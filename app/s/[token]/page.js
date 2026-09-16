@@ -26,9 +26,11 @@ import WeeklyRecapPopup from '@/app/components/WeeklyRecapPopup'
 import {
   House, WifiSlash, Bell, Target, Repeat, SkipForward, Lock, EyeSlash, Backpack, UsersThree,
   Lightning, PencilSimple, Calculator, CalendarBlank, Prohibit, Lightbulb, ChartBar, ChartLineUp,
-  LinkSimple, Circle, Clock,
+  LinkSimple, Circle, Clock, DownloadSimple,
 } from '@phosphor-icons/react'
 import { annotatePaceReferences, formatPace, isRunMovement, isCardioMovementName, cardioMovementSortKey, is3030Movement, PACE_BASES, computePaceForBasePct, computeDistanceForBasePct, formatDistance, RACE_TARGETS, parsePaceInput } from '@/lib/raceEstimates'
+import { hasCardioSteps } from '@/lib/cardioSteps'
+import { buildCardioFitFile, downloadFitFile } from '@/lib/fitExport'
 import { CIRCUIT_MODES } from '@/lib/circuitModes'
 import { registerPushNotifications } from '@/lib/pushRegistration'
 import { unlockAudio } from '@/lib/audioBeep'
@@ -1937,6 +1939,21 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
                   </div>
                 )
               })()}
+              {hasCardioSteps(exo.cardio_structure) && (
+                <button
+                  onClick={() => {
+                    const bytes = buildCardioFitFile({ exerciseName: exo.name, structure: exo.cardio_structure, known: raceKnown })
+                    if (bytes) downloadFitFile(bytes, exo.name || 'seance')
+                  }}
+                  title="Télécharger cet exercice en .FIT pour ta montre (Garmin et compatibles)"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--bg)', border: '1px solid #B8EAD8',
+                    borderRadius: 20, padding: '4px 10px', fontSize: 12, fontWeight: 700, color: 'var(--green)', cursor: 'pointer', marginBottom: 8,
+                  }}
+                >
+                  <DownloadSimple size={13} /> Télécharger pour ma montre
+                </button>
+              )}
               {isRunMovement(exo.name) ? (
                 exo.sets && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: exo.note ? 6 : 0 }}>
