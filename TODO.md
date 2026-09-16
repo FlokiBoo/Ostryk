@@ -17,4 +17,3 @@ Tâches identifiées mais pas encore traitées, à reprendre en session.
 - [ ] Améliorer la vue coach avec retour client.
 - [ ] **Écran de préparation du player de séance** (`app/s/[token]/page.js`, `SessionCard` en `playerMode`) : reprendre une par une les fonctions annexes qui y sont restées telles quelles lors de l'ajout du player exercice-par-exercice (report/skip, circuits, notes coach, allures course à pied, verrou abonnement, séances récurrentes/groupe, matériel) pour voir comment chacune s'articule mieux avec le nouveau flow — explicitement non retravaillé dans ce lot, à la demande de l'utilisateur.
 - [ ] Synchro automatique des activités Strava dans l'app (mise à jour auto, pas d'import manuel).
-- [ ] Pouvoir envoyer les séances de l'app vers une montre connectée, avec les formats déjà construits dans l'éditeur (action, allure, temps d'action, temps de récup).
