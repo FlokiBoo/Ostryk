@@ -16,19 +16,17 @@ cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}"
 # package-lock.json (champs `libc` supprimés) et salit le diff à chaque session.
 npm install --no-save --no-audit --no-fund
 
-# `next build` instancie les clients Supabase et Stripe pendant le "collect page
-# data" : sans ces variables il échoue sur un « supabaseUrl is required » ou un
-# « Neither apiKey nor config.authenticator provided » qui n'ont rien à voir avec
-# le code modifié. On le signale ici plutôt que de laisser chercher.
+# `npm run build` et `npx eslint` passent sans ces variables (les clients Supabase
+# et Stripe sont instanciés à l'appel, pas au chargement du module). En revanche
+# un serveur lancé sans elles renvoie une erreur dès la première requête.
 manquantes=()
 for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY STRIPE_SECRET_KEY; do
   [ -z "${!v:-}" ] && manquantes+=("$v")
 done
 
 if [ ${#manquantes[@]} -gt 0 ]; then
-  echo "ATTENTION : variables d'environnement absentes : ${manquantes[*]}"
-  echo "→ \`npm run build\` échouera. Les ajouter dans les réglages de l'environnement Claude Code (web)."
-  echo "→ \`npx eslint <fichiers>\` fonctionne sans elles."
+  echo "Variables d'environnement absentes : ${manquantes[*]}"
+  echo "→ build et lint fonctionnent quand même ; \`npm run dev\` ne servira rien d'utile."
 fi
 
 echo "Dépendances OSTRYK installées."

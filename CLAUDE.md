@@ -79,9 +79,9 @@ Tailwind (`@tailwindcss/postcss`) is configured but barely used; the overwhelmin
 
 Le conteneur d'une session web est cloné à neuf : `node_modules` est absent et les variables d'environnement sont celles de l'environnement Claude Code, pas celles de Vercel.
 
-- `.claude/hooks/session-start.sh` (branché via `.claude/settings.json`) fait le `npm install` au démarrage de chaque session distante, et prévient si les variables nécessaires au build manquent. Il ne fait rien en local (`CLAUDE_CODE_REMOTE`).
-- `npm run build` exige au minimum `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY` — sans elles il casse au "collect page data", pour une raison sans rapport avec le code modifié. À renseigner dans les réglages de l'environnement Claude Code.
-- `npx eslint <fichiers>` marche sans aucune variable.
+- `.claude/hooks/session-start.sh` (branché via `.claude/settings.json`) fait le `npm install` au démarrage de chaque session distante, et liste les variables d'environnement absentes. Il ne fait rien en local (`CLAUDE_CODE_REMOTE`).
+- `npm run build` et `npx eslint <fichiers>` passent **sans aucune variable d'environnement** : les clients Supabase et Stripe sont instanciés à la première utilisation, pas au chargement du module (voir le commentaire en tête de `lib/supabase.js`). Ne jamais revenir à une instanciation au niveau module — c'est ce qui cassait le build des previews et des sessions web.
+- En revanche, un bundle construit sans `NEXT_PUBLIC_SUPABASE_*` reste inutilisable à l'exécution : ces variables sont inlinées au build. Le build qui passe ne veut pas dire que la preview marche.
 - La vérif live du checklist (script Playwright + magic link) n'est **pas** faisable depuis une session web : la policy réseau de l'environnement bloque les domaines sortants autres que les registries de paquets (`api.supabase.com`, `mcp.vercel.com` répondent 403 au CONNECT). Depuis le téléphone, le substitut est la preview Vercel de la branche — avec ses limites décrites plus haut.
 - `.mcp.json` déclare le serveur MCP Supabase en lecture seule. Il démarre uniquement si `SUPABASE_PROJECT_REF` et `SUPABASE_ACCESS_TOKEN` sont définis, et uniquement là où `api.supabase.com` est joignable (poste local, ou environnement web dont la policy réseau a été élargie). `--read-only` est délibéré : la base est la prod.
 
