@@ -16,6 +16,8 @@ import { setUnsavedChanges, hasUnsavedChanges } from '@/lib/unsavedChanges'
 import { MUSCLE_GROUPS as REAL_MUSCLE_GROUPS } from '@/app/components/MuscleAnatomyDiagram'
 import { parseMusclesFromText } from '@/app/components/CelebrationModal'
 import { isCardioMovementName, cardioMovementSortKey, PACE_BASES } from '@/lib/raceEstimates'
+import { hasCardioSteps } from '@/lib/cardioSteps'
+import CardioStepEditor from '@/app/components/CardioStepEditor'
 import {
   X, TextB, TextItalic, LinkSimple, ListBullets, TextTSlash,
   CaretLeft, CaretRight, ArrowsDownUp, Plus, FileText, Flame, Snowflake, Barbell,
@@ -161,6 +163,7 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
     const setNotes = {}
     const setValues = {}
     const paceValues = {}
+    const cardioStructures = {}
     // La granularité par set est perdue côté ancien schéma (un seul `note` par exercice) : on la
     // réattache au premier set de chaque exercice (grille standard) ET sous une clé "note:<ex>"
     // dédiée (vue cardio, pas de grille de sets) pour ne pas la perdre silencieusement.
@@ -182,6 +185,9 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
       if (r.pace_base || r.pct_low != null || r.pct_high != null) {
         paceValues[exId] = { base: r.pace_base || '', pctLow: r.pct_low ?? '', pctHigh: r.pct_high ?? '' }
       }
+      if (hasCardioSteps(r.cardio_structure)) {
+        cardioStructures[exId] = r.cardio_structure
+      }
     })
     return {
       id: `block-${firstId}`,
@@ -197,6 +203,7 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
       setNotes,
       setValues,
       paceValues,
+      cardioStructures,
       // Timer lié au bloc entier (superset compris) : porté par le premier exercice du bloc
       // côté program_exercises.timer_config, même colonne que l'ancien éditeur plein écran —
       // voir flattenBlocksToExerciseRows pour l'écriture symétrique.
@@ -302,6 +309,7 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           set_details: null,
           timer_config,
           focus_muscles: ex.focus_muscles || null,
+          cardio_structure: block.cardioStructures?.[ex.id] || null,
         })
       } else {
         const notes = (block.sets || [])
@@ -326,6 +334,7 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           pace_base: null,
           pct_low: null,
           pct_high: null,
+          cardio_structure: null,
           set_details: setDetails.some(d => d.reps || d.kg != null) ? setDetails : null,
           timer_config,
           focus_muscles: ex.focus_muscles || null,
@@ -452,6 +461,9 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [movementMusclesMap, setMovementMusclesMap] = useState({})
   const [movementFocusGroupsMap, setMovementFocusGroupsMap] = useState({})
   const [focusPickerExerciseId, setFocusPickerExerciseId] = useState(null)
+  // Exercice cardio dont l'éditeur de steps détaillé (CardioStepEditor) est déplié — un seul à la
+  // fois, repliés par défaut pour ne pas alourdir la vue quand la structure simple (base+%) suffit.
+  const [cardioStepEditorExId, setCardioStepEditorExId] = useState(null)
   // Création rapide d'un mouvement absent du catalogue, depuis la modale Exercises elle-même
   // (coach uniquement, canManageCatalog) — voir createMovement plus bas.
   const [createMovementOpen, setCreateMovementOpen] = useState(false)
@@ -498,7 +510,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     async function load() {
       const [{ data: sessionRow }, { data: exerciseRows }, { data: movs }] = await Promise.all([
         supabase.from('program_sessions').select('id, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, timer_config, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
-        supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles').eq('program_session_id', sessionId).order('order_index'),
+        supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles, cardio_structure').eq('program_session_id', sessionId).order('order_index'),
         // Bibliothèque récupérée en entier (petit volume) plutôt que filtrée par nom — sensible à
         // la casse côté Postgres, raterait silencieusement un nom mal accordé. Même approche que
         // l'ancien éditeur plein écran (page.js:629-638).
@@ -759,6 +771,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     Object.entries(original.paceValues || {}).forEach(([exId, value]) => {
       paceValues[exerciseIdMap.get(exId) ?? exId] = value
     })
+    const cardioStructures = {}
+    Object.entries(original.cardioStructures || {}).forEach(([exId, value]) => {
+      cardioStructures[exerciseIdMap.get(exId) ?? exId] = value
+    })
 
     const duplicate = {
       ...original,
@@ -769,6 +785,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       setNotes: remapRecord(original.setNotes),
       setValues: remapRecord(original.setValues),
       paceValues,
+      cardioStructures,
     }
 
     setBlocks([...blocks.slice(0, index + 1), duplicate, ...blocks.slice(index + 1)])
@@ -975,7 +992,9 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       const setNotes = Object.fromEntries(Object.entries(b.setNotes || {}).filter(([k]) => !dropKey(k)))
       const paceValues = { ...(b.paceValues || {}) }
       delete paceValues[exerciseId]
-      return { ...b, exercises, setValues, setNotes, paceValues }
+      const cardioStructures = { ...(b.cardioStructures || {}) }
+      delete cardioStructures[exerciseId]
+      return { ...b, exercises, setValues, setNotes, paceValues, cardioStructures }
     }))
     setUnsavedChanges(true)
     setExerciseMenuOpenId(null)
@@ -1215,6 +1234,20 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       const paceValues = { ...(b.paceValues || {}) }
       paceValues[exerciseId] = { ...(paceValues[exerciseId] || { base: '', pctLow: '', pctHigh: '' }), [field]: value }
       return { ...b, paceValues }
+    }))
+    setUnsavedChanges(true)
+  }
+
+  // Structure cardio détaillée (blocs de steps, voir lib/cardioSteps.js) d'un exercice cardio —
+  // écrite en plus de paceValues (repli simple base+%low/%high, voir updatePaceValue), pas à sa
+  // place : un exercice sans structure garde son export .FIT résolu depuis pace_base/pct.
+  const updateCardioStructure = (exerciseId, structure) => {
+    setBlocks(blocks.map((b, i) => {
+      if (i !== activeBlockIndex) return b
+      const cardioStructures = { ...(b.cardioStructures || {}) }
+      if (structure) cardioStructures[exerciseId] = structure
+      else delete cardioStructures[exerciseId]
+      return { ...b, cardioStructures }
     }))
     setUnsavedChanges(true)
   }
@@ -1886,6 +1919,9 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                     {activeBlock.exercises.map(ex => {
                       const pace = activeBlock.paceValues?.[ex.id] || { base: '', pctLow: '', pctHigh: '' }
                       const hasNote = Boolean(activeBlock.setNotes?.[setCellKey('note', ex.id)])
+                      const cardioStructure = activeBlock.cardioStructures?.[ex.id] || null
+                      const hasSteps = hasCardioSteps(cardioStructure)
+                      const stepEditorOpen = cardioStepEditorExId === ex.id
                       return (
                         <div key={ex.id} style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '14px 16px' }}>
                           <div style={{ fontSize: 14, fontWeight: 600, color: c.text, textDecoration: 'underline', marginBottom: 10 }}>{ex.name}</div>
@@ -1915,15 +1951,44 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                             />
                             <span style={{ fontSize: 13, color: c.textMuted }}>%</span>
                           </div>
-                          <button
-                            onClick={() => openSetNotesModal('note', ex.id)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 6, borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer',
-                              border: `1px solid ${hasNote ? c.blue : c.border}`, background: hasNote ? c.blueBorder : c.bg, color: hasNote ? c.blue : c.text,
-                            }}
-                          >
-                            <FileText size={14} /> Notes
-                          </button>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                              onClick={() => openSetNotesModal('note', ex.id)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 6, borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer',
+                                border: `1px solid ${hasNote ? c.blue : c.border}`, background: hasNote ? c.blueBorder : c.bg, color: hasNote ? c.blue : c.text,
+                              }}
+                            >
+                              <FileText size={14} /> Notes
+                            </button>
+                            <button
+                              onClick={() => setCardioStepEditorExId(stepEditorOpen ? null : ex.id)}
+                              title="Structurer l'effort en plusieurs steps (échauffement/effort/récup), pour l'export .FIT montre"
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 6, borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer',
+                                border: `1px solid ${hasSteps ? c.blue : c.border}`, background: hasSteps ? c.blueBorder : c.bg, color: hasSteps ? c.blue : c.text,
+                              }}
+                            >
+                              <ListBullets size={14} />
+                              {hasSteps ? `${cardioStructure.blocks.length} bloc${cardioStructure.blocks.length > 1 ? 's' : ''} de steps` : 'Structurer en steps'}
+                            </button>
+                          </div>
+                          {stepEditorOpen && (
+                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${c.border}` }}>
+                              <CardioStepEditor
+                                value={cardioStructure}
+                                onChange={structure => updateCardioStructure(ex.id, structure)}
+                              />
+                              {hasSteps && (
+                                <button
+                                  onClick={() => updateCardioStructure(ex.id, null)}
+                                  style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', padding: '4px 2px', cursor: 'pointer', color: '#991B1B', fontSize: 12, fontWeight: 600 }}
+                                >
+                                  <X size={13} /> Retirer la structure détaillée
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
