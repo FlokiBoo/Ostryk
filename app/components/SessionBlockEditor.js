@@ -20,7 +20,7 @@ import {
   X, TextB, TextItalic, LinkSimple, ListBullets, TextTSlash,
   CaretLeft, CaretRight, ArrowsDownUp, Plus, FileText, Flame, Snowflake, Barbell,
   DotsThreeVertical, PencilSimple, Info, MagnifyingGlass, Check, Timer, DotsSixVertical,
-  ArrowsClockwise, Heartbeat, VideoCamera, Lightbulb, Target,
+  ArrowsClockwise, Heartbeat, VideoCamera, Lightbulb, Target, Eye, EyeSlash,
 } from '@phosphor-icons/react'
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
@@ -411,6 +411,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [explicationVideo, setExplicationVideo] = useState('')
   const [activityMode, setActivityMode] = useState('standard')
   const [recurringTarget, setRecurringTarget] = useState(1)
+  const [materiel, setMateriel] = useState('')
+  // hidden_until_run : programmes de groupe uniquement (isGroupProgram, résolu via la jointure
+  // programs(group_id) au chargement) — porté depuis l'ancien éditeur plein écran (page.js:2124-2137).
+  const [hiddenUntilRun, setHiddenUntilRun] = useState(false)
+  const [isGroupProgram, setIsGroupProgram] = useState(false)
   const [movementsList, setMovementsList] = useState([]) // [{ id, name, muscles }]
 
   // Timer de séance (program_sessions.timer_config) — distinct des timers par bloc, qui vivent
@@ -492,7 +497,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     let cancelled = false
     async function load() {
       const [{ data: sessionRow }, { data: exerciseRows }, { data: movs }] = await Promise.all([
-        supabase.from('program_sessions').select('id, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, timer_config, activation_videos').eq('id', sessionId).single(),
+        supabase.from('program_sessions').select('id, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, timer_config, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
         supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles').eq('program_session_id', sessionId).order('order_index'),
         // Bibliothèque récupérée en entier (petit volume) plutôt que filtrée par nom — sensible à
         // la casse côté Postgres, raterait silencieusement un nom mal accordé. Même approche que
@@ -512,6 +517,9 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       setRecurringTarget(sessionRow.recurring_daily_target || 1)
       setSessionTimerConfig(sessionRow.timer_config || null)
       setExplicationVideo(sessionRow.activation_videos?.[0]?.video_url || '')
+      setMateriel(sessionRow.materiel || '')
+      setHiddenUntilRun(!!sessionRow.hidden_until_run)
+      setIsGroupProgram(!!sessionRow.programs?.group_id)
       const musclesMap = {}, focusMap = {}
       ;(movs || []).forEach(m => {
         if (m.muscles) musclesMap[m.name.trim().toLowerCase()] = m.muscles
@@ -641,6 +649,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
           warmup_block: extractBlockMeta(blocks, 'warmup'), cooldown_block: extractBlockMeta(blocks, 'cooldown'),
           timer_config: sessionTimerConfig,
           activity_mode: activityMode,
+          materiel: materiel.trim() || null,
+          ...(isGroupProgram ? { hidden_until_run: hiddenUntilRun } : {}),
           session_type: sessionType, recurring_daily_target: sessionType === 'recurrent' ? recurringTarget : null,
           // Récurrente = hors calendrier : jamais de semaine/jour, même si la séance en avait un
           // avant (créée via une case du calendrier puis basculée en récurrente après coup).
@@ -1438,6 +1448,21 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
           />
         </div>
 
+        {/* Matériel : porté depuis l'ancien éditeur plein écran (page.js:2726-2735) — lu côté
+            athlète (app/s/[token]/page.js) et sur le tableau de bord coach (app/page.js). */}
+        <div style={{ marginBottom: 24 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: c.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            Matériel
+          </label>
+          <textarea
+            placeholder="Matériel nécessaire pour cette séance"
+            value={materiel}
+            onChange={e => { setMateriel(e.target.value); setUnsavedChanges(true) }}
+            rows={2}
+            style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${c.border}`, borderRadius: 6, padding: '10px 14px', fontSize: 14, outline: 'none', resize: 'none', background: c.bg, fontFamily: 'inherit', color: c.text }}
+          />
+        </div>
+
         {/* Récurrence : hors calendrier, proposée au sportif tous les jours plutôt qu'à une
             date précise — voir la note en tête de fichier sur le périmètre réduit de cette page,
             ce champ est l'exception portée ici car il n'a pas d'équivalent dans l'ancien éditeur
@@ -1485,6 +1510,20 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
           >
             <Lightbulb size={14} weight={sessionType === 'explication' ? 'fill' : 'regular'} /> Explication
           </button>
+          {isGroupProgram && (
+            <button
+              onClick={() => { setHiddenUntilRun(v => !v); setUnsavedChanges(true) }}
+              title="Cache le contenu de la séance aux athlètes du groupe jusqu'à son lancement en direct"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                border: `1px solid ${hiddenUntilRun ? c.blue : c.border}`,
+                background: hiddenUntilRun ? c.blueBorder : c.bg,
+                color: hiddenUntilRun ? c.blue : c.textMuted,
+              }}
+            >
+              {hiddenUntilRun ? <><EyeSlash size={14} /> Caché</> : <><Eye size={14} /> Visible</>}
+            </button>
+          )}
         </div>
 
         {sessionType !== 'explication' && (
