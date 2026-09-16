@@ -14,12 +14,13 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { setUnsavedChanges, hasUnsavedChanges } from '@/lib/unsavedChanges'
 import { MUSCLE_GROUPS as REAL_MUSCLE_GROUPS } from '@/app/components/MuscleAnatomyDiagram'
+import { parseMusclesFromText } from '@/app/components/CelebrationModal'
 import { isCardioMovementName, cardioMovementSortKey, PACE_BASES } from '@/lib/raceEstimates'
 import {
   X, TextB, TextItalic, LinkSimple, ListBullets, TextTSlash,
   CaretLeft, CaretRight, ArrowsDownUp, Plus, FileText, Flame, Snowflake, Barbell,
   DotsThreeVertical, PencilSimple, Info, MagnifyingGlass, Check, Timer, DotsSixVertical,
-  ArrowsClockwise, Heartbeat, VideoCamera, Lightbulb,
+  ArrowsClockwise, Heartbeat, VideoCamera, Lightbulb, Target,
 } from '@phosphor-icons/react'
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
@@ -143,7 +144,7 @@ function RestDivider({ seconds, onChange }) {
 // Groupe les program_exercises consécutifs partageant le même superset_group (et block_type) en
 // un seul bloc multi-exercices ; chaque ligne sans superset_group devient son propre bloc à 1
 // exercice. Même logique de regroupement que la carte superset de l'ancien éditeur.
-function groupExercisesIntoBlocks(rows) {
+function groupExercisesIntoBlocks(rows, musclesMap = {}) {
   const groups = []
   rows.forEach(row => {
     const last = groups[groups.length - 1]
@@ -186,7 +187,11 @@ function groupExercisesIntoBlocks(rows) {
       id: `block-${firstId}`,
       type: g.block_type,
       name: '', description: '', note: '',
-      exercises: g.rows.map(r => ({ id: `ex-${r.id}`, name: r.name, muscles: '' })),
+      exercises: g.rows.map(r => ({
+        id: `ex-${r.id}`, name: r.name,
+        muscles: musclesMap[r.name.trim().toLowerCase()] || '',
+        focus_muscles: r.focus_muscles || '',
+      })),
       sets,
       restSeconds: parseRestToSeconds(g.rows[0].rest),
       setNotes,
@@ -260,8 +265,8 @@ function applyBlockMeta(blocks, type, meta, position) {
   return position === 'prepend' ? [newBlock, ...blocks] : [...blocks, newBlock]
 }
 
-function buildBlocksFromDb(exerciseRows, circuits, warmupMeta, cooldownMeta) {
-  let blocks = insertCircuits(groupExercisesIntoBlocks(exerciseRows), circuits || [])
+function buildBlocksFromDb(exerciseRows, circuits, warmupMeta, cooldownMeta, musclesMap = {}) {
+  let blocks = insertCircuits(groupExercisesIntoBlocks(exerciseRows, musclesMap), circuits || [])
   blocks = applyBlockMeta(blocks, 'warmup', warmupMeta, 'prepend')
   blocks = applyBlockMeta(blocks, 'cooldown', cooldownMeta, 'append')
   return blocks
@@ -296,6 +301,7 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           pct_high: pace.pctHigh !== '' && pace.pctHigh != null ? parseFloat(pace.pctHigh) : null,
           set_details: null,
           timer_config,
+          focus_muscles: ex.focus_muscles || null,
         })
       } else {
         const notes = (block.sets || [])
@@ -322,6 +328,7 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           pct_high: null,
           set_details: setDetails.some(d => d.reps || d.kg != null) ? setDetails : null,
           timer_config,
+          focus_muscles: ex.focus_muscles || null,
         })
       }
     })
@@ -432,6 +439,14 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [replacingExerciseId, setReplacingExerciseId] = useState(null)
   const [exerciseMenuOpenId, setExerciseMenuOpenId] = useState(null)
   const [pendingCircuitExercises, setPendingCircuitExercises] = useState([])
+  // Focus muscles par exercice — porté depuis l'ancien éditeur plein écran (page.js:2419-2533).
+  // Le focus vit sur le mouvement du catalogue (movements.focus_groups, partagé entre toutes ses
+  // utilisations) plutôt que sur cet exercice précis : cohérent avec la détection auto déjà en
+  // place ailleurs (parseMusclesFromText sur movements.muscles), et évite d'avoir à re-choisir le
+  // focus à chaque fois qu'on reprend le même mouvement dans une autre séance.
+  const [movementMusclesMap, setMovementMusclesMap] = useState({})
+  const [movementFocusGroupsMap, setMovementFocusGroupsMap] = useState({})
+  const [focusPickerExerciseId, setFocusPickerExerciseId] = useState(null)
   // Création rapide d'un mouvement absent du catalogue, depuis la modale Exercises elle-même
   // (coach uniquement, canManageCatalog) — voir createMovement plus bas.
   const [createMovementOpen, setCreateMovementOpen] = useState(false)
@@ -476,9 +491,13 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const [{ data: sessionRow }, { data: exerciseRows }] = await Promise.all([
+      const [{ data: sessionRow }, { data: exerciseRows }, { data: movs }] = await Promise.all([
         supabase.from('program_sessions').select('id, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, timer_config, activation_videos').eq('id', sessionId).single(),
-        supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config').eq('program_session_id', sessionId).order('order_index'),
+        supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles').eq('program_session_id', sessionId).order('order_index'),
+        // Bibliothèque récupérée en entier (petit volume) plutôt que filtrée par nom — sensible à
+        // la casse côté Postgres, raterait silencieusement un nom mal accordé. Même approche que
+        // l'ancien éditeur plein écran (page.js:629-638).
+        supabase.from('movements').select('name, muscles, focus_groups'),
       ])
       if (cancelled) return
       if (!sessionRow) {
@@ -493,7 +512,14 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       setRecurringTarget(sessionRow.recurring_daily_target || 1)
       setSessionTimerConfig(sessionRow.timer_config || null)
       setExplicationVideo(sessionRow.activation_videos?.[0]?.video_url || '')
-      const builtBlocks = buildBlocksFromDb(exerciseRows || [], sessionRow.circuits || [], sessionRow.warmup_block || null, sessionRow.cooldown_block || null)
+      const musclesMap = {}, focusMap = {}
+      ;(movs || []).forEach(m => {
+        if (m.muscles) musclesMap[m.name.trim().toLowerCase()] = m.muscles
+        if (m.focus_groups) focusMap[m.name.trim().toLowerCase()] = m.focus_groups
+      })
+      setMovementMusclesMap(musclesMap)
+      setMovementFocusGroupsMap(focusMap)
+      const builtBlocks = buildBlocksFromDb(exerciseRows || [], sessionRow.circuits || [], sessionRow.warmup_block || null, sessionRow.cooldown_block || null, musclesMap)
       setBlocks(builtBlocks)
       if (builtBlocks.length) setActiveBlockId(builtBlocks[0].id)
       setAddMenuOpen((exerciseRows || []).length === 0 && !(sessionRow.circuits || []).length)
@@ -943,6 +969,45 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     }))
     setUnsavedChanges(true)
     setExerciseMenuOpenId(null)
+  }
+
+  // Groupes musculaires "à ressentir" pour un exercice : override manuel s'il y en a un sur CET
+  // exercice précis (ex.focus_muscles, hérité d'une ancienne saisie), sinon le focus déjà posé sur
+  // ce mouvement dans le catalogue (movementFocusGroupsMap), sinon détection auto depuis son texte
+  // "muscles" (parseMusclesFromText) — même ordre de priorité que l'ancien éditeur (page.js:2488-2490).
+  const getExerciseFocusGroups = (ex) => {
+    if (ex.focus_muscles) return ex.focus_muscles.split(',').filter(Boolean)
+    const key = ex.name.trim().toLowerCase()
+    const catalogFocus = movementFocusGroupsMap[key]
+    if (catalogFocus) return catalogFocus.split(',').filter(Boolean)
+    return parseMusclesFromText(movementMusclesMap[key] || '')
+  }
+
+  // Écrit le focus sur le mouvement du catalogue (partagé entre toutes ses utilisations) plutôt
+  // que sur cet exercice précis, et efface un éventuel override laissé sur CET exercice — même
+  // choix que l'ancien éditeur (page.js:2516-2522), pour ne pas avoir deux sources de vérité qui
+  // divergent silencieusement.
+  const toggleExerciseFocusGroup = (ex, groupKey) => {
+    if (!activeBlock) return
+    const current = getExerciseFocusGroups(ex)
+    const next = current.includes(groupKey) ? current.filter(k => k !== groupKey) : [...current, groupKey]
+    const name = ex.name.trim()
+    const value = next.length ? next.join(',') : null
+    if (name) {
+      // .then() indispensable : un PostgrestFilterBuilder Supabase est "lazy" et n'envoie la
+      // requête que quand la promesse est consommée (await ou .then()) — sans ça l'appel
+      // s'exécute (aucune erreur) mais ne part jamais réellement (vérifié en conditions réelles :
+      // 0 requête réseau sans ce .then()). Même piège présent dans l'ancien éditeur (page.js:2517).
+      supabase.from('movements').upsert({ name, focus_groups: value }, { onConflict: 'name' })
+        .then(({ error }) => { if (error) console.error('Erreur sauvegarde focus_groups:', error.message) })
+      setMovementFocusGroupsMap(prev => ({ ...prev, [name.toLowerCase()]: value }))
+    }
+    setBlocks(blocks.map((b, i) => (
+      i === activeBlockIndex
+        ? { ...b, exercises: (b.exercises || []).map(e => e.id === ex.id ? { ...e, focus_muscles: '' } : e) }
+        : b
+    )))
+    setUnsavedChanges(true)
   }
 
   // Ajoute directement l'exercice au bloc actif, sans détour séries/récup — 1 série de base (voir
@@ -1661,6 +1726,17 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                                 {ex.muscles}
                               </span>
                             )}
+                            {(() => {
+                              const focusGroups = getExerciseFocusGroups(ex)
+                              if (focusGroups.length === 0) return null
+                              const isAuto = !ex.focus_muscles
+                              return (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 20, padding: '2px 8px' }}>
+                                  <Target size={11} /> {REAL_MUSCLE_GROUPS.filter(g => focusGroups.includes(g.key)).map(g => g.label).join(', ')}
+                                  {isAuto && <span style={{ fontWeight: 500, opacity: 0.75 }}> (auto)</span>}
+                                </span>
+                              )
+                            })()}
                           </div>
                           <div style={{ position: 'relative', flexShrink: 0 }}>
                             <button
@@ -1678,6 +1754,12 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                                   zIndex: 100, padding: 8, display: 'flex', flexDirection: 'column', gap: 2,
                                 }}>
                                   <button
+                                    onClick={() => { setFocusPickerExerciseId(ex.id); setExerciseMenuOpenId(null) }}
+                                    style={{ padding: '10px 12px', borderRadius: 6, fontSize: 14, color: c.text, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                                  >
+                                    Focus muscles
+                                  </button>
+                                  <button
                                     onClick={() => openReplaceExercisePicker(ex.id)}
                                     style={{ padding: '10px 12px', borderRadius: 6, fontSize: 14, color: c.text, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                                   >
@@ -1688,6 +1770,36 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                                     style={{ padding: '10px 12px', borderRadius: 6, fontSize: 14, color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                                   >
                                     Delete exercise
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                            {focusPickerExerciseId === ex.id && (
+                              <>
+                                <div onClick={() => setFocusPickerExerciseId(null)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
+                                <div style={{
+                                  position: 'absolute', right: 0, top: '100%', marginTop: 6, width: 260, background: c.bg,
+                                  border: `1px solid ${c.border}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                                  zIndex: 100, padding: 12,
+                                }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: c.textMuted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Target size={12} /> Focus — muscles à ressentir
+                                  </div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
+                                    {REAL_MUSCLE_GROUPS.map(g => {
+                                      const active = getExerciseFocusGroups(ex).includes(g.key)
+                                      return (
+                                        <button key={g.key} onClick={() => toggleExerciseFocusGroup(ex, g.key)} style={{
+                                          background: active ? '#FEF2F2' : c.bg, border: `1px solid ${active ? '#FCA5A5' : c.border}`,
+                                          color: active ? '#B91C1C' : c.textMuted, borderRadius: 16, padding: '4px 9px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                                        }}>
+                                          {g.label}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                  <button onClick={() => setFocusPickerExerciseId(null)} style={{ background: c.blue, color: '#fff', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                                    Done
                                   </button>
                                 </div>
                               </>
