@@ -219,19 +219,31 @@ function AthleteView({ params }) {
   // Séance ouverte en dernier par le sportif et pas encore validée : tant qu'elle ne l'est pas,
   // c'est ELLE que la carte "Séance du jour" doit afficher, pas la suivante du programme (retour
   // terrain : ouvrir une séance sans la valider faisait aussitôt apparaître la suivante à sa
-  // place, comme si elle avait été faite). Persisté en localStorage (même convention que
-  // playerStartedKey) pour survivre au rechargement complet que le WebView mobile provoque quand
-  // l'app repasse en arrière-plan.
+  // place, comme si elle avait été faite).
+  // Stockée sur le compte (athletes.current_session_id, voir supabase_current_session.sql) pour
+  // suivre le sportif d'un appareil à l'autre ; le localStorage (même convention que
+  // playerStartedKey) n'est plus qu'un cache local : il tient l'affichage avant la réponse du
+  // serveur, survit au rechargement complet que le WebView mobile provoque en arrière-plan, et
+  // garde l'ancre juste hors ligne. Au chargement, c'est la valeur du compte qui fait foi.
   const openedSessionKey = `coachpro_opened_session_${token}`
   const [openedSessionId, setOpenedSessionId] = useState(() => {
     try { return localStorage.getItem(openedSessionKey) } catch { return null }
   })
+  const rememberOpenedSessionLocally = (sessId) => {
+    try {
+      if (sessId) localStorage.setItem(openedSessionKey, sessId)
+      else localStorage.removeItem(openedSessionKey)
+    } catch { /* localStorage indisponible (navigation privée...) — pas bloquant */ }
+  }
   const forgetOpenedSession = (sessId) => {
     setOpenedSessionId(prev => (prev === sessId ? null : prev))
     try {
       if (localStorage.getItem(openedSessionKey) === sessId) localStorage.removeItem(openedSessionKey)
-    } catch { /* localStorage indisponible (navigation privée...) — pas bloquant */ }
+    } catch { /* idem */ }
   }
+  // Dernière valeur connue côté compte : évite de repousser au serveur ce qu'on vient d'en lire,
+  // et de reposter la même ancre à chaque rendu.
+  const syncedAnchorRef = useRef(undefined)
   // Un coach qui prévisualise la séance d'un client ne "fait" pas cette séance : il ne doit pas
   // déplacer l'ancre du sportif. Sur son propre profil sportif (is_coach), c'est bien lui qui
   // s'entraîne, ?coach=1 ou pas — même distinction que backHref plus bas.
@@ -240,8 +252,20 @@ function AthleteView({ params }) {
   // reset de playerStarted juste au-dessus : un effet ne servirait qu'à déclencher un rendu de plus.
   if (focusMode && targetSessionId && canAnchorOpenedSession && openedSessionId !== targetSessionId) {
     setOpenedSessionId(targetSessionId)
-    try { localStorage.setItem(openedSessionKey, targetSessionId) } catch { /* idem */ }
+    rememberOpenedSessionLocally(targetSessionId)
   }
+  // L'écriture réseau, elle, ne peut pas se faire pendant le rendu. Tant que le profil n'est pas
+  // chargé, syncedAnchorRef vaut undefined et on ne pousse rien : sinon on écraserait la valeur du
+  // compte avec le cache local avant même de l'avoir lue.
+  useEffect(() => {
+    if (!athlete || !canAnchorOpenedSession) return
+    if (syncedAnchorRef.current === undefined || syncedAnchorRef.current === openedSessionId) return
+    syncedAnchorRef.current = openedSessionId
+    fetch(`/api/athlete-view/${token}/current-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: openedSessionId || null }),
+    }).catch(() => { /* hors ligne : le cache local prend le relais jusqu'à la prochaine ouverture */ })
+  }, [athlete, openedSessionId, canAnchorOpenedSession, token])
   const [openSessionId, setOpenSessionId] = useState(null)
   const [validating, setValidating] = useState(false)
   const [exerciseLogs, setExerciseLogs] = useState({})
@@ -404,6 +428,20 @@ function AthleteView({ params }) {
       if (!res.ok) return
       const { athlete: ath, programs: progs, completions: comps, exerciseLogs: logs, movieMap, musclesMap, focusGroupsMap, objectives: objs, noteBlocks: blocks, exerciseSets: exoSets, raceKnown: rk, trackedMovements: tms, isCoach: coachFlag, isGroupLeader: leaderFlag, circuitLogs: cLogs } = await res.json()
       setAthlete(ath)
+      // Ancre "séance en cours" : la valeur du compte fait foi au chargement, c'est elle qui suit
+      // le sportif d'un appareil à l'autre. Exception, l'URL gagne s'il est justement en train
+      // d'ouvrir une séance (?session=…&focus=1) : elle est forcément plus récente, et l'effet de
+      // synchro plus haut se chargera de la pousser au serveur.
+      // `undefined` (et pas `null`) = la colonne n'existe pas encore en base : on laisse alors le
+      // cache local piloter, plutôt que d'effacer l'ancre du sportif à chaque chargement.
+      if (ath.current_session_id !== undefined) {
+        const serverAnchor = ath.current_session_id || null
+        syncedAnchorRef.current = serverAnchor
+        if (!(focusMode && targetSessionId)) {
+          setOpenedSessionId(serverAnchor)
+          rememberOpenedSessionLocally(serverAnchor)
+        }
+      }
       setObjectives(objs || [])
       setNoteBlocks(blocks || [])
       setRaceKnown(rk || {})
