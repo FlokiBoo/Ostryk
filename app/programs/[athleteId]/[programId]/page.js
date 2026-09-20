@@ -383,7 +383,7 @@ function ProgramEditorPage({ params }) {
         ...s,
         exercises: [...(s.program_exercises || [])]
           .sort((a, b) => a.order_index - b.order_index)
-          .map(e => ({ ...e, _key: e.id, sets: e.sets ?? '', reps: e.reps ?? '', kg: e.kg ?? '', rest: e.rest ?? '', note: e.note ?? '', video_url: (movieMap[e.name?.trim().toLowerCase()] ?? e.video_url) || '', superset_group: e.superset_group || null, pct_low: e.pct_low ?? '', pct_high: e.pct_high ?? '' })),
+          .map(e => ({ ...e, _key: e.id, sets: e.sets ?? '', reps: e.reps ?? '', kg: e.kg ?? '', rest: e.rest ?? '', note: e.note ?? '', materiel: e.materiel ?? '', video_url: (movieMap[e.name?.trim().toLowerCase()] ?? e.video_url) || '', superset_group: e.superset_group || null, pct_low: e.pct_low ?? '', pct_high: e.pct_high ?? '' })),
         activation_videos: s.activation_videos || [],
         circuits: s.circuits || [],
       }))
@@ -444,13 +444,13 @@ function ProgramEditorPage({ params }) {
         if (e && existing[j]) {
           await supabase.from('program_exercises').update({
             order_index: j, name: e.name, sets: e.sets, reps: e.reps, kg: e.kg,
-            rest: e.rest, note: e.note, video_url: e.video_url, superset_group: e.superset_group,
+            rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url, superset_group: e.superset_group,
             focus_muscles: e.focus_muscles || null, timer_config: e.timer_config || null,
           }).eq('id', existing[j].id)
         } else if (e && !existing[j]) {
           await supabase.from('program_exercises').insert({
             program_session_id: clientSess.id, order_index: j, name: e.name,
-            sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note,
+            sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note, materiel: e.materiel || null,
             video_url: e.video_url, superset_group: e.superset_group,
             focus_muscles: e.focus_muscles || null, timer_config: e.timer_config || null,
           })
@@ -508,7 +508,7 @@ function ProgramEditorPage({ params }) {
         order_index: j, name: e.name.trim(),
         sets: e.sets !== '' ? parseInt(e.sets) : null, reps: e.reps || null,
         kg: e.kg !== '' && !isNaN(parseFloat(e.kg)) ? parseFloat(e.kg) : null,
-        rest: e.rest || null, note: e.note || null, video_url: e.video_url || null,
+        rest: e.rest || null, note: e.note || null, materiel: e.materiel || null, video_url: e.video_url || null,
         superset_group: e.superset_group || null, focus_muscles: e.focus_muscles || null,
         pace_base: e.pace_base || null,
         pct_low: e.pct_low !== '' && e.pct_low != null ? parseFloat(e.pct_low) : null,
@@ -638,7 +638,7 @@ function ProgramEditorPage({ params }) {
     if (exos.length) {
       await supabase.from('program_exercises').insert(exos.map(e => ({
         program_session_id: newSess.id, order_index: e.order_index, name: e.name,
-        sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note, video_url: e.video_url,
+        sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url,
         superset_group: e.superset_group, focus_muscles: e.focus_muscles || null,
         pace_base: e.pace_base || null, pct_low: e.pct_low, pct_high: e.pct_high,
         timer_config: e.timer_config || null,
@@ -663,6 +663,11 @@ function ProgramEditorPage({ params }) {
         activation_videos: s.activation_videos || [], session_type: s.session_type || null,
         recurring_daily_target: s.recurring_daily_target ?? null,
         materiel: s.materiel || null,
+        // Circuits + warmup/cooldown/timer de séance : oubliés par le passé (voir
+        // addSessionFromWorkout ci-dessus pour le pattern correct), ce qui faisait disparaître le
+        // circuit d'une séance dupliquée sans toucher à ses exercices.
+        circuits: s.circuits || [], warmup_block: s.warmup_block || null, cooldown_block: s.cooldown_block || null,
+        activity_mode: s.activity_mode || 'standard', timer_config: s.timer_config || null,
         // Garde le même jour que l'originale (au lieu de retomber "non planifiée") : dans la
         // grille Jour 1→N, dupliquer une séance sert surtout à en poser une copie juste à côté,
         // que le coach glisse ensuite ailleurs si besoin.
@@ -678,6 +683,7 @@ function ProgramEditorPage({ params }) {
       kg: e.kg !== '' && !isNaN(parseFloat(e.kg)) ? parseFloat(e.kg) : null,
       rest: e.rest || null,
       note: e.note || null,
+      materiel: e.materiel || null,
       video_url: e.video_url || null,
       superset_group: e.superset_group || null,
       focus_muscles: e.focus_muscles || null,
@@ -828,7 +834,7 @@ function ProgramEditorPage({ params }) {
           await supabase.from('program_exercises').insert(
             exos.map(e => ({
               program_session_id: newSess.id, order_index: e.order_index, name: e.name,
-              sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note, video_url: e.video_url,
+              sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url,
               superset_group: e.superset_group, focus_muscles: e.focus_muscles || null,
               pace_base: e.pace_base || null, pct_low: e.pct_low, pct_high: e.pct_high, source_exercise_id: e.id,
               timer_config: e.timer_config || null,

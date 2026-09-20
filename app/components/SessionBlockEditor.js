@@ -13,7 +13,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { setUnsavedChanges, hasUnsavedChanges } from '@/lib/unsavedChanges'
-import { MUSCLE_GROUPS as REAL_MUSCLE_GROUPS } from '@/app/components/MuscleAnatomyDiagram'
+import { MUSCLE_GROUPS as REAL_MUSCLE_GROUPS, JOINT_GROUPS } from '@/app/components/MuscleAnatomyDiagram'
 import { parseMusclesFromText } from '@/app/components/CelebrationModal'
 import { isCardioMovementName, cardioMovementSortKey, PACE_BASES } from '@/lib/raceEstimates'
 import { hasCardioSteps } from '@/lib/cardioSteps'
@@ -22,10 +22,27 @@ import {
   X, TextB, TextItalic, LinkSimple, ListBullets, TextTSlash,
   CaretLeft, CaretRight, ArrowsDownUp, Plus, FileText, Flame, Snowflake, Barbell,
   DotsThreeVertical, PencilSimple, Info, MagnifyingGlass, Check, Timer, DotsSixVertical,
-  ArrowsClockwise, Heartbeat, VideoCamera, Lightbulb, Target, Eye, EyeSlash,
+  ArrowsClockwise, Heartbeat, VideoCamera, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack,
 } from '@phosphor-icons/react'
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
+
+// Dupliqué depuis app/components/athlete/SessionPlayer.js (même convention que ce fichier :
+// petit helper autonome plutôt qu'un import cross-fichier).
+function extractYouTubeId(url) {
+  if (!url) return null
+  const patterns = [
+    /youtu\.be\/([a-zA-Z0-9_-]{6,})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/,
+    /youtube\.com\/watch\?v=([a-zA-Z0-9_-]{6,})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{6,})/,
+  ]
+  for (const p of patterns) {
+    const m = url.match(p)
+    if (m) return m[1]
+  }
+  return null
+}
 
 const BLOCK_META = {
   warmup: {
@@ -177,8 +194,8 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
       if (Array.isArray(r.set_details)) {
         r.set_details.forEach((d, i) => {
           const set = sets[i]
-          if (set && d && (d.reps || d.kg != null)) {
-            setValues[`${set.id}:${exId}`] = { reps: d.reps || '', kg: d.kg != null ? String(d.kg) : '' }
+          if (set && d && (d.reps || d.kg != null || d.tempo)) {
+            setValues[`${set.id}:${exId}`] = { reps: d.reps || '', kg: d.kg != null ? String(d.kg) : '', tempo: d.tempo || '' }
           }
         })
       }
@@ -197,6 +214,7 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
         id: `ex-${r.id}`, name: r.name,
         muscles: musclesMap[r.name.trim().toLowerCase()] || '',
         focus_muscles: r.focus_muscles || '',
+        materiel: r.materiel || '',
       })),
       sets,
       restSeconds: parseRestToSeconds(g.rows[0].rest),
@@ -302,6 +320,7 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           sets: null,
           rest: null,
           note: block.setNotes?.[`note:${ex.id}`] || null,
+          materiel: ex.materiel || null,
           superset_group: supersetToken,
           pace_base: pace.base || null,
           pct_low: pace.pctLow !== '' && pace.pctLow != null ? parseFloat(pace.pctLow) : null,
@@ -312,9 +331,14 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           cardio_structure: block.cardioStructures?.[ex.id] || null,
         })
       } else {
-        const notes = (block.sets || [])
-          .map(s => block.setNotes?.[`${s.id}:${ex.id}`])
-          .filter(Boolean)
+        // addSet recopie la note du set précédent sur le nouveau set (voir plus haut) : sans
+        // dédoublonnage ici, une note laissée identique d'un set à l'autre serait répétée autant
+        // de fois que de sets dans le texte final vu par l'athlète.
+        const notes = [...new Set(
+          (block.sets || [])
+            .map(s => block.setNotes?.[`${s.id}:${ex.id}`])
+            .filter(Boolean)
+        )]
         // Reps/kg gardent leur granularité par set (contrairement à `note` ci-dessus, fusionnée
         // en une seule chaîne) : un tableau index-aligné sur `sets`, relu par groupExercisesIntoBlocks.
         const setDetails = (block.sets || []).map(s => {
@@ -322,6 +346,7 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           return {
             reps: v?.reps || null,
             kg: v?.kg !== '' && v?.kg != null ? parseFloat(v.kg) : null,
+            tempo: v?.tempo || null,
           }
         })
         rows.push({
@@ -330,12 +355,13 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           sets: block.sets?.length || 1,
           rest: formatRestLabel(block.restSeconds ?? 60),
           note: notes.length ? notes.join(' / ') : null,
+          materiel: ex.materiel || null,
           superset_group: supersetToken,
           pace_base: null,
           pct_low: null,
           pct_high: null,
           cardio_structure: null,
-          set_details: setDetails.some(d => d.reps || d.kg != null) ? setDetails : null,
+          set_details: setDetails.some(d => d.reps || d.kg != null || d.tempo) ? setDetails : null,
           timer_config,
           focus_muscles: ex.focus_muscles || null,
         })
@@ -441,6 +467,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [exercisesModalOpen, setExercisesModalOpen] = useState(false)
   const [exerciseSearch, setExerciseSearch] = useState('')
   const [selectedMuscles, setSelectedMuscles] = useState([])
+  const [selectedJoints, setSelectedJoints] = useState([])
   // Détour "nombre de séries" puis "temps de récup" à la toute première sélection d'un exercice —
   // coach uniquement (canManageCatalog), voir plus bas. Le sportif en "Séance libre" (canManageCatalog
   // false) et l'ajout d'un exercice suivant en superset (addingSecondaryExercise) gardent l'ajout
@@ -461,6 +488,20 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [movementMusclesMap, setMovementMusclesMap] = useState({})
   const [movementFocusGroupsMap, setMovementFocusGroupsMap] = useState({})
   const [focusPickerExerciseId, setFocusPickerExerciseId] = useState(null)
+  // Matériel par exercice — propre à CETTE séance (contrairement au focus, pas de catalogue
+  // partagé à mettre à jour) : un simple champ texte sur l'exercice, écrit directement dans
+  // program_exercises.materiel par flattenBlocksToExerciseRows. Regroupé avec le champ matériel
+  // de session dans l'encart du haut (cf. le calcul de exercisesWithMateriel).
+  const [materielPickerExerciseId, setMaterielPickerExerciseId] = useState(null)
+  const [draftMateriel, setDraftMateriel] = useState('')
+  // Modale "Advanced settings" (coach uniquement, canManageCatalog) — édite muscles/vidéo du
+  // mouvement (catalogue partagé `movements`, retrouvé par nom comme le reste de ce fichier), pas
+  // une donnée propre à cette séance : écrit directement en base à la sauvegarde, sans passer par
+  // handleSave/setUnsavedChanges (program_exercises ne porte ni muscles ni vidéo).
+  const [advancedSettingsExerciseId, setAdvancedSettingsExerciseId] = useState(null)
+  const [advancedDraftMuscles, setAdvancedDraftMuscles] = useState([])
+  const [advancedDraftVideoUrl, setAdvancedDraftVideoUrl] = useState('')
+  const [savingAdvancedSettings, setSavingAdvancedSettings] = useState(false)
   // Exercice cardio dont l'éditeur de steps détaillé (CardioStepEditor) est déplié — un seul à la
   // fois, repliés par défaut pour ne pas alourdir la vue quand la structure simple (base+%) suffit.
   const [cardioStepEditorExId, setCardioStepEditorExId] = useState(null)
@@ -469,6 +510,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [createMovementOpen, setCreateMovementOpen] = useState(false)
   const [newMovementName, setNewMovementName] = useState('')
   const [newMovementMuscles, setNewMovementMuscles] = useState([])
+  const [newMovementJoints, setNewMovementJoints] = useState([])
   const [newMovementVideoUrl, setNewMovementVideoUrl] = useState('')
   const [creatingMovement, setCreatingMovement] = useState(false)
   // Sélection par id (pas par index) : un glisser-déposer des blocs (voir moveBlock/orderMode
@@ -490,6 +532,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [draftSetNote, setDraftSetNote] = useState('')
   const [applyNoteToNextSets, setApplyNoteToNextSets] = useState(false)
   const [activeNoteContext, setActiveNoteContext] = useState(null)
+  const [videoModalExercise, setVideoModalExercise] = useState(null)
+  // Popover "Dupliquer" ouvert sur une cellule reps/kg (setCellKey), voir copySetValueToNextSet /
+  // copySetValueToAllSets — un seul à la fois, comme les autres popovers de ce fichier (RestDivider).
+  const [copyMenuOpenKey, setCopyMenuOpenKey] = useState(null)
   const descriptionRef = useRef(null)
   const descriptionBackdropRef = useRef(null)
   const blockIdCounter = useRef(0)
@@ -510,7 +556,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     async function load() {
       const [{ data: sessionRow }, { data: exerciseRows }, { data: movs }] = await Promise.all([
         supabase.from('program_sessions').select('id, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, timer_config, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
-        supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles, cardio_structure').eq('program_session_id', sessionId).order('order_index'),
+        supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, materiel, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles, cardio_structure').eq('program_session_id', sessionId).order('order_index'),
         // Bibliothèque récupérée en entier (petit volume) plutôt que filtrée par nom — sensible à
         // la casse côté Postgres, raterait silencieusement un nom mal accordé. Même approche que
         // l'ancien éditeur plein écran (page.js:629-638).
@@ -566,14 +612,17 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       // après coup en JS : il faut donc charger toute la bibliothèque (400+ mouvements chez ce
       // coach) plutôt que les 100 premiers par ordre alphabétique, sous peine de couper avant
       // d'atteindre "Run EF" etc. si aucun texte de recherche ne réduit déjà la liste.
-      let query = supabase.from('movements').select('id, name, muscles, video_url, youtube_url').order('name').limit(isCardio ? 2000 : 100)
+      let query = supabase.from('movements').select('id, name, muscles, joints, video_url, youtube_url').order('name').limit(isCardio ? 2000 : 100)
       if (searchTerm.trim()) query = query.ilike('name', `%${searchTerm.trim()}%`)
       if (selectedMuscles.length > 0 && !isCardio && exercisesModalOpen) {
         query = query.or(selectedMuscles.map(m => `muscles.ilike.%${m}%`).join(','))
       }
+      if (selectedJoints.length > 0 && !isCardio && exercisesModalOpen) {
+        query = query.or(selectedJoints.map(j => `joints.ilike.%${j}%`).join(','))
+      }
       const { data } = await query
       if (cancelled) return
-      let list = (data || []).map(m => ({ id: m.id, name: m.name, muscles: m.muscles || '', videoUrl: m.video_url || m.youtube_url || '' }))
+      let list = (data || []).map(m => ({ id: m.id, name: m.name, muscles: m.muscles || '', joints: m.joints || '', videoUrl: m.video_url || m.youtube_url || '' }))
       if (isCardio) {
         list = list.filter(m => isCardioMovementName(m.name))
           .sort((a, b) => cardioMovementSortKey(a.name) - cardioMovementSortKey(b.name))
@@ -582,7 +631,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       setMovementsList(list)
     }, 250)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [exercisesModalOpen, exerciseSearch, selectedMuscles, activityMode, mentionActive, mentionQuery])
+  }, [exercisesModalOpen, exerciseSearch, selectedMuscles, selectedJoints, activityMode, mentionActive, mentionQuery])
 
   // Bibliothèque d'activations pré-construites (app/library/activations) — chargée une seule fois,
   // à la première ouverture de la modale Description OU du picker "Create from library" d'un bloc
@@ -796,6 +845,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   // Dérivé de activeBlockId (voir sa déclaration) plutôt que stocké directement.
   const activeBlockIndex = blocks.findIndex(b => b.id === activeBlockId)
   const activeBlock = blocks[activeBlockIndex] ?? null
+  // Un même exercice (id) n'existe que dans un seul bloc, mais la modale Advanced settings est
+  // déclenchée depuis la grille des sets sans y garder de référence directe à son bloc parent.
+  const advancedSettingsExercise = advancedSettingsExerciseId
+    ? blocks.flatMap(b => b.exercises || []).find(e => e.id === advancedSettingsExerciseId) ?? null
+    : null
 
   // Glisser-déposer des cercles de navigation pour réordonner les blocs (actif seulement en mode
   // Order — hors de ce mode, un tap sur un cercle sert à naviguer, pas à déplacer). Même contrat
@@ -894,6 +948,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
 
   const toggleMuscle = (muscleKey) => {
     setSelectedMuscles(prev => prev.includes(muscleKey) ? prev.filter(m => m !== muscleKey) : [...prev, muscleKey])
+  }
+
+  const toggleJoint = (jointKey) => {
+    setSelectedJoints(prev => prev.includes(jointKey) ? prev.filter(j => j !== jointKey) : [...prev, jointKey])
   }
 
   // Pour warmup/cooldown, "Create from library" propose d'abord les activations pré-construites
@@ -1039,6 +1097,74 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     setUnsavedChanges(true)
   }
 
+  const openMaterielPicker = (ex) => {
+    setDraftMateriel(ex.materiel || '')
+    setMaterielPickerExerciseId(ex.id)
+  }
+
+  const confirmMaterielPicker = () => {
+    const exId = materielPickerExerciseId
+    setBlocks(blocks.map((b, i) => (
+      i === activeBlockIndex
+        ? { ...b, exercises: (b.exercises || []).map(e => e.id === exId ? { ...e, materiel: draftMateriel.trim() } : e) }
+        : b
+    )))
+    setUnsavedChanges(true)
+    setMaterielPickerExerciseId(null)
+  }
+
+  // Modale "Advanced settings" (coach uniquement, canManageCatalog) : édite muscles + vidéo du
+  // mouvement du catalogue partagé (movements, retrouvé par nom — même limite que openExerciseVideo :
+  // un exercice déjà enregistré n'a pas de lien vers movements.id, donc la vidéo se re-fetch si
+  // absente de ex.videoUrl). Écrit en base tout de suite (pas de setUnsavedChanges : program_exercises
+  // ne porte ni muscles ni vidéo, voir flattenBlocksToExerciseRows).
+  const openAdvancedSettings = async (ex) => {
+    const muscleKeys = (ex.muscles || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(part => REAL_MUSCLE_GROUPS.find(g => g.label.toLowerCase() === part.toLowerCase())?.key)
+      .filter(Boolean)
+    setAdvancedDraftMuscles(muscleKeys)
+    let videoUrl = ex.videoUrl || ''
+    if (!videoUrl) {
+      const { data } = await supabase.from('movements').select('video_url, youtube_url').eq('name', ex.name).limit(1).maybeSingle()
+      videoUrl = data?.video_url || data?.youtube_url || ''
+    }
+    setAdvancedDraftVideoUrl(videoUrl)
+    setAdvancedSettingsExerciseId(ex.id)
+  }
+
+  const closeAdvancedSettings = () => setAdvancedSettingsExerciseId(null)
+
+  const toggleAdvancedDraftMuscle = (key) => {
+    setAdvancedDraftMuscles(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  }
+
+  // Répercute sur TOUTES les occurrences de ce nom dans la séance (un même mouvement peut
+  // apparaître dans plusieurs blocs/supersets) sans attendre un rechargement de page — même
+  // logique que toggleExerciseFocusGroup pour movementFocusGroupsMap.
+  const saveAdvancedSettings = async (ex) => {
+    const name = ex.name.trim()
+    if (!name || savingAdvancedSettings) return
+    setSavingAdvancedSettings(true)
+    const musclesLabel = advancedDraftMuscles
+      .map(key => REAL_MUSCLE_GROUPS.find(g => g.key === key)?.label)
+      .filter(Boolean)
+      .join(', ')
+    const videoUrl = advancedDraftVideoUrl.trim()
+    const { error } = await supabase.from('movements')
+      .upsert({ name, muscles: musclesLabel || null, youtube_url: videoUrl || null }, { onConflict: 'name' })
+    setSavingAdvancedSettings(false)
+    if (error) { alert('Erreur : ' + error.message); return }
+    setMovementMusclesMap(prev => ({ ...prev, [name.toLowerCase()]: musclesLabel }))
+    setBlocks(prev => prev.map(b => ({
+      ...b,
+      exercises: (b.exercises || []).map(e => e.name.trim() === name ? { ...e, muscles: musclesLabel, videoUrl } : e),
+    })))
+    setAdvancedSettingsExerciseId(null)
+  }
+
   // Ajoute directement l'exercice au bloc actif, sans détour séries/récup — 1 série de base (voir
   // "Add set" pour en ajouter). Utilisé pour l'ajout en superset (addingSecondaryExercise), en mode
   // cardio, et pour la toute première sélection côté sportif (canManageCatalog false, "Séance
@@ -1100,12 +1226,17 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const openCreateMovement = () => {
     setNewMovementName(exerciseSearch.trim())
     setNewMovementMuscles([])
+    setNewMovementJoints([])
     setNewMovementVideoUrl('')
     setCreateMovementOpen(true)
   }
 
   const toggleNewMovementMuscle = (key) => {
     setNewMovementMuscles(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  }
+
+  const toggleNewMovementJoint = (key) => {
+    setNewMovementJoints(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   }
 
   // Insère le mouvement dans le catalogue (même shape que app/movements/page.js : nom seul
@@ -1123,15 +1254,20 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       .map(key => REAL_MUSCLE_GROUPS.find(g => g.key === key)?.label)
       .filter(Boolean)
       .join(', ')
+    const jointsLabel = newMovementJoints
+      .map(key => JOINT_GROUPS.find(g => g.key === key)?.label)
+      .filter(Boolean)
+      .join(', ')
     const { data, error } = await supabase.from('movements').insert({
       name,
       muscles: musclesLabel || null,
+      joints: jointsLabel || null,
       youtube_url: newMovementVideoUrl.trim() || null,
       coach_id: coachRow?.is_admin ? null : (user?.id || null),
-    }).select('id, name, muscles, video_url, youtube_url').single()
+    }).select('id, name, muscles, joints, video_url, youtube_url').single()
     setCreatingMovement(false)
     if (error || !data) { alert('Erreur : ' + (error?.message || 'création impossible')); return }
-    const ex = { id: data.id, name: data.name, muscles: data.muscles || '', videoUrl: data.video_url || data.youtube_url || '' }
+    const ex = { id: data.id, name: data.name, muscles: data.muscles || '', joints: data.joints || '', videoUrl: data.video_url || data.youtube_url || '' }
     setMovementsList(prev => [ex, ...prev])
     setCreateMovementOpen(false)
     if (replacingExerciseId) replaceExerciseInActiveBlock(ex)
@@ -1212,10 +1348,54 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       if (i !== activeBlockIndex) return b
       const key = setCellKey(setId, exerciseId)
       const setValues = { ...(b.setValues || {}) }
-      setValues[key] = { ...(setValues[key] || { reps: '', kg: '' }), [field]: value }
+      setValues[key] = { ...(setValues[key] || { reps: '', kg: '', tempo: '' }), [field]: value }
       return { ...b, setValues }
     }))
     setUnsavedChanges(true)
+  }
+
+  // Copie reps+kg d'un set vers le set juste après, pour ce même exercice.
+  const copySetValueToNextSet = (setId, exerciseId) => {
+    if (!activeBlock) return
+    setBlocks(blocks.map((b, i) => {
+      if (i !== activeBlockIndex) return b
+      const value = b.setValues?.[setCellKey(setId, exerciseId)]
+      if (!value) return b
+      const setIndex = (b.sets || []).findIndex(s => s.id === setId)
+      const nextSet = (b.sets || [])[setIndex + 1]
+      if (!nextSet) return b
+      const setValues = { ...(b.setValues || {}), [setCellKey(nextSet.id, exerciseId)]: { ...value } }
+      return { ...b, setValues }
+    }))
+    setUnsavedChanges(true)
+  }
+
+  // Copie reps+kg d'un set vers TOUS les sets du bloc pour ce même exercice (y compris ceux
+  // d'avant), pour éviter de ressaisir les mêmes valeurs set par set quand elles ne varient pas.
+  const copySetValueToAllSets = (setId, exerciseId) => {
+    if (!activeBlock) return
+    setBlocks(blocks.map((b, i) => {
+      if (i !== activeBlockIndex) return b
+      const value = b.setValues?.[setCellKey(setId, exerciseId)]
+      if (!value) return b
+      const setValues = { ...(b.setValues || {}) }
+      for (const s of (b.sets || [])) {
+        setValues[setCellKey(s.id, exerciseId)] = { ...value }
+      }
+      return { ...b, setValues }
+    }))
+    setUnsavedChanges(true)
+  }
+
+  // Les program_exercises déjà enregistrés n'ont que `name` (pas de lien vers movements.id), donc
+  // ex.videoUrl n'est connu à l'avance que pour un exercice tout juste ajouté depuis la recherche
+  // (voir addExercisesToActiveBlock) — pour les autres on va chercher la vidéo par nom au clic.
+  const openExerciseVideo = async (ex) => {
+    if (ex.videoUrl) { setVideoModalExercise(ex); return }
+    const { data } = await supabase.from('movements').select('video_url, youtube_url').eq('name', ex.name).limit(1).maybeSingle()
+    const videoUrl = data?.video_url || data?.youtube_url || ''
+    if (!videoUrl) { alert('Aucune vidéo liée à ce mouvement.'); return }
+    setVideoModalExercise({ ...ex, videoUrl })
   }
 
   // Récup du bloc actif (un seul restSeconds partagé par tous les RestDivider du bloc, voir
@@ -1494,6 +1674,22 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
             rows={2}
             style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${c.border}`, borderRadius: 6, padding: '10px 14px', fontSize: 14, outline: 'none', resize: 'none', background: c.bg, fontFamily: 'inherit', color: c.text }}
           />
+          {/* Regroupe automatiquement le matériel tagué exercice par exercice (bouton sac à dos
+              sur chaque ligne d'exercice) — vient s'ajouter au texte libre ci-dessus, ne le
+              remplace pas : le coach garde la main pour une note générale ("prévoir une serviette"). */}
+          {(() => {
+            const tagged = blocks.flatMap(b => b.exercises || []).filter(ex => ex.materiel?.trim())
+            if (!tagged.length) return null
+            return (
+              <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {tagged.map(ex => (
+                  <li key={ex.id} style={{ fontSize: 13, color: c.textMuted }}>
+                    <span style={{ fontWeight: 600, color: c.text }}>{ex.name}</span> — {ex.materiel}
+                  </li>
+                ))}
+              </ul>
+            )
+          })()}
         </div>
 
         {/* Récurrence : hors calendrier, proposée au sportif tous les jours plutôt qu'à une
@@ -1784,13 +1980,18 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                           <span {...attributes} {...listeners} style={{ display: 'flex', flexShrink: 0, cursor: 'grab', touchAction: 'none', color: c.textFaint }}>
                             <DotsSixVertical size={16} />
                           </span>
-                          <div style={{
-                            width: 56, height: 56, flexShrink: 0, borderRadius: 6, background: c.text, color: '#fff',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-                            fontSize: 9, fontWeight: 700, textTransform: 'uppercase', padding: 4, lineHeight: 1.2,
-                          }}>
+                          <button
+                            onClick={() => openExerciseVideo(ex)}
+                            title="Voir la vidéo"
+                            style={{
+                              width: 56, height: 56, flexShrink: 0, borderRadius: 6, background: c.text, color: '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+                              fontSize: 9, fontWeight: 700, textTransform: 'uppercase', padding: 4, lineHeight: 1.2,
+                              border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                            }}
+                          >
                             {ex.name}
-                          </div>
+                          </button>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 15, fontWeight: 600, color: c.text, textDecoration: 'underline' }}>{ex.name}</div>
                             {ex.muscles && (
@@ -1810,7 +2011,14 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                               )
                             })()}
                           </div>
-                          <div style={{ position: 'relative', flexShrink: 0 }}>
+                          <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <button
+                              onClick={() => openMaterielPicker(ex)}
+                              title={ex.materiel ? `Matériel : ${ex.materiel}` : 'Indiquer le matériel nécessaire'}
+                              style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: ex.materiel ? c.blue : c.textMuted }}
+                            >
+                              <Backpack size={18} weight={ex.materiel ? 'fill' : 'regular'} />
+                            </button>
                             <button
                               onClick={() => setExerciseMenuOpenId(v => v === ex.id ? null : ex.id)}
                               style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: c.textMuted }}
@@ -1871,6 +2079,32 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                                     })}
                                   </div>
                                   <button onClick={() => setFocusPickerExerciseId(null)} style={{ background: c.blue, color: '#fff', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                                    Done
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                            {materielPickerExerciseId === ex.id && (
+                              <>
+                                <div onClick={() => setMaterielPickerExerciseId(null)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
+                                <div style={{
+                                  position: 'absolute', right: 0, top: '100%', marginTop: 6, width: 260, background: c.bg,
+                                  border: `1px solid ${c.border}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                                  zIndex: 100, padding: 12,
+                                }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: c.textMuted, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Backpack size={12} /> Matériel pour cet exercice
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={draftMateriel}
+                                    onChange={e => setDraftMateriel(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && confirmMaterielPicker()}
+                                    placeholder="Ex. haltères 8kg, tapis"
+                                    autoFocus
+                                    style={{ ...input, marginBottom: 10 }}
+                                  />
+                                  <button onClick={confirmMaterielPicker} style={{ background: c.blue, color: '#fff', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                                     Done
                                   </button>
                                 </div>
@@ -2010,13 +2244,37 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                           </div>
                           {activeBlock.exercises.map(ex => {
                             const hasNote = Boolean(activeBlock.setNotes?.[setCellKey(s.id, ex.id)])
-                            const value = activeBlock.setValues?.[setCellKey(s.id, ex.id)] || { reps: '', kg: '' }
+                            const value = activeBlock.setValues?.[setCellKey(s.id, ex.id)] || { reps: '', kg: '', tempo: '' }
                             return (
                               <div key={ex.id} style={{ marginBottom: 10 }}>
-                                <div style={{ fontSize: 14, fontWeight: 600, color: c.text, textDecoration: 'underline', marginBottom: 6 }}>{ex.name}</div>
-                                <button style={{ display: 'block', border: 'none', background: 'none', padding: 0, marginBottom: 8, color: c.blue, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}>
-                                  Advanced settings
-                                </button>
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                                  <span style={{ fontSize: 14, fontWeight: 600, color: c.text, textDecoration: 'underline' }}>{ex.name}</span>
+                                  {ex.muscles && (
+                                    <span style={{ fontSize: 11, color: c.textMuted, background: c.disabledBg, borderRadius: 5, padding: '2px 8px' }}>
+                                      {ex.muscles}
+                                    </span>
+                                  )}
+                                </div>
+                                {canManageCatalog && (
+                                  <button
+                                    onClick={() => openAdvancedSettings(ex)}
+                                    style={{ display: 'block', border: 'none', background: 'none', padding: 0, marginBottom: 8, color: c.blue, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}
+                                  >
+                                    Advanced settings
+                                  </button>
+                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                  <span style={{ fontSize: 12, color: c.textMuted }}>Tempo</span>
+                                  <input
+                                    type="text"
+                                    inputMode="text"
+                                    maxLength={4}
+                                    placeholder="3010"
+                                    value={value.tempo || ''}
+                                    onChange={e => updateSetValue(s.id, ex.id, 'tempo', e.target.value.toUpperCase().replace(/[^0-9X]/g, ''))}
+                                    style={{ width: 70, boxSizing: 'border-box', textAlign: 'center', letterSpacing: '2px', border: `1px solid ${c.border}`, borderRadius: 6, padding: '6px 6px', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
+                                  />
+                                </div>
                                 <button
                                   onClick={() => openSetNotesModal(s.id, ex.id)}
                                   style={{
@@ -2045,6 +2303,42 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                                     style={{ width: 60, boxSizing: 'border-box', textAlign: 'center', border: `1px solid ${c.border}`, borderRadius: 6, padding: '8px 6px', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
                                   />
                                   <span style={{ fontSize: 13, color: c.textMuted }}>kg</span>
+                                  {activeBlock.sets.length > 1 && (value.reps || value.kg) && (
+                                    <div style={{ position: 'relative' }}>
+                                      <button
+                                        onClick={() => setCopyMenuOpenKey(k => k === setCellKey(s.id, ex.id) ? null : setCellKey(s.id, ex.id))}
+                                        title="Dupliquer reps/kg"
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', padding: '4px 6px', cursor: 'pointer', color: c.blue, fontSize: 12 }}
+                                      >
+                                        <CopySimple size={14} />
+                                      </button>
+                                      {copyMenuOpenKey === setCellKey(s.id, ex.id) && (
+                                        <>
+                                          <div onClick={() => setCopyMenuOpenKey(null)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
+                                          <div style={{
+                                            position: 'absolute', left: 0, top: '100%', marginTop: 4, background: c.bg, border: `1px solid ${c.border}`,
+                                            borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100, padding: 6,
+                                            display: 'flex', flexDirection: 'column', gap: 2, width: 170, whiteSpace: 'nowrap',
+                                          }}>
+                                            {i < activeBlock.sets.length - 1 && (
+                                              <button
+                                                onClick={() => { copySetValueToNextSet(s.id, ex.id); setCopyMenuOpenKey(null) }}
+                                                style={{ textAlign: 'left', padding: '6px 8px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: 'none', color: c.text }}
+                                              >
+                                                Set suivant
+                                              </button>
+                                            )}
+                                            <button
+                                              onClick={() => { copySetValueToAllSets(s.id, ex.id); setCopyMenuOpenKey(null) }}
+                                              style={{ textAlign: 'left', padding: '6px 8px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: 'none', color: c.text }}
+                                            >
+                                              Tous les sets
+                                            </button>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )
@@ -2507,6 +2801,34 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                           )
                         })}
                       </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '20px 0 14px' }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.5px', color: c.textMuted }}>ARTICULATIONS</span>
+                        {selectedJoints.length > 0 && (
+                          <button onClick={() => setSelectedJoints([])} style={{ border: 'none', background: 'none', color: c.blue, cursor: 'pointer', padding: 0, fontSize: 11, fontWeight: 600 }}>
+                            NONE
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+                        {JOINT_GROUPS.map(group => {
+                          const active = selectedJoints.includes(group.key)
+                          return (
+                            <button key={group.key} onClick={() => toggleJoint(group.key)} style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                            }}>
+                              <span style={{
+                                width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 11, fontWeight: 700, background: active ? c.blue : c.disabledBg, color: active ? '#fff' : c.textMuted,
+                              }}>
+                                {group.label.slice(0, 2).toUpperCase()}
+                              </span>
+                              <span style={{ fontSize: 10, color: c.textMuted, textAlign: 'center' }}>{group.label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
                     </>
                   )}
                 </div>
@@ -2632,6 +2954,23 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                 </div>
 
                 <div>
+                  <span style={label}>Articulations (facultatif)</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {JOINT_GROUPS.map(group => {
+                      const active = newMovementJoints.includes(group.key)
+                      return (
+                        <button key={group.key} onClick={() => toggleNewMovementJoint(group.key)} style={{
+                          border: `1.5px solid ${active ? c.blue : c.border}`, background: active ? c.blueBorder : c.bg,
+                          color: active ? c.blue : c.textMuted, borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        }}>
+                          {group.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div>
                   <span style={label}>Vidéo (facultatif)</span>
                   <input
                     value={newMovementVideoUrl}
@@ -2659,6 +2998,75 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                   }}
                 >
                   {creatingMovement ? '…' : 'Créer et sélectionner'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Advanced settings (coach uniquement) : muscles + vidéo du mouvement, retrouvé par nom
+            dans le catalogue partagé (movements) — voir openAdvancedSettings/saveAdvancedSettings. */}
+        {advancedSettingsExercise && (
+          <>
+            <div onClick={closeAdvancedSettings} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 210 }} />
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 211,
+              width: 520, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 64px)', overflowY: 'auto',
+              background: c.bg, borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: `1px solid ${c.border}` }}>
+                <span style={{ fontSize: 22, fontWeight: 700, color: c.text }}>{advancedSettingsExercise.name}</span>
+                <button onClick={closeAdvancedSettings} style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: c.text }}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+                <div>
+                  <span style={label}>Muscles</span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {REAL_MUSCLE_GROUPS.map(group => {
+                      const active = advancedDraftMuscles.includes(group.key)
+                      return (
+                        <button key={group.key} onClick={() => toggleAdvancedDraftMuscle(group.key)} style={{
+                          border: `1.5px solid ${active ? c.blue : c.border}`, background: active ? c.blueBorder : c.bg,
+                          color: active ? c.blue : c.textMuted, borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        }}>
+                          {group.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <span style={label}>Vidéo</span>
+                  <input
+                    value={advancedDraftVideoUrl}
+                    onChange={e => setAdvancedDraftVideoUrl(e.target.value)}
+                    placeholder="Lien YouTube…"
+                    style={input}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '16px 24px', borderTop: `1px solid ${c.border}` }}>
+                <button onClick={closeAdvancedSettings} style={{
+                  border: `1px solid ${c.border}`, color: c.text, fontWeight: 600, fontSize: 14, borderRadius: 6,
+                  padding: '9px 20px', background: c.bg, cursor: 'pointer',
+                }}>
+                  Annuler
+                </button>
+                <button
+                  onClick={() => saveAdvancedSettings(advancedSettingsExercise)}
+                  disabled={savingAdvancedSettings}
+                  style={{
+                    border: 'none', color: '#fff', fontWeight: 700, fontSize: 14, borderRadius: 6, padding: '9px 20px',
+                    background: savingAdvancedSettings ? c.disabledBg : c.blue,
+                    cursor: savingAdvancedSettings ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {savingAdvancedSettings ? '…' : 'Enregistrer'}
                 </button>
               </div>
             </div>
@@ -2856,6 +3264,32 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
             </div>
           </>
         )}
+
+        {videoModalExercise && (() => {
+          const videoId = extractYouTubeId(videoModalExercise.videoUrl)
+          return (
+            <div onClick={() => setVideoModalExercise(null)} style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 230,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+            }}>
+              {videoId ? (
+                <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 640, background: '#000', borderRadius: 10, overflow: 'hidden', position: 'relative' }}>
+                  <button onClick={() => setVideoModalExercise(null)} style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(0,0,0,.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <X size={16} />
+                  </button>
+                  <div style={{ position: 'relative', paddingTop: '56.25%' }}>
+                    <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+                      allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+                  </div>
+                </div>
+              ) : (
+                <a href={videoModalExercise.videoUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 8, padding: '12px 20px', fontWeight: 700, textDecoration: 'none', color: c.text }}>
+                  Ouvrir la vidéo ↗
+                </a>
+              )}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

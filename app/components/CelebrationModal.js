@@ -19,12 +19,14 @@ const MUSCLE_MAP = {
   'trapèzes':        ['trap', 'trapèze', 'trapeze'],
   'grand dorsal':    ['dorsal', 'dorsaux', 'dos'],
   'triceps':         ['tricep', 'triceps'],
+  'avant-bras':      ['avant-bras', 'avant bras', 'forearm', 'préhension', 'prehension', 'grip'],
   'lombaires':       ['lombaire', 'bas du dos', 'lower back', 'érecteur', 'erecteur'],
   'fessiers':        ['fessier', 'glute', 'fesse', 'glutéaux', 'rotateur', 'piriforme'],
   'ischio-jambiers': ['ischio', 'hamstring', 'ij'],
   'mollets':         ['mollet', 'calf', 'calves', 'gastro', 'soléaire', 'soleaire'],
   'tibial':          ['tibial', 'tibialis', 'jambier antérieur'],
   'psoas':           ['psoas', 'fléchisseur de hanche', 'flechisseur de hanche'],
+  'pieds':           ['pied', 'foot', 'plantaire', 'voûte plantaire', 'voute plantaire'],
 }
 
 const CITATIONS = [

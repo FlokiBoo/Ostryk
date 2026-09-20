@@ -76,7 +76,7 @@ async function copyProgramToAthletes(sourceProgram, targetAthleteIds, { coachId,
         await supabase.from('program_exercises').insert(
           exos.map(e => ({
             program_session_id: newSess.id, order_index: e.order_index, name: e.name, sets: e.sets, reps: e.reps,
-            kg: e.kg, rest: e.rest, note: e.note, video_url: e.video_url, superset_group: e.superset_group,
+            kg: e.kg, rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url, superset_group: e.superset_group,
             focus_muscles: e.focus_muscles || null, pace_base: e.pace_base || null, pct_low: e.pct_low, pct_high: e.pct_high,
             source_exercise_id: e.id,
           }))
@@ -329,7 +329,7 @@ export default function GroupDetailPage({ params }) {
     if ((exos || []).length) {
       const { error: insErr } = await supabase.from('program_exercises').insert(exos.map((e, j) => ({
         program_session_id: newSession.id, order_index: j, name: e.name, sets: e.sets, reps: e.reps, kg: e.kg,
-        rest: e.rest, note: e.note, video_url: e.video_url, superset_group: e.superset_group,
+        rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url, superset_group: e.superset_group,
         focus_muscles: e.focus_muscles, pace_base: e.pace_base, pct_low: e.pct_low, pct_high: e.pct_high,
         timer_config: e.timer_config,
       })))

@@ -198,6 +198,7 @@ export default function MicrocyclesBlock({ athleteId, athleteToken }) {
               reps: e.reps,
               kg: e.kg,
               note: e.note,
+              materiel: e.materiel || null,
               video_url: e.video_url,
               superset_group: e.superset_group,
               source_exercise_id: e.id,
@@ -229,8 +230,18 @@ export default function MicrocyclesBlock({ athleteId, athleteToken }) {
   async function duplicateSession(sess, programId, forcedIdx = null) {
     const prog = programs.find(p => p.id === programId)
     const idx = forcedIdx !== null ? forcedIdx : (prog?.sessions?.length || 0)
+    // `sess` ici ne porte que id/title/order_index (voir le select minimal qui charge `programs`
+    // plus haut) — sans ce refetch, circuits/warmup/cooldown/timer de la séance source étaient
+    // silencieusement ignorés à la copie alors que les exercices, eux, étaient bien dupliqués.
+    const { data: srcSession } = await supabase.from('program_sessions')
+      .select('circuits, coach_notes, activation, activation_videos, session_type, recurring_daily_target, materiel, activity_mode, warmup_block, cooldown_block, timer_config')
+      .eq('id', sess.id).single()
     const { data: newSess } = await supabase.from('program_sessions')
-      .insert({ program_id: programId, title: sess.title + ' (copie)', order_index: idx })
+      .insert({
+        ...srcSession,
+        program_id: programId, title: sess.title + ' (copie)', order_index: idx,
+        circuits: srcSession?.circuits || [], activation_videos: srcSession?.activation_videos || [],
+      })
       .select().single()
     if (!newSess) return
     const { data: exos } = await supabase.from('program_exercises')

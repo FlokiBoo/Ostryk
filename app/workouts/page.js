@@ -22,6 +22,7 @@ export default function WorkoutsPage() {
   const [workouts, setWorkouts] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newActivity, setNewActivity] = useState('Musculation 🏋️')
@@ -47,7 +48,7 @@ export default function WorkoutsPage() {
     if (!newTitle.trim()) return
     setCreating(true)
     const coachId = await getCoachId()
-    const { data: prog } = await supabase.from('programs')
+    const { data: prog, error } = await supabase.from('programs')
       .insert({ title: newTitle.trim(), coach_id: coachId, activity_type: newActivity, is_workout: true })
       .select().single()
     if (prog) {
@@ -55,6 +56,7 @@ export default function WorkoutsPage() {
       router.push(`/workouts/${prog.id}`)
       return
     }
+    if (error) { console.error(error); alert(`Erreur lors de la création : ${error.message}`) }
     setCreating(false)
   }
 
@@ -100,7 +102,7 @@ export default function WorkoutsPage() {
           <div style={{ flex: 1, fontFamily: 'var(--font-title)', color: 'var(--title)', fontWeight: 700, fontSize: 19, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Barbell size={20} /> Workouts
           </div>
-          <button onClick={() => { setCreating(true); setNewTitle(''); setNewActivity('Musculation 🏋️') }}
+          <button onClick={() => { setFormOpen(true); setNewTitle(''); setNewActivity('Musculation 🏋️') }}
             style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             <Plus size={14} weight="bold" /> Nouveau workout
           </button>
@@ -116,7 +118,7 @@ export default function WorkoutsPage() {
             style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px 9px 32px', border: '1px solid var(--border2)', borderRadius: 'var(--r)', fontSize: 13, outline: 'none', background: 'var(--bg)', color: 'var(--text)' }} />
         </div>
 
-        {creating && (
+        {formOpen && (
           <div style={{ margin: '14px 16px 0', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', padding: 14, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', maxWidth: 640 }}>
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Nom du workout</div>
@@ -125,8 +127,8 @@ export default function WorkoutsPage() {
                 style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 'var(--r)', fontSize: 13, outline: 'none', background: 'var(--bg2)', color: 'var(--text)' }} />
             </div>
             <ActivityTypeSelect value={newActivity} onChange={setNewActivity} inputStyle={{ fontSize: 12, fontWeight: 600, borderRadius: 20, padding: '8px 12px' }} />
-            <button onClick={createWorkout} disabled={!newTitle.trim() || creating} style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Créer</button>
-            <button onClick={() => setCreating(false)} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '8px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--text3)' }}>Annuler</button>
+            <button onClick={createWorkout} disabled={!newTitle.trim() || creating} style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: (!newTitle.trim() || creating) ? 0.5 : 1 }}>{creating ? 'Création…' : 'Créer'}</button>
+            <button onClick={() => setFormOpen(false)} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '8px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--text3)' }}>Annuler</button>
           </div>
         )}
 

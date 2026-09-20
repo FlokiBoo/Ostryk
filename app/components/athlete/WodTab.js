@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ClipboardText, UsersThree, Play, Repeat, Barbell, Clock, CalendarBlank } from '@phosphor-icons/react'
+import { ClipboardText, UsersThree, Play, Repeat, Barbell, Clock, CalendarBlank, CaretRight, ClockCounterClockwise } from '@phosphor-icons/react'
 import { WEEK_DAYS } from '@/lib/weekDays'
 import ObjectivesBlock from '@/app/components/ObjectivesBlock'
 import SwipeCarousel from './SwipeCarousel'
@@ -27,6 +27,7 @@ function estimateDurationMin(exercises) {
 export default function WodTab({
   isCoachView, noteBlocks,
   programs, completions, skippedSessions,
+  completionDates = {}, openedSessionId = null,
   router, token, setActiveTab,
   recurringTodayCounts = {},
   athlete, objectives, setObjectives,
@@ -37,6 +38,7 @@ export default function WodTab({
   // seulement pour cette visite (pas persisté), il redemandera à la prochaine ouverture tant que
   // athlete_days_of_week reste vide.
   const [dismissedDayPickerIds, setDismissedDayPickerIds] = useState(new Set())
+  const [showAllPast, setShowAllPast] = useState(false)
 
   const openSession = (sessionId) => {
     router.push(`/s/${token}?session=${sessionId}&focus=1${isCoachView ? '&coach=1' : ''}`)
@@ -79,9 +81,17 @@ export default function WodTab({
     else if (prog.athlete_days_of_week?.length) athleteDatedPrograms.push(prog)
     else if (!prog.sessions.every(s => s.session_type === 'recurrent')) unscheduledPrograms.push(prog)
   })
+  const isValidated = (s) => completions.has(s.id) && !skippedSessions.has(s.id)
+  // La séance que le sportif a ouverte en dernier reste la séance "en cours" tant qu'il ne l'a pas
+  // validée — y compris s'il a rouvert une séance plus ancienne depuis l'historique. Sans ça, la
+  // carte repartait sur la suivante du programme dès l'ouverture, comme si la séance ouverte était
+  // faite (retour terrain). Une fois validée, la progression classique reprend la main.
   const nextUncompletedOf = (prog) => {
     const progressionSessions = prog.sessions.filter(s => s.session_type !== 'recurrent')
-    return progressionSessions.find(s => !(completions.has(s.id) && !skippedSessions.has(s.id)))
+    const opened = openedSessionId
+      ? progressionSessions.find(s => s.id === openedSessionId && !isValidated(s))
+      : null
+    return opened || progressionSessions.find(s => !isValidated(s))
   }
 
   // Une seule carte par programme actif, toujours affichée jusqu'à validation de la séance —
@@ -118,6 +128,25 @@ export default function WodTab({
   // (recurring_session_logs) repart à zéro le lendemain sans faire disparaître la séance.
   const recurringDisplayEntries = recurringEntries.map(e => ({ ...e, isRecurring: true, dayKey: null }))
 
+  // Historique : toutes les séances déjà passées (validées ou sautées), programmes archivés et
+  // séances libres compris — le sportif doit pouvoir en rouvrir une pour la relire ou corriger son
+  // bilan, sans qu'elle encombre "Séance du jour". Triées du plus récent au plus ancien ; les
+  // lignes sans completed_at (anciennes validations) retombent sur l'ordre du programme.
+  // Une séance sautée reste proposée sur la carte du jour (elle n'est pas "faite") : on l'exclut
+  // alors de l'historique, sinon elle s'afficherait deux fois sur le même écran.
+  const boardSessionIds = new Set(programEntries.map(e => e.session.id))
+  const pastEntries = programs.flatMap(prog =>
+    prog.sessions
+      .filter(s => s.session_type !== 'recurrent' && completions.has(s.id) && !boardSessionIds.has(s.id) && !s.locked && !s.hidden)
+      .map(s => ({ session: s, program: prog, date: completionDates[s.id] || null, skipped: skippedSessions.has(s.id) }))
+  ).sort((a, b) => {
+    if (a.date && b.date) return b.date.localeCompare(a.date)
+    if (a.date) return -1
+    if (b.date) return 1
+    return (b.session.order_index ?? 0) - (a.session.order_index ?? 0)
+  })
+  const visiblePast = showAllPast ? pastEntries : pastEntries.slice(0, 5)
+
   // Un vrai programme multi-séances non daté doit demander à l'athlète son rythme hebdomadaire
   // (popup) — une "Séance libre" ponctuelle (1 seule séance) n'a pas de "rythme" à choisir, elle
   // reste juste accessible via sa carte dans "Séance du jour" ci-dessus sans popup.
@@ -151,7 +180,15 @@ export default function WodTab({
         {dayLabel && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: 'var(--vert-foret)' }}><CalendarBlank size={12} weight="light" /> Prévue {dayLabel}</span>
         )}
-        <div style={{ fontFamily: 'var(--font-title)', fontWeight: 600, fontSize: 19, color: 'var(--bordeaux)' }}>
+        {/* Nom du programme : toujours affiché (même avec un seul programme actif, où il ne
+            vivait auparavant que dans le sous-titre du carrousel, absent en dehors de ce mode) —
+            retour terrain, doit rester visible et lisible en toutes circonstances. */}
+        {program.title && (
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ostryk-text2)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+            {program.title}
+          </div>
+        )}
+        <div style={{ fontFamily: 'var(--font-title)', fontWeight: 600, fontSize: 22, color: 'var(--bordeaux)' }}>
           {s.title || 'Séance'}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: 'var(--ostryk-text2)' }}>
@@ -164,7 +201,7 @@ export default function WodTab({
           border: isPrimary ? 'none' : '1.5px solid var(--vert-foret)',
           borderRadius: 'var(--ostryk-pill-radius)', padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%',
         }}>
-          {(isDone || recurringMet) ? '✓ Commencer' : 'Commencer'}
+          {(isDone || recurringMet) ? '✓ Lancer la séance' : 'Lancer la séance'}
         </button>
       </div>
     )
@@ -183,7 +220,7 @@ export default function WodTab({
               content: (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text3)', textAlign: 'center' }}>
-                    {i + 1}/{recurringDisplayEntries.length} · {entry.program.title}
+                    {i + 1}/{recurringDisplayEntries.length}
                   </div>
                   {renderDayCard(entry, i === 0)}
                 </div>
@@ -204,13 +241,54 @@ export default function WodTab({
               content: (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text3)', textAlign: 'center' }}>
-                    {i + 1}/{programEntries.length} · {entry.program.title}
+                    {i + 1}/{programEntries.length}
                   </div>
                   {renderDayCard(entry, recurringDisplayEntries.length === 0 && i === 0)}
                 </div>
               ),
             }))} />
           )}
+        </div>
+      )}
+
+      {pastEntries.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text2)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <ClockCounterClockwise size={13} weight="light" /> Séances passées
+          </div>
+          <div style={{ background: 'var(--card-white)', border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-card-radius)', margin: '0 2px', overflow: 'hidden' }}>
+            {visiblePast.map((entry, i) => (
+              <button key={entry.session.id} onClick={() => openSession(entry.session.id)} style={{
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+                background: 'none', border: 'none', borderTop: i > 0 ? '1px solid var(--ostryk-border)' : 'none',
+                padding: '12px 14px', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--bordeaux)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {entry.session.title || 'Séance'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--ostryk-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {[
+                      entry.date ? new Date(entry.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : null,
+                      entry.program.title,
+                    ].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+                {entry.skipped && (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--ostryk-text3)', border: '1px solid var(--ostryk-border)', borderRadius: 20, padding: '2px 7px', flexShrink: 0 }}>Non faite</span>
+                )}
+                <CaretRight size={14} weight="bold" color="var(--vert-foret)" style={{ flexShrink: 0 }} />
+              </button>
+            ))}
+            {pastEntries.length > 5 && (
+              <button onClick={() => setShowAllPast(v => !v)} style={{
+                background: 'none', border: 'none', borderTop: '1px solid var(--ostryk-border)', width: '100%',
+                padding: '10px 14px', fontSize: 12, fontWeight: 700, color: 'var(--vert-foret)', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                {showAllPast ? 'Réduire' : `Voir tout (${pastEntries.length})`}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

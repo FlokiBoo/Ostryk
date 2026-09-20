@@ -242,6 +242,7 @@ function ProgramsPageInner({ params }) {
               kg: e.kg,
               rest: e.rest,
               note: e.note,
+              materiel: e.materiel || null,
               video_url: e.video_url,
               superset_group: e.superset_group,
               focus_muscles: e.focus_muscles,

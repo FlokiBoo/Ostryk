@@ -1,4 +1,4 @@
-const CACHE = 'ostryk-v4'
+const CACHE = 'ostryk-v5'
 
 // Installation : cache les pages essentielles
 self.addEventListener('install', event => {
@@ -26,6 +26,13 @@ self.addEventListener('fetch', event => {
   // Appels Supabase (données) — jamais interceptés, toujours en direct
   if (url.hostname.includes('supabase.co')) return
 
+  // Requêtes internes de routage Next.js (prefetch + navigation client-side d'un <Link>) —
+  // jamais interceptées : ce sont des payloads RSC (pas du HTML ni un asset), mis en cache par URL
+  // ici ils cassaient la navigation — un clic sur un lien juste préfetché (ex: résultat de
+  // recherche) resservait le prefetch en cache au lieu d'aller chercher la vraie page, faisant
+  // échouer le chargement (fixé par un reload, qui passe par la branche "navigate" ci-dessous).
+  if (url.searchParams.has('_rsc') || event.request.headers.has('rsc') || event.request.headers.has('next-router-prefetch')) return
+
   // Pages HTML (navigation) — Network first, cache en fallback (permet l'ouverture hors ligne)
   if (event.request.mode === 'navigate') {
     event.respondWith(
@@ -35,7 +42,12 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE).then(cache => cache.put(event.request, copy))
           return response
         })
-        .catch(() => caches.match(event.request).then(cached => cached || caches.match('/')))
+        .catch(() => caches.match(event.request).then(cached =>
+          // Repli sur "/" uniquement pour "/" lui-même : le resservir à la place de n'importe
+          // quelle autre page affichait le dashboard sous l'URL demandée (ex: /programs/...),
+          // ce qui ressemblait à une redirection intempestive. Sinon, vraie erreur réseau.
+          cached || (url.pathname === '/' ? caches.match('/') : Response.error())
+        ))
     )
     return
   }

@@ -712,7 +712,7 @@ function SessionBrowserModal({ programId, initialSessionId, athleteId, athleteNa
     async function load() {
       const { data: sessData } = await supabase
         .from('program_sessions')
-        .select('id, title, order_index, coach_notes, program_exercises(id, name, sets, reps, kg, note, order_index)')
+        .select('id, title, order_index, coach_notes, program_exercises(id, name, sets, reps, kg, note, materiel, order_index)')
         .eq('program_id', programId)
         .order('order_index')
 
@@ -759,7 +759,7 @@ function SessionBrowserModal({ programId, initialSessionId, athleteId, athleteNa
 
     const toInsert = s.exercises.filter(e => e.name).map((e, j) => ({
       program_session_id: newSession.id, order_index: j, name: e.name,
-      sets: e.sets ?? null, reps: e.reps || null, kg: e.kg ?? null, note: e.note || null,
+      sets: e.sets ?? null, reps: e.reps || null, kg: e.kg ?? null, note: e.note || null, materiel: e.materiel || null,
     }))
     let insertedExos = []
     if (toInsert.length) {

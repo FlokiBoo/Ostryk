@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { CaretLeft, X, Play, Timer, Check } from '@phosphor-icons/react'
 import Toast from '@/app/components/Toast'
+import TempoBadge from '@/app/components/TempoBadge'
 
 // Dupliqué depuis app/s/[token]/page.js (mêmes petites fonctions pures utilisées pour le même champ
 // `rest`/vidéos YouTube) — composant volontairement autonome plutôt qu'un import cross-fichier
@@ -103,6 +104,21 @@ function computeBlocks(exos) {
     i = j
   }
   return blocks
+}
+
+// Nombre de séries déjà validées (reps_done rempli) en tête de liste. Les sets sont créés et
+// remplis dans l'ordre (set_index, voir ensureExerciseSets/handleValidate côté page.js), donc un
+// simple compte de tête suffit à retrouver où l'athlète s'était arrêté — utilisé pour resynchroniser
+// blockIndex/validatedCount/round sur les données déjà en base (jamais perdues) plutôt que sur un
+// simple useState (lui, perdu) quand le WebView mobile recharge toute la page en repassant au
+// premier plan : voir SessionPlayer, SingleExerciseScreen, SupersetScreen ci-dessous.
+function countValidatedSets(sets) {
+  let n = 0
+  for (const s of sets) {
+    if (s.reps_done == null || s.reps_done === '') break
+    n++
+  }
+  return n
 }
 
 // Bannière de repos discrète (par opposition à TimerModal, plein écran, utilisé ailleurs dans
@@ -301,6 +317,10 @@ function ExerciseLogBody({ exo, totalSets, currentSetIndex, validatedCount, ctaL
 
       {exo.video_url && <VideoThumbnail url={exo.video_url} />}
 
+      <div style={{ textAlign: 'center' }}>
+        <TempoBadge tempo={exo.set_details?.[currentSetIndex]?.tempo || null} />
+      </div>
+
       {exo.note && (
         <div style={{ background: 'var(--card-white)', border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-card-radius)', padding: '12px 14px', fontSize: 14, color: '#5A5348', whiteSpace: 'pre-wrap' }}>
           {exo.note}
@@ -379,7 +399,7 @@ function PlayerHeader({ title, onBack, onClose }) {
 // un repos discret (RestBanner) s'affiche après chaque série tant que exo.rest est renseigné.
 function SingleExerciseScreen({ exo, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onSetSaved, blockLabel, onPrev, onNext, onExit }) {
   const totalSets = Math.max(1, parseInt(exo.sets, 10) || 1)
-  const [validatedCount, setValidatedCount] = useState(0)
+  const [validatedCount, setValidatedCount] = useState(() => Math.min(countValidatedSets(exerciseSets[exo.id] || []), totalSets))
   const [resting, setResting] = useState(false)
   const [lastValues, setLastValues] = useState(null)
   // Remonté à neuf par le parent (key=exo.id) à chaque nouveau bloc solo — validatedCount/resting
@@ -438,8 +458,15 @@ function SingleExerciseScreen({ exo, exerciseSets, onEnsureExerciseSets, onSaveE
 // action requise pour repartir sur le tour suivant (RestBanner.onDone gère l'avance).
 function SupersetScreen({ group, labels, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onSetSaved, blockLabel, onPrev, onNext, onExit }) {
   const totalRounds = Math.max(1, parseInt(group[0]?.sets, 10) || 1)
-  const [round, setRound] = useState(1)
-  const [exoIdx, setExoIdx] = useState(0)
+  const [round, setRound] = useState(() => {
+    const counts = group.map(exo => Math.min(countValidatedSets(exerciseSets[exo.id] || []), totalRounds))
+    return Math.min(Math.min(...counts) + 1, totalRounds)
+  })
+  const [exoIdx, setExoIdx] = useState(() => {
+    const counts = group.map(exo => Math.min(countValidatedSets(exerciseSets[exo.id] || []), totalRounds))
+    const idx = counts.findIndex(c => c === Math.min(...counts))
+    return idx === -1 ? 0 : idx
+  })
   const [resting, setResting] = useState(false)
   // Une mémoire par exercice (A1/A2 n'ont pas le même poids/reps) — voir ExerciseLogBody.initialReps/initialKg.
   const [lastValuesByExo, setLastValuesByExo] = useState({})
@@ -521,7 +548,7 @@ function SupersetScreen({ group, labels, exerciseSets, onEnsureExerciseSets, onS
         ) : (
           <ExerciseLogBody
             key={`${exo.id}:${round}`}
-            exo={exo} totalSets={1} currentSetIndex={0} validatedCount={0}
+            exo={exo} totalSets={1} currentSetIndex={round - 1} validatedCount={0}
             ctaLabel={isLastOfGroup ? 'Valider — fin du tour, repos' : 'Valider'}
             onValidate={handleValidate}
             initialReps={lastValuesByExo[exo.id]?.reps} initialKg={lastValuesByExo[exo.id]?.kg}
@@ -541,7 +568,21 @@ export default function SessionPlayer({ session, exerciseSets, onEnsureExerciseS
   const exos = (session.exercises || []).filter(e => e.name)
   const labels = computeLabels(exos)
   const blocks = computeBlocks(exos)
-  const [blockIndex, setBlockIndex] = useState(0)
+  const isBlockDone = (block) => {
+    if (block.type === 'solo') {
+      const totalSets = Math.max(1, parseInt(block.exos[0].sets, 10) || 1)
+      return countValidatedSets(exerciseSets[block.exos[0].id] || []) >= totalSets
+    }
+    const totalRounds = Math.max(1, parseInt(block.exos[0]?.sets, 10) || 1)
+    return block.exos.every(exo => countValidatedSets(exerciseSets[exo.id] || []) >= totalRounds)
+  }
+  // Reprend sur le premier bloc pas encore entièrement validé plutôt que de toujours repartir de 0 —
+  // ce qui permet à SessionPlayer de "résister" à un remount complet (WebView tuée puis recréée en
+  // arrière-plan) en se resynchronisant sur les séries déjà en base, voir countValidatedSets ci-dessus.
+  const [blockIndex, setBlockIndex] = useState(() => {
+    const idx = blocks.findIndex(b => !isBlockDone(b))
+    return idx === -1 ? Math.max(0, blocks.length - 1) : idx
+  })
 
   if (blocks.length === 0) {
     return (

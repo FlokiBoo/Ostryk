@@ -19,6 +19,7 @@ import AddActivityWizard from '@/app/components/athlete/AddActivityWizard'
 import PerformancesTab from '@/app/components/athlete/PerformancesTab'
 import ProfilTab from '@/app/components/athlete/ProfilTab'
 import SessionPlayer from '@/app/components/athlete/SessionPlayer'
+import TempoBadge, { getTempoDisplay } from '@/app/components/TempoBadge'
 import { UNITS, unitOf, formatPerformance } from '@/app/components/TrackedMovementsBlock'
 import TimerModal from '@/app/components/TimerModal'
 import SplitTimerSession from '@/app/components/SplitTimerSession'
@@ -188,7 +189,21 @@ function AthleteView({ params }) {
   // pour ne pas rouvrir le player sur une autre séance après un retour au calendrier. Reset ajusté
   // pendant le rendu (pattern React officiel "Adjusting state when a prop changes") plutôt que
   // dans un effet, pour ne pas déclencher un second rendu superflu.
-  const [playerStarted, setPlayerStarted] = useState(false)
+  // Persisté en localStorage (même convention que queueKey plus bas) : un WebView mobile peut
+  // recharger toute la page quand l'app repasse en arrière-plan, ce qui perdrait ce useState et
+  // renverrait l'athlète sur SessionCard au lieu du player — SessionPlayer se resynchronise déjà
+  // sur les séries en base (voir countValidatedSets), mais encore faut-il qu'il se remonte direct.
+  const playerStartedKey = `coachpro_player_started_${token}`
+  const [playerStarted, setPlayerStartedRaw] = useState(() => {
+    try { return !!targetSessionId && localStorage.getItem(playerStartedKey) === targetSessionId } catch { return false }
+  })
+  const setPlayerStarted = (started) => {
+    setPlayerStartedRaw(started)
+    try {
+      if (started && targetSessionId) localStorage.setItem(playerStartedKey, targetSessionId)
+      else localStorage.removeItem(playerStartedKey)
+    } catch { /* localStorage indisponible (navigation privée...) — pas bloquant */ }
+  }
   const [playerStartedForSession, setPlayerStartedForSession] = useState(targetSessionId)
   if (targetSessionId !== playerStartedForSession) {
     setPlayerStartedForSession(targetSessionId)
@@ -198,6 +213,35 @@ function AthleteView({ params }) {
   const [programs, setPrograms] = useState([])
   const [completions, setCompletions] = useState(new Set())
   const [skippedSessions, setSkippedSessions] = useState(new Set())
+  // Date de validation par séance (program_completions.completed_at) — sert uniquement à ordonner
+  // l'historique "Séances passées" de la page d'accueil, du plus récent au plus ancien.
+  const [completionDates, setCompletionDates] = useState({})
+  // Séance ouverte en dernier par le sportif et pas encore validée : tant qu'elle ne l'est pas,
+  // c'est ELLE que la carte "Séance du jour" doit afficher, pas la suivante du programme (retour
+  // terrain : ouvrir une séance sans la valider faisait aussitôt apparaître la suivante à sa
+  // place, comme si elle avait été faite). Persisté en localStorage (même convention que
+  // playerStartedKey) pour survivre au rechargement complet que le WebView mobile provoque quand
+  // l'app repasse en arrière-plan.
+  const openedSessionKey = `coachpro_opened_session_${token}`
+  const [openedSessionId, setOpenedSessionId] = useState(() => {
+    try { return localStorage.getItem(openedSessionKey) } catch { return null }
+  })
+  const forgetOpenedSession = (sessId) => {
+    setOpenedSessionId(prev => (prev === sessId ? null : prev))
+    try {
+      if (localStorage.getItem(openedSessionKey) === sessId) localStorage.removeItem(openedSessionKey)
+    } catch { /* localStorage indisponible (navigation privée...) — pas bloquant */ }
+  }
+  // Un coach qui prévisualise la séance d'un client ne "fait" pas cette séance : il ne doit pas
+  // déplacer l'ancre du sportif. Sur son propre profil sportif (is_coach), c'est bien lui qui
+  // s'entraîne, ?coach=1 ou pas — même distinction que backHref plus bas.
+  const canAnchorOpenedSession = !isCoachView || !!athlete?.is_coach
+  // Ancre posée pendant le rendu (pattern React "Adjusting state when a prop changes"), comme le
+  // reset de playerStarted juste au-dessus : un effet ne servirait qu'à déclencher un rendu de plus.
+  if (focusMode && targetSessionId && canAnchorOpenedSession && openedSessionId !== targetSessionId) {
+    setOpenedSessionId(targetSessionId)
+    try { localStorage.setItem(openedSessionKey, targetSessionId) } catch { /* idem */ }
+  }
   const [openSessionId, setOpenSessionId] = useState(null)
   const [validating, setValidating] = useState(false)
   const [exerciseLogs, setExerciseLogs] = useState({})
@@ -384,6 +428,9 @@ function AthleteView({ params }) {
       const completionSet = new Set((comps || []).map(c => c.program_session_id))
       setCompletions(completionSet)
       setSkippedSessions(new Set((comps || []).filter(c => c.skipped).map(c => c.program_session_id)))
+      const datesMap = {}
+      ;(comps || []).forEach(c => { if (c.completed_at) datesMap[c.program_session_id] = c.completed_at })
+      setCompletionDates(datesMap)
 
       // Séance validée par le coach en direct pendant que l'athlète n'était pas connecté : on lui
       // montre le même bilan (citation, record, muscles) qu'une auto-validation, une seule fois.
@@ -625,6 +672,7 @@ function AthleteView({ params }) {
     newSet.delete(sessId)
     setCompletions(newSet)
     setSkippedSessions(prev => { const n = new Set(prev); n.delete(sessId); return n })
+    setCompletionDates(prev => { const n = { ...prev }; delete n[sessId]; return n })
     setOpenSessionId(sessId)
     setValidating(false)
   }
@@ -639,6 +687,8 @@ function AthleteView({ params }) {
     )
     setCompletions(new Set([...completions, sessId]))
     setSkippedSessions(prev => new Set([...prev, sessId]))
+    setCompletionDates(prev => ({ ...prev, [sessId]: prev[sessId] || new Date().toISOString() }))
+    forgetOpenedSession(sessId)
     setValidating(false)
   }
 
@@ -672,7 +722,9 @@ function AthleteView({ params }) {
       setCompletions(newSet)
       setSkippedSessions(prev => { const n = new Set(prev); n.delete(sessId); return n })
       setPendingGroupSessions(prev => prev.filter(p => p.ownSessionId !== sessId))
+      setCompletionDates(prev => ({ ...prev, [sessId]: prev[sessId] || new Date().toISOString() }))
       if (!isUpdate) {
+        forgetOpenedSession(sessId)
         const next = progSessions.find(s => !newSet.has(s.id))
         setOpenSessionId(next?.id || null)
       }
@@ -689,7 +741,9 @@ function AthleteView({ params }) {
     setCompletions(newSet)
     setSkippedSessions(prev => { const n = new Set(prev); n.delete(sessId); return n })
     setPendingGroupSessions(prev => prev.filter(p => p.ownSessionId !== sessId))
+    setCompletionDates(prev => ({ ...prev, [sessId]: prev[sessId] || new Date().toISOString() }))
     if (!isUpdate) {
+      forgetOpenedSession(sessId)
       const next = progSessions.find(s => !newSet.has(s.id))
       setOpenSessionId(next?.id || null)
     }
@@ -1032,6 +1086,13 @@ function AthleteView({ params }) {
     // est vrai alors qu'il s'agit de sa propre séance — "retour" doit alors rester sur sa page séance.
     const backHref = (isCoachView && !athlete.is_coach) ? '/' : `/s/${token}`
 
+    // isCoachView est vrai à la fois quand un coach prévisualise la séance d'un CLIENT (supervision,
+    // pas d'exécution — l'ancienne vue reste adaptée : note coach, pas de "Démarrer") et quand un
+    // coach est sur SA PROPRE séance (ath.is_coach, voir commentaire backHref ci-dessus) — dans ce
+    // second cas c'est bien lui qui s'entraîne, donc le nouveau player doit s'afficher comme pour
+    // n'importe quel client.
+    const isOwnAthleteSession = !isCoachView || athlete.is_coach
+
     // Le nouveau player exercice-par-exercice (SessionPlayer) ne gère pas encore les mouvements de
     // course (zone d'allure cible, logging distance/allure, intervalles — voir TODO.md, chantier
     // explicitement mis de côté à sa création) : il affiquerait à tort des steppers Reps/Poids sans
@@ -1056,7 +1117,7 @@ function AthleteView({ params }) {
           </div>
         </div>
 
-        {focusSession && playerStarted && !isCoachView && !focusSessionHasRun ? (
+        {focusSession && playerStarted && isOwnAthleteSession && !focusSessionHasRun ? (
           <SessionPlayer
             session={focusSession}
             exerciseSets={exerciseSets}
@@ -1108,7 +1169,7 @@ function AthleteView({ params }) {
               onLaunchTimer={(config, label) => setRunningTimer({ config, label })}
               onExerciseSaved={() => setExerciseToast('Enregistré')}
               token={token}
-              playerMode={!isCoachView}
+              playerMode={isOwnAthleteSession}
               onStartPlayer={focusSessionHasRun ? null : () => setPlayerStarted(true)}
             />
           ) : (
@@ -1194,6 +1255,7 @@ function AthleteView({ params }) {
             isCoachView={isCoachView}
             noteBlocks={noteBlocks}
             programs={programs} completions={completions} skippedSessions={skippedSessions}
+            completionDates={completionDates} openedSessionId={openedSessionId}
             selectedType={selectedType} setSelectedType={setSelectedType}
             router={router} token={token} setActiveTab={setActiveTab}
             onUpdateProgramDays={updateProgramDays} isGroupLeader={isGroupLeader}
@@ -1615,10 +1677,13 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
 
   // À l'ouverture, pré-remplit une ligne de série par série prescrite par le coach
   // (ex. "3 séries" -> 3 lignes Reps/Charge), au lieu d'attendre que le sportif clique "+ Ajouter".
+  // Côté coach en direct (isCoachView), le coach saisit les résultats au fur et à mesure de la
+  // séance réelle plutôt qu'à l'avance : une seule ligne s'ouvre, il ajoute la 2e/3e série lui-même
+  // quand l'athlète l'a faite, peu importe le nombre de séries prescrit dans le programme.
   useEffect(() => {
     if (!isOpen || !onEnsureExerciseSets) return
     exos.forEach(exo => {
-      const wanted = parseInt(exo.sets, 10)
+      const wanted = isCoachView ? 1 : parseInt(exo.sets, 10)
       if (!wanted || wanted < 1) return
       if (provisionedSetsRef.current.has(exo.id)) return
       provisionedSetsRef.current.add(exo.id)
@@ -1663,7 +1728,7 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
             {session.locked && <span style={{ display: 'flex' }}><Lock size={13} /></span>}
             {session.hidden && <span style={{ display: 'flex' }}><EyeSlash size={13} /></span>}
             {session.title || `Séance ${idx + 1}`}
-            {session.materiel && (
+            {(session.materiel || exos.some(e => e.materiel?.trim())) && (
               <button onClick={e => { e.stopPropagation(); setShowMateriel(true) }} title="Matériel à prévoir pour cette séance"
                 style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 20, padding: '2px 8px', display: 'flex', cursor: 'pointer', flexShrink: 0 }}>
                 <Backpack size={13} />
@@ -1726,10 +1791,21 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
 
       {isOpen && !session.locked && !session.hidden && (
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {session.materiel && (
-            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '10px 12px' }}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}><Backpack size={11} /> Matériel</div>
-              <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{session.materiel}</div>
+          {(session.materiel || exos.some(e => e.materiel?.trim())) && (
+            <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderLeft: '3px solid var(--bordeaux)', borderRadius: 'var(--r)', padding: '10px 12px' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--bordeaux)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}><Backpack size={13} /> Matériel à prévoir</div>
+              {session.materiel && (
+                <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{session.materiel}</div>
+              )}
+              {exos.some(e => e.materiel?.trim()) && (
+                <ul style={{ margin: session.materiel ? '6px 0 0' : 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {exos.filter(e => e.materiel?.trim()).map(e => (
+                    <li key={e.id} style={{ fontSize: 13, color: 'var(--text)' }}>
+                      <span style={{ fontWeight: 700 }}>{e.name}</span> — {e.materiel}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {(session.activation || (session.activation_videos?.length > 0)) && (
@@ -1785,20 +1861,40 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
           {playerMode && !sessionHasRun ? (
             <>
               {(session.circuits || []).filter(c => circuitSlot(c) === 0).map(c => renderCircuit(c))}
+              {/* Aperçu complet avant "Démarrer" (vidéo, cibles séries/reps/poids, consigne du
+                  coach) — une fois lancé, SessionPlayer ne montre plus qu'un exercice à la fois,
+                  donc c'est ici et uniquement ici que l'athlète peut voir toute la séance à
+                  l'avance. Volontairement en lecture seule (pas de timer récup cliquable, pas de
+                  saisie) : la logique interactive reste dans SessionPlayer. */}
               {exos.map((exo, ei) => (
                 <Fragment key={exo.id}>
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: 10, background: 'var(--card-white)',
-                    border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-card-radius)', padding: '10px 14px',
+                    background: 'var(--card-white)', border: '1px solid var(--ostryk-border)',
+                    borderRadius: 'var(--ostryk-card-radius)', padding: '10px 14px',
                   }}>
-                    <span style={{
-                      minWidth: 24, height: 24, borderRadius: '50%', background: 'var(--beige)', color: 'var(--bordeaux)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, padding: '0 4px', flexShrink: 0,
-                    }}>
-                      {labels[exo.id] || String.fromCharCode(65 + ei)}
-                    </span>
-                    <span style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>{exo.name}</span>
-                    {exo.sets && <span style={{ fontSize: 12, color: 'var(--ostryk-text2)', fontWeight: 600 }}>{exo.sets} séries</span>}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{
+                        minWidth: 24, height: 24, borderRadius: '50%', background: 'var(--beige)', color: 'var(--bordeaux)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, padding: '0 4px', flexShrink: 0,
+                      }}>
+                        {labels[exo.id] || String.fromCharCode(65 + ei)}
+                      </span>
+                      <span style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>{exo.name}</span>
+                      {exo.video_url && (
+                        <VideoButton url={exo.video_url} label="▶"
+                          style={{ background: 'var(--green-light)', color: 'var(--green)', border: '1px solid #B8EAD8', borderRadius: 'var(--r)', padding: '4px 10px', fontSize: 13, fontWeight: 700, flexShrink: 0 }} />
+                      )}
+                    </div>
+                    {(exo.sets || exo.reps || exo.kg || exo.rest) && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                        {exo.sets && <Pill value={exo.sets} label="séries" />}
+                        {exo.reps && <Pill value={exo.reps} label="reps" />}
+                        {exo.kg && <Pill value={`${exo.kg} kg`} />}
+                        {exo.rest && <Pill value={exo.rest} label="récup" color="#EFF6FF" textColor="#1D4ED8" />}
+                      </div>
+                    )}
+                    <TempoBadge tempo={getTempoDisplay(exo.set_details)} />
+                    {exo.note && <div style={{ fontSize: 12, color: 'var(--text2)', fontStyle: 'italic', marginTop: 8, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{exo.note}</div>}
                   </div>
                   {(session.circuits || []).filter(c => circuitSlot(c) === ei + 1).map(c => renderCircuit(c))}
                 </Fragment>
@@ -1823,7 +1919,7 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
             <Fragment key={exo.id}>
             <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '12px 14px' }}>
               <div onClick={isCollapsed ? () => setExpandedOverride(p => ({ ...p, [exo.id]: true })) : undefined}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: (exo.note || (!isCollapsed && (exo.sets || exo.reps || exo.kg))) ? 8 : 0, cursor: isCollapsed ? 'pointer' : 'default' }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: (exo.note || (!isCollapsed && (exo.sets || exo.reps || exo.kg || getTempoDisplay(exo.set_details)))) ? 8 : 0, cursor: isCollapsed ? 'pointer' : 'default' }}>
                 <div style={{
                   minWidth: 24, height: 24, borderRadius: '50%',
                   background: isCollapsed ? '#DCFCE7' : 'var(--green-light)', color: isCollapsed ? '#166534' : 'var(--green)',
@@ -1854,6 +1950,7 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
                   contrairement au détail sets/reps/pace ci-dessous, c'est une note permanente que
                   l'athlète doit pouvoir relire pendant tout l'exercice (ex: consigne de respiration
                   sur un run), pas un détail de saisie qui ne sert plus une fois enregistré. */}
+              {!isCollapsed && <TempoBadge tempo={getTempoDisplay(exo.set_details)} />}
               {exo.note && <div style={{ fontSize: 12, color: 'var(--text2)', fontStyle: 'italic', marginTop: 4, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{exo.note}</div>}
 
               {!isCollapsed && <>
@@ -2189,7 +2286,18 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
             <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontSize: 17, fontWeight: 700, marginBottom: 12, textAlign: 'center' }}>
               Matériel à prévoir
             </div>
-            <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: 16 }}>{session.materiel}</div>
+            {session.materiel && (
+              <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: exos.some(e => e.materiel?.trim()) ? 8 : 16 }}>{session.materiel}</div>
+            )}
+            {exos.some(e => e.materiel?.trim()) && (
+              <ul style={{ margin: '0 0 16px', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {exos.filter(e => e.materiel?.trim()).map(e => (
+                  <li key={e.id} style={{ fontSize: 13, color: 'var(--text)' }}>
+                    <span style={{ fontWeight: 700 }}>{e.name}</span> — {e.materiel}
+                  </li>
+                ))}
+              </ul>
+            )}
             <button onClick={() => setShowMateriel(false)} style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '11px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%' }}>
               Compris
             </button>
