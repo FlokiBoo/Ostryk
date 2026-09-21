@@ -1,11 +1,26 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ClipboardText, UsersThree, Play, Repeat, Barbell, Clock, CalendarBlank, CaretRight, ClockCounterClockwise } from '@phosphor-icons/react'
+import { ClipboardText, UsersThree, Play, Repeat, Barbell, Clock, CalendarBlank, CaretRight, ClockCounterClockwise, LockSimpleOpen } from '@phosphor-icons/react'
 import { WEEK_DAYS } from '@/lib/weekDays'
 import ObjectivesBlock from '@/app/components/ObjectivesBlock'
 import SwipeCarousel from './SwipeCarousel'
 import ChooseDaysModal from './ChooseDaysModal'
+
+// Un programme multi-séances que personne n'a daté (ni le coach via day_of_week, ni le sportif via
+// athlete_days_of_week) doit d'abord demander son rythme hebdomadaire — c'est ChooseDaysModal, plus
+// bas. Le prédicat est exporté parce que app/s/[token]/page.js doit savoir si ce popup est en
+// attente : il passe avant le rappel d'abonnement dans la file des popups, sinon les deux
+// s'affichent l'un sur l'autre au même chargement.
+export function hasPendingDayPicker(programs, completions, skippedSessions) {
+  return (programs || []).filter(p => p.pinned_board !== false && !p.archived && !p.group_id).some(prog => {
+    const progression = prog.sessions.filter(s => s.session_type !== 'recurrent')
+    if (progression.length <= 1) return false
+    if (progression.some(s => s.day_of_week != null)) return false
+    if (prog.athlete_days_of_week?.length) return false
+    return progression.some(s => !(completions.has(s.id) && !skippedSessions.has(s.id)))
+  })
+}
 
 // Aucune durée réelle n'est connue avant d'avoir fait la séance (duration_minutes n'existe qu'en
 // feedback post-séance) — estimation grossière à partir du nombre de séries prescrites, juste pour
@@ -28,6 +43,7 @@ export default function WodTab({
   isCoachView, noteBlocks,
   programs, completions, skippedSessions,
   completionDates = {}, openedSessionId = null,
+  onOpenSubscription,
   router, token, setActiveTab,
   recurringTodayCounts = {},
   athlete, objectives, setObjectives,
@@ -207,8 +223,33 @@ export default function WodTab({
     )
   }
 
+  // Un compte gratuit n'entendait parler d'abonnement qu'au moment précis où il butait sur la
+  // limite de séances d'un programme libre-service — autant dire presque jamais. Bandeau permanent
+  // mais volontairement fin (une ligne) : la séance du jour doit rester visible sans scroll, c'est
+  // la raison pour laquelle les Objectifs ont déjà été repoussés plus bas.
+  const showUpsellBanner = !isCoachView && !athlete?.is_coach && athlete?.subscription_status !== 'active' && !!onOpenSubscription
+
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {showUpsellBanner && (
+        <button onClick={onOpenSubscription} style={{
+          display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', margin: '0 2px',
+          background: 'var(--beige)', border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-pill-radius)',
+          padding: '10px 14px', cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+          <span style={{ display: 'flex', flexShrink: 0, color: 'var(--bordeaux)' }}><LockSimpleOpen size={17} weight="light" /></span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--bordeaux)', lineHeight: 1.25 }}>
+              Tu es en accès gratuit
+            </span>
+            <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ostryk-text2)', lineHeight: 1.3 }}>
+              Débloque tous les programmes
+            </span>
+          </span>
+          <CaretRight size={13} weight="bold" color="var(--vert-foret)" style={{ flexShrink: 0 }} />
+        </button>
+      )}
+
       {recurringDisplayEntries.length > 0 && (
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text2)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Séance récurrente</div>

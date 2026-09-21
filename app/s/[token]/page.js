@@ -8,10 +8,12 @@ import CelebrationModal, { parseMusclesFromText } from '@/app/components/Celebra
 import MuscleAnatomyDiagram, { MUSCLE_GROUPS } from '@/app/components/MuscleAnatomyDiagram'
 import FocusBodyDiagram from '@/app/components/FocusBodyDiagram'
 import Toast from '@/app/components/Toast'
+import SubscriptionScreen from '@/app/components/athlete/SubscriptionScreen'
+import { SUBSCRIPTION_TIERS, FREE_SESSIONS_DEFAULT } from '@/lib/subscriptionTiers'
 import AthleteTabBar from '@/app/components/AthleteTabBar'
 import ChatHeaderButton from '@/app/components/ChatHeaderButton'
 import NotificationBell from '@/app/components/NotificationBell'
-import WodTab from '@/app/components/athlete/WodTab'
+import WodTab, { hasPendingDayPicker } from '@/app/components/athlete/WodTab'
 import StatsTab from '@/app/components/athlete/StatsTab'
 import TemplatesTab from '@/app/components/athlete/TemplatesTab'
 import AddActionSheet from '@/app/components/athlete/AddActionSheet'
@@ -275,7 +277,7 @@ function AthleteView({ params }) {
   const viewDate = today()
   const [celebration, setCelebration] = useState(null)
   const [freeGateUpsell, setFreeGateUpsell] = useState(null)
-  const [subscribingFromGate, setSubscribingFromGate] = useState(false)
+  const [showSubscription, setShowSubscription] = useState(false)
   const [pendingGroupSessions, setPendingGroupSessions] = useState([])
   // Ne se fie pas à navigator.onLine dès le premier rendu : ce signal est connu pour être
   // temporairement faux juste après une navigation (ex. "Switch to athlete" du coach), affichant
@@ -507,6 +509,24 @@ function AthleteView({ params }) {
         if (next) { setOpenSessionId(next.id); break }
       }
 
+      // Rappel d'abonnement pour un compte gratuit : la gate de fin d'accès gratuit (voir validate)
+      // ne se déclenche que si le sportif pousse un programme libre-service jusqu'à sa 3e séance —
+      // beaucoup n'y arrivaient jamais et ne voyaient donc jamais parler d'abonnement. Ici, une
+      // fois tous les 7 jours, et seulement après une première séance validée (un compte tout neuf
+      // n'a pas à être accueilli par un paywall).
+      const skippedSet = new Set((comps || []).filter(c => c.skipped).map(c => c.program_session_id))
+      if (!isCoachView && !ath.is_coach && ath.subscription_status !== 'active' && completionSet.size > 0
+          && !hasPendingDayPicker(progList, completionSet, skippedSet)) {
+        const upsellKey = `coachpro_upsell_last_${token}`
+        let lastShown = null
+        try { lastShown = localStorage.getItem(upsellKey) } catch { /* localStorage indisponible — pas bloquant */ }
+        const daysSince = lastShown ? (Date.now() - new Date(lastShown).getTime()) / 86400000 : Infinity
+        if (daysSince >= 7) {
+          setFreeGateUpsell({ programName: null })
+          try { localStorage.setItem(upsellKey, new Date().toISOString()) } catch { /* idem */ }
+        }
+      }
+
       // Séances de groupe où le coach l'a marqué présent, à compléter (pas en vue coach — sauf
       // sur le profil perso du coach : "Switch to athlete" passe toujours par ?coach=1, donc
       // isCoachView y est vrai même quand c'est lui-même qui a participé et doit voir le rappel).
@@ -563,17 +583,6 @@ function AthleteView({ params }) {
   const dismissBirthdayPopup = () => {
     if (birthdayDismissKey) localStorage.setItem(birthdayDismissKey, '1')
     setBirthdayDismissed(true)
-  }
-
-  const subscribeFromGate = async (tier) => {
-    setSubscribingFromGate(true)
-    const res = await fetch(`/api/athlete-view/${token}/checkout`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tier }),
-    })
-    const json = await res.json().catch(() => ({}))
-    setSubscribingFromGate(false)
-    if (json.error) { alert('Erreur : ' + json.error); return }
-    window.location.assign(json.url)
   }
 
   // Synchronise un résultat de séance (allure + distance) vers le mouvement Metrics correspondant
@@ -1220,7 +1229,10 @@ function AthleteView({ params }) {
           <CelebrationModal tonnage={celebration.tonnage} muscles={celebration.muscles} records={celebration.records} onClose={() => { setCelebration(null); router.push(backHref) }} />
         )}
         {!celebration && freeGateUpsell && (
-          <FreeGateUpsellModal upsell={freeGateUpsell} subscribing={subscribingFromGate} onSubscribe={subscribeFromGate} onClose={() => setFreeGateUpsell(null)} />
+          <FreeGateUpsellModal upsell={freeGateUpsell} onSeeOffers={() => { setFreeGateUpsell(null); setShowSubscription(true) }} onClose={() => setFreeGateUpsell(null)} />
+        )}
+        {showSubscription && (
+          <SubscriptionScreen athlete={athlete} token={token} onClose={() => setShowSubscription(false)} />
         )}
         <Toast message={toast} show={!!toast} onDone={() => setToast(null)} />
         <Toast message={exerciseToast} show={!!exerciseToast} onDone={() => setExerciseToast(null)} position="top" />
@@ -1294,6 +1306,7 @@ function AthleteView({ params }) {
             noteBlocks={noteBlocks}
             programs={programs} completions={completions} skippedSessions={skippedSessions}
             completionDates={completionDates} openedSessionId={openedSessionId}
+            onOpenSubscription={() => setShowSubscription(true)}
             selectedType={selectedType} setSelectedType={setSelectedType}
             router={router} token={token} setActiveTab={setActiveTab}
             onUpdateProgramDays={updateProgramDays} isGroupLeader={isGroupLeader}
@@ -1340,6 +1353,7 @@ function AthleteView({ params }) {
           onClose={() => setShowAddSheet(false)}
           onAddActivity={() => { setShowAddSheet(false); setShowAddWizard(true) }}
           onFreeSession={(mode, timing) => { setShowAddSheet(false); startFreeSession([], mode, timing === 'now' ? 'focus' : 'builder') }}
+          onAddRecord={() => { setShowAddSheet(false); setActiveTab('pr') }}
         />
       )}
       {showAddWizard && (
@@ -1420,7 +1434,11 @@ function AthleteView({ params }) {
       )}
 
       {!celebration && pendingGroupSessions.length === 0 && !showBirthdayPopup && !showRenewalPopup && freeGateUpsell && (
-        <FreeGateUpsellModal upsell={freeGateUpsell} subscribing={subscribingFromGate} onSubscribe={subscribeFromGate} onClose={() => setFreeGateUpsell(null)} />
+        <FreeGateUpsellModal upsell={freeGateUpsell} onSeeOffers={() => { setFreeGateUpsell(null); setShowSubscription(true) }} onClose={() => setFreeGateUpsell(null)} />
+      )}
+
+      {showSubscription && (
+        <SubscriptionScreen athlete={athlete} token={token} onClose={() => setShowSubscription(false)} />
       )}
 
       <Toast message={toast} show={!!toast} onDone={() => setToast(null)} />
@@ -1428,20 +1446,29 @@ function AthleteView({ params }) {
   )
 }
 
-function FreeGateUpsellModal({ upsell, subscribing, onSubscribe, onClose }) {
+// Deux déclencheurs, une seule modale : la gate atteinte en fin d'accès gratuit d'un programme
+// (upsell.programName), et le rappel périodique pour un compte gratuit (voir loadAthlete) — avant,
+// seule la gate existait, et un sportif qui ne poussait aucun programme jusqu'au bout ne voyait
+// jamais parler d'abonnement (retour testeur).
+// Le bouton n'envoie plus directement vers le checkout de la formule A : il ouvre l'écran des
+// formules, où le sportif voit ce que chacune apporte avant de payer.
+function FreeGateUpsellModal({ upsell, onSeeOffers, onClose }) {
+  const isGate = !!upsell.programName
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300, padding: 16 }}>
       <div style={{ background: 'var(--bg)', borderRadius: 'var(--rl)', padding: 20, maxWidth: 380, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-        <div style={{ fontSize: 32, marginBottom: 8, textAlign: 'center' }}>🎉</div>
+        <div style={{ fontSize: 32, marginBottom: 8, textAlign: 'center' }}>{isGate ? '🎉' : '🔓'}</div>
         <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontSize: 17, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>
-          Bravo pour ces 3 séances !
+          {isGate ? `Bravo pour ces ${FREE_SESSIONS_DEFAULT} séances !` : 'Tu es en accès gratuit'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16, textAlign: 'center' }}>
-          Tu as terminé l&apos;accès gratuit de « {upsell.programName} ». Abonne-toi pour débloquer la suite de ce programme, et l&apos;accès à tous les programmes de la plateforme.
+          {isGate
+            ? <>Tu as terminé l&apos;accès gratuit de « {upsell.programName} ». Abonne-toi pour débloquer la suite de ce programme, et l&apos;accès à tous les programmes de la plateforme.</>
+            : <>Ton compte s&apos;arrête aux {FREE_SESSIONS_DEFAULT} premières séances de chaque programme. L&apos;abonnement débloque tout le catalogue, à partir de {SUBSCRIPTION_TIERS.A.amount.toFixed(2).replace('.', ',')}€/mois.</>}
         </div>
-        <button onClick={() => onSubscribe('A')} disabled={subscribing}
+        <button onClick={onSeeOffers}
           style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '11px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%', marginBottom: 8 }}>
-          {subscribing ? '…' : "S'abonner"}
+          Voir les formules
         </button>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 13, fontWeight: 600, cursor: 'pointer', width: '100%', padding: 6 }}>
           Plus tard

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { CalendarBlank, PencilSimple } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import WellnessBlock from '@/app/components/WellnessBlock'
+import WellnessBlock, { WELLNESS_METRICS } from '@/app/components/WellnessBlock'
 import { ActivityLogForm } from '@/app/components/ActivityBlock'
 
 function today() {
@@ -88,6 +88,32 @@ export default function AddActivityWizard({ athleteId, onClose, onSaved }) {
   const [defs, setDefs] = useState(null)
   const [selectedDef, setSelectedDef] = useState(null)
   const [log, setLog] = useState(null)
+  // Bien-être : le bouton "Valider mon bien-être" de WellnessBlock est masqué ici (hideValidate) —
+  // "Suivant" fait les deux d'un coup, et refuse d'avancer tant que les quatre curseurs ne sont pas
+  // renseignés. Avant, il fallait valider puis appuyer sur Suivant, et rien n'empêchait de passer
+  // avec un formulaire vide (retour testeur).
+  const [wellness, setWellness] = useState(null)
+  const [wellnessError, setWellnessError] = useState(null)
+  const [validatingWellness, setValidatingWellness] = useState(false)
+  const onWellnessChange = useCallback(row => { setWellness(row); setWellnessError(null) }, [])
+
+  const goToActivityStep = async () => {
+    const missing = WELLNESS_METRICS.filter(m => !wellness?.[m.key])
+    if (missing.length) {
+      setWellnessError(
+        missing.length === WELLNESS_METRICS.length
+          ? 'Renseigne les quatre curseurs pour continuer.'
+          : `Il manque : ${missing.map(m => m.label.toLowerCase()).join(', ')}.`
+      )
+      return
+    }
+    setValidatingWellness(true)
+    const { error } = await supabase.from('wellness')
+      .upsert({ athlete_id: athleteId, date, validated: true }, { onConflict: 'athlete_id,date' })
+    setValidatingWellness(false)
+    if (error) { setWellnessError('Enregistrement impossible : ' + error.message); return }
+    setStep(3)
+  }
 
   useEffect(() => {
     supabase.from('activity_definitions').select('*').order('created_at')
@@ -102,6 +128,7 @@ export default function AddActivityWizard({ athleteId, onClose, onSaved }) {
   }, [selectedDef, athleteId, date])
 
   const back = () => { if (step === 1) onClose(); else setStep(s => s - 1) }
+  const changeDate = (d) => { setDate(d); setWellness(null); setWellnessError(null) }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'var(--bg2)', zIndex: 600, display: 'flex', flexDirection: 'column' }}>
@@ -120,7 +147,7 @@ export default function AddActivityWizard({ athleteId, onClose, onSaved }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', maxWidth: 460, width: '100%', margin: '0 auto', boxSizing: 'border-box', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <DatePickerRow date={date} onChange={setDate} />
+        <DatePickerRow date={date} onChange={changeDate} />
 
         {step === 1 && (
           defs === null ? (
@@ -144,12 +171,17 @@ export default function AddActivityWizard({ athleteId, onClose, onSaved }) {
 
         {step === 2 && (
           <>
-            <WellnessBlock athleteId={athleteId} date={date} mode="athlete" />
-            <button onClick={() => setStep(3)} style={{
+            <WellnessBlock athleteId={athleteId} date={date} mode="athlete" hideValidate onChange={onWellnessChange} />
+            {wellnessError && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 'var(--r)', padding: '10px 12px', fontSize: 13, fontWeight: 600, color: '#991B1B' }}>
+                {wellnessError}
+              </div>
+            )}
+            <button onClick={goToActivityStep} disabled={validatingWellness} style={{
               background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--rl)',
               padding: '14px', fontSize: 15, fontWeight: 700, cursor: 'pointer',
             }}>
-              Suivant →
+              {validatingWellness ? '…' : 'Suivant →'}
             </button>
           </>
         )}
