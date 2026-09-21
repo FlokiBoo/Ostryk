@@ -165,9 +165,18 @@ async function fetchFeedbackAverages(athleteId, start, end) {
   }
 }
 
+// Source : exercise_performance_history, et non program_exercise_logs. Deux raisons, qui se
+// cumulaient pour rendre cette section systématiquement vide :
+//   - program_exercise_logs n'a pas de colonne logged_at (c'est created_at) — la requête partait
+//     donc en 400 silencieux et `logs` valait toujours null ;
+//   - même avec le bon nom de colonne, cette table est upsertée sur (athlete_id,
+//     program_exercise_id) : une seule ligne par exercice, portant la dernière valeur. Impossible
+//     d'y trouver à la fois un "avant" et un "pendant", donc la comparaison ne renvoyait rien.
+// exercise_performance_history est l'historique en ajout seul, écrit à chaque saisie (voir
+// saveExerciseLog et flushQueue dans app/s/[token]/page.js) : c'est la vraie série temporelle.
 async function fetchProgressions(athleteId, start, end) {
   const { data: logs } = await supabase
-    .from('program_exercise_logs')
+    .from('exercise_performance_history')
     .select('kg_done, logged_at, program_exercises(name)')
     .eq('athlete_id', athleteId)
     .lte('logged_at', end + 'T23:59:59')
