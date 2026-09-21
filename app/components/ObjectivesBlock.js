@@ -166,6 +166,8 @@ export default function ObjectivesBlock({ athleteId, objectives, setObjectives, 
   // Rempli quand une performance n'améliore pas le record actuel : suspend l'enregistrement le
   // temps de demander confirmation dans la modale (remplace l'ancien confirm() natif, hors charte).
   const [pendingResult, setPendingResult] = useState(null)
+  // Objectif dont la suppression attend confirmation (voir removeObjective).
+  const [deletingObj, setDeletingObj] = useState(null)
 
   const sorted = [...objectives].filter(o => !o.completed_at).sort((a, b) => {
     if (!a.target_date && !b.target_date) return 0
@@ -205,10 +207,16 @@ export default function ObjectivesBlock({ athleteId, objectives, setObjectives, 
     setSaving(false)
   }
 
+  // Suppression irréversible et sans historique : on passe par une modale de confirmation plutôt
+  // que de supprimer au premier tap sur la croix (retour testeur). Même charte que la modale
+  // "performance n'améliorant pas le record" plus bas, pas de confirm() natif.
   const removeObjective = async (id) => {
+    setSaving(true)
     const { error } = await supabase.from('athlete_objectives').delete().eq('id', id)
-    if (error) { alert('Erreur : ' + error.message); return }
+    setSaving(false)
+    if (error) { alert('Erreur : ' + error.message); setDeletingObj(null); return }
     setObjectives(prev => prev.filter(o => o.id !== id))
+    setDeletingObj(null)
   }
 
   const openComplete = (obj) => {
@@ -382,7 +390,7 @@ export default function ObjectivesBlock({ athleteId, objectives, setObjectives, 
                     )}
                   </div>
                   <button onClick={() => openComplete(obj)} title="Marquer comme terminé" style={{ background: 'none', border: 'none', color: 'var(--green)', display: 'flex', cursor: 'pointer', padding: 0, flexShrink: 0 }}><CheckCircle size={17} /></button>
-                  <button onClick={() => removeObjective(obj.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer', padding: 0, flexShrink: 0, lineHeight: 1 }}>×</button>
+                  <button onClick={() => setDeletingObj(obj)} title="Supprimer" style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer', padding: 0, flexShrink: 0, lineHeight: 1 }}>×</button>
                 </div>
               )}
             </div>
@@ -444,7 +452,7 @@ export default function ObjectivesBlock({ athleteId, objectives, setObjectives, 
                           )}
                         </div>
                         <button onClick={() => openComplete(obj)} title="Marquer comme terminé" style={{ background: 'none', border: 'none', color: 'var(--vert-foret)', display: 'flex', cursor: 'pointer', padding: 0, flexShrink: 0 }}><CheckCircle size={18} /></button>
-                        <button onClick={() => removeObjective(obj.id)} style={{ background: 'none', border: 'none', color: 'var(--ostryk-text3)', fontSize: 16, cursor: 'pointer', padding: 0, flexShrink: 0, lineHeight: 1 }}>×</button>
+                        <button onClick={() => setDeletingObj(obj)} title="Supprimer" style={{ background: 'none', border: 'none', color: 'var(--ostryk-text3)', fontSize: 16, cursor: 'pointer', padding: 0, flexShrink: 0, lineHeight: 1 }}>×</button>
                       </div>
                     )}
                   </div>
@@ -581,6 +589,32 @@ export default function ObjectivesBlock({ athleteId, objectives, setObjectives, 
             }}>
               Terminé sans résultat
             </button>
+          </div>
+        </div>
+      )}
+      {deletingObj && (
+        <div onClick={() => setDeletingObj(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg)', borderRadius: 'var(--rl)', padding: 20, width: '100%', maxWidth: 380, boxShadow: '0 8px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontSize: 17, fontWeight: 700, marginBottom: 6 }}>
+              Supprimer cet objectif ?
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>
+              « {deletingObj.emoji || '🎯'} {deletingObj.text} » sera définitivement supprimé. Si tu l&apos;as atteint, utilise plutôt ✓ pour le marquer comme terminé et garder le résultat.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setDeletingObj(null)} disabled={saving} style={{
+                flex: 1, background: 'none', border: '1px solid var(--border2)', color: 'var(--text2)',
+                borderRadius: 'var(--r)', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}>
+                Annuler
+              </button>
+              <button onClick={() => removeObjective(deletingObj.id)} disabled={saving} style={{
+                flex: 1, background: '#DC2626', color: '#fff', border: 'none',
+                borderRadius: 'var(--r)', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}>
+                {saving ? '…' : 'Supprimer'}
+              </button>
+            </div>
           </div>
         </div>
       )}

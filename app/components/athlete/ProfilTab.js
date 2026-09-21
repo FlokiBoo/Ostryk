@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { User, PencilSimple, ClipboardText, ChatCircle, ForkKnife, GearSix } from '@phosphor-icons/react'
+import { User, PencilSimple, ClipboardText, ChatCircle, ForkKnife, GearSix, CreditCard } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import ChatThread from '@/app/components/ChatThread'
 import SettingsScreen from './SettingsScreen'
+import SubscriptionScreen from './SubscriptionScreen'
+import { SUBSCRIPTION_TIERS } from '@/lib/subscriptionTiers'
 
 function calcAge(birthDate) {
   if (!birthDate) return null
@@ -22,6 +24,10 @@ export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate
   const [fieldVal, setFieldVal] = useState('')
   const [saving, setSaving] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  // L'abonnement ne vivait que dans Réglages → "Offres & abonnement". Remonté ici, et placé AVANT
+  // "Choisir un programme" : le testeur ne voyait pas le lien entre les deux et se demandait dans
+  // quel ordre ça se prend — l'abonnement d'abord, le programme ensuite.
+  const [showSubscription, setShowSubscription] = useState(false)
   const [showMessages, setShowMessages] = useState(false)
   const [unread, setUnread] = useState(0)
 
@@ -62,6 +68,7 @@ export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate
 
   if (!athlete) return null
   const age = calcAge(athlete.birth_date)
+  const isSubscribed = athlete.subscription_status === 'active'
 
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -104,9 +111,37 @@ export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate
         </div>
       </div>
 
+      {!isSubscribed && (
+        <button onClick={() => setShowSubscription(true)} style={{
+          background: 'var(--bordeaux)', color: '#fff', border: 'none', borderRadius: 'var(--ostryk-card-radius)',
+          padding: '16px', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <span style={{ display: 'flex', flexShrink: 0 }}><CreditCard size={24} weight="light" /></span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'var(--font-title)', fontWeight: 600, fontSize: 17 }}>Passer à l&apos;abonnement</div>
+            <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>Débloque tous les programmes en entier, à partir de {SUBSCRIPTION_TIERS.A.amount.toFixed(2).replace('.', ',')}€/mois</div>
+          </div>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>›</span>
+        </button>
+      )}
+
       <div>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text2)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Mon espace</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {isSubscribed && (
+            <button onClick={() => setShowSubscription(true)} style={{
+              background: 'var(--card-white)', color: 'var(--text)', border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-card-radius)',
+              padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left',
+            }}>
+              <span style={{ display: 'flex', color: 'var(--vert-foret)' }}><CreditCard size={20} weight="light" /></span>
+              <span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>Mon abonnement</span>
+              <span style={{ background: 'var(--beige)', color: 'var(--vert-foret)', borderRadius: 'var(--ostryk-pill-radius)', padding: '3px 10px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                {SUBSCRIPTION_TIERS[athlete.subscription_tier]?.label || 'Actif'}
+              </span>
+              <span style={{ color: 'var(--ostryk-text3)', fontSize: 18 }}>›</span>
+            </button>
+          )}
+
           <button onClick={() => setActiveTab?.('templates')} style={{
             background: 'var(--card-white)', color: 'var(--text)', border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-card-radius)',
             padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left',
@@ -150,6 +185,10 @@ export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate
         <span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>Réglages</span>
         <span style={{ color: 'var(--ostryk-text3)', fontSize: 18 }}>›</span>
       </button>
+
+      {showSubscription && (
+        <SubscriptionScreen athlete={athlete} token={token} onClose={() => setShowSubscription(false)} />
+      )}
 
       {showSettings && (
         <SettingsScreen

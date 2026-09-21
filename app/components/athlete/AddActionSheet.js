@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePencil } from '@phosphor-icons/react'
+import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePencil, Trophy } from '@phosphor-icons/react'
 
 // "Séance libre" enchaîne deux choix avant de créer la séance :
 // 1. Standard/Cardio — même distinction que côté coach (voir app/programs/.../page.js), pour que
@@ -10,7 +10,7 @@ import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePe
 //    ajoute ses exercices et logue ses performances en direct, à la volée). "Plus tard" ouvre le
 //    même éditeur "blocks" que le coach (SessionBlockEditor) pour construire la séance à l'avance
 //    (exercices, séries/récup ou allure cardio), sans la lancer tout de suite.
-export default function AddActionSheet({ onClose, onAddActivity, onFreeSession }) {
+export default function AddActionSheet({ onClose, onAddActivity, onFreeSession, onAddRecord }) {
   const [step, setStep] = useState('root') // 'root' | 'mode' | 'timing'
   const [mode, setMode] = useState(null)
 
@@ -47,6 +47,23 @@ export default function AddActionSheet({ onClose, onAddActivity, onFreeSession }
                 <div style={{ fontSize: 12, color: 'var(--text3)' }}>Ajoute des exercices et note tes performances</div>
               </div>
             </button>
+
+            {/* Le "+" proposait d'ajouter une activité mais pas un record, alors que c'est le même
+                geste dans la tête du sportif (retour testeur). Raccourci vers l'écran Performances,
+                où vit déjà toute la saisie (choix du mouvement, unité, détection du PR) — plutôt
+                qu'un second formulaire de saisie à maintenir en parallèle. */}
+            {onAddRecord && (
+              <button onClick={onAddRecord} style={{
+                display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg2)', border: '1px solid var(--border)',
+                borderRadius: 'var(--rl)', padding: '16px', cursor: 'pointer', textAlign: 'left',
+              }}>
+                <span style={{ display: 'flex' }}><Trophy size={24} /></span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Ajouter un record</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>Note une nouvelle perf sur un mouvement suivi</div>
+                </div>
+              </button>
+            )}
 
             <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 0', textAlign: 'center' }}>
               Annuler

@@ -8,17 +8,19 @@ import CelebrationModal, { parseMusclesFromText } from '@/app/components/Celebra
 import MuscleAnatomyDiagram, { MUSCLE_GROUPS } from '@/app/components/MuscleAnatomyDiagram'
 import FocusBodyDiagram from '@/app/components/FocusBodyDiagram'
 import Toast from '@/app/components/Toast'
+import SubscriptionScreen from '@/app/components/athlete/SubscriptionScreen'
+import { SUBSCRIPTION_TIERS, FREE_SESSIONS_DEFAULT } from '@/lib/subscriptionTiers'
 import AthleteTabBar from '@/app/components/AthleteTabBar'
 import ChatHeaderButton from '@/app/components/ChatHeaderButton'
 import NotificationBell from '@/app/components/NotificationBell'
-import WodTab from '@/app/components/athlete/WodTab'
+import WodTab, { hasPendingDayPicker } from '@/app/components/athlete/WodTab'
 import StatsTab from '@/app/components/athlete/StatsTab'
 import TemplatesTab from '@/app/components/athlete/TemplatesTab'
 import AddActionSheet from '@/app/components/athlete/AddActionSheet'
 import AddActivityWizard from '@/app/components/athlete/AddActivityWizard'
 import PerformancesTab from '@/app/components/athlete/PerformancesTab'
 import ProfilTab from '@/app/components/athlete/ProfilTab'
-import SessionPlayer from '@/app/components/athlete/SessionPlayer'
+import SessionPlayer, { sessionProgressKey } from '@/app/components/athlete/SessionPlayer'
 import TempoBadge, { getTempoDisplay } from '@/app/components/TempoBadge'
 import { UNITS, unitOf, formatPerformance } from '@/app/components/TrackedMovementsBlock'
 import TimerModal from '@/app/components/TimerModal'
@@ -275,7 +277,7 @@ function AthleteView({ params }) {
   const viewDate = today()
   const [celebration, setCelebration] = useState(null)
   const [freeGateUpsell, setFreeGateUpsell] = useState(null)
-  const [subscribingFromGate, setSubscribingFromGate] = useState(false)
+  const [showSubscription, setShowSubscription] = useState(false)
   const [pendingGroupSessions, setPendingGroupSessions] = useState([])
   // Ne se fie pas à navigator.onLine dès le premier rendu : ce signal est connu pour être
   // temporairement faux juste après une navigation (ex. "Switch to athlete" du coach), affichant
@@ -295,71 +297,180 @@ function AthleteView({ params }) {
   const [birthdayDismissed, setBirthdayDismissed] = useState(false)
   const [birthdayMessage] = useState(() => BIRTHDAY_MESSAGES[Math.floor(Math.random() * BIRTHDAY_MESSAGES.length)])
 
+  // File d'écritures de séance. Toutes les saisies y passent désormais, en ligne comme hors ligne :
+  // elle est la copie locale de la séance en cours (localStorage, donc elle survit au rechargement
+  // complet que le WebView provoque en repassant au premier plan), et la source de vérité tant que
+  // Supabase n'a pas confirmé. Avant, une écriture partait en direct dès que navigator.onLine était
+  // vrai — or en salle le wifi répond mais les requêtes échouent : l'erreur finissait en alert() et
+  // la série était perdue, ramenant la séance à l'échauffement au retour dans l'app.
   const queueKey = `coachpro_offline_queue_${token}`
   const loadQueue = () => { try { return JSON.parse(localStorage.getItem(queueKey) || '[]') } catch { return [] } }
-  const enqueue = (op) => { const q = loadQueue(); q.push(op); localStorage.setItem(queueKey, JSON.stringify(q)) }
+  const saveQueue = (q) => { try { localStorage.setItem(queueKey, JSON.stringify(q)) } catch { /* stockage plein/indisponible — pas bloquant */ } }
+  const enqueue = (op) => { const q = loadQueue(); q.push(op); saveQueue(q) }
+
+  // Correspondance id temporaire → id réel, persistée elle aussi. Elle ne peut pas vivre seulement
+  // le temps d'un flush : l'écran garde ses ids temporaires jusqu'à ce que reloadExerciseSets soit
+  // revenu, donc une série validée dans cette fenêtre est mise en file avec un id déjà résolu par
+  // le flush précédent. Sans cette table, l'opération était jugée irrésoluble et abandonnée en
+  // silence — la série n'arrivait jamais en base.
+  const aliasKey = `coachpro_setid_alias_${token}`
+  const loadAliases = () => { try { return JSON.parse(localStorage.getItem(aliasKey) || '{}') } catch { return {} } }
+  const saveAliases = (m) => { try { localStorage.setItem(aliasKey, JSON.stringify(m)) } catch { /* pas bloquant */ } }
 
   const isTempSetId = id => typeof id === 'string' && id.startsWith('local-')
   const makeTempSetId = () => `local-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-  const reloadExerciseSets = async () => {
-    if (!athlete) return
-    const { data } = await supabase.from('program_exercise_sets').select('*')
-      .eq('athlete_id', athlete.id).order('set_index')
-    const grouped = {}
-    ;(data || []).forEach(s => { (grouped[s.program_exercise_id] ||= []).push(s) })
-    setExerciseSets(grouped)
-  }
+  // Un seul flush à la fois : l'effet de montage et l'événement `online` pouvaient le déclencher en
+  // parallèle et rejouer la même file — avec un insert sec sur add_exercise_set, ça créait des
+  // séries en double.
+  const flushingRef = useRef(false)
+  const flushTimerRef = useRef(null)
+  const flushRetryRef = useRef(0)
 
-  const flushQueue = async () => {
+  // Rejoue les opérations encore en attente par-dessus les séries venant de la base : ce que
+  // l'athlète vient de saisir doit rester à l'écran même si rien n'est encore parti (mode avion),
+  // et c'est ce qui permet à countValidatedSets de retrouver la bonne position au remontage.
+  const applyQueueToSets = (setsMap) => {
     const q = loadQueue()
-    if (!q.length) return
-    const tempIdMap = {} // tempId -> id réel une fois créé en base
-    const resolveSetId = id => (isTempSetId(id) && tempIdMap[id]) ? tempIdMap[id] : id
-    let hasExerciseSetOps = false
-
+    if (!q.length) return setsMap
+    const persisted = loadAliases()
+    const out = {}
+    Object.entries(setsMap).forEach(([k, v]) => { out[k] = v.map(row => ({ ...row })) })
+    // Une création peut déjà être passée en base sans que la file ait été purgée (flush interrompu) :
+    // la ligne existe alors avec son vrai id, et les mises à jour qui suivent la désignent encore par
+    // son id temporaire. On garde la correspondance pour ne pas perdre ces valeurs à l'écran.
+    const aliases = { ...persisted }
+    const resolve = id => aliases[id] || id
     for (const op of q) {
-      if (op.type === 'exercise_log') {
-        await supabase.from('program_exercise_logs').upsert(
-          { athlete_id: op.athleteId, program_exercise_id: op.exerciseId, ...op.updated },
-          { onConflict: 'athlete_id,program_exercise_id' }
-        )
-        if (op.updated.kg_done || op.updated.reps_done || op.updated.sets_done || op.updated.note) {
-          await supabase.from('exercise_performance_history').insert({
-            athlete_id: op.athleteId,
-            program_exercise_id: op.exerciseId,
-            kg_done: op.updated.kg_done ? parseFloat(op.updated.kg_done) : null,
-            reps_done: op.updated.reps_done || null,
-            sets_done: op.updated.sets_done || null,
-            note: op.updated.note || null,
-          })
-        }
-      } else if (op.type === 'validate') {
-        await supabase.from('program_completions').upsert(
-          { athlete_id: op.athleteId, program_session_id: op.sessId, skipped: false, ...op.feedback },
-          { onConflict: 'athlete_id,program_session_id' }
-        )
-      } else if (op.type === 'add_exercise_set') {
-        hasExerciseSetOps = true
-        const { data, error } = await supabase.from('program_exercise_sets')
-          .insert({ athlete_id: op.athleteId, program_exercise_id: op.exerciseId, set_index: op.setIndex })
-          .select().single()
-        if (!error && data) tempIdMap[op.tempId] = data.id
+      if (op.type === 'add_exercise_set') {
+        const list = (out[op.exerciseId] ||= [])
+        const existing = list.find(r => r.set_index === op.setIndex)
+        if (existing) aliases[op.tempId] = existing.id
+        else list.push({ id: op.tempId, athlete_id: op.athleteId, program_exercise_id: op.exerciseId, set_index: op.setIndex })
       } else if (op.type === 'exercise_set_field') {
-        hasExerciseSetOps = true
-        const realId = resolveSetId(op.setId)
-        if (isTempSetId(realId)) continue // la création a échoué, rien à mettre à jour
-        await supabase.from('program_exercise_sets').update({ [op.field]: op.value }).eq('id', realId)
+        const target = resolve(op.setId)
+        for (const list of Object.values(out)) {
+          const row = list.find(r => r.id === target)
+          if (row) { row[op.field] = op.value; break }
+        }
       } else if (op.type === 'delete_exercise_set') {
-        hasExerciseSetOps = true
-        const realId = resolveSetId(op.setId)
-        if (isTempSetId(realId)) continue
-        await supabase.from('program_exercise_sets').delete().eq('id', realId)
+        const target = resolve(op.setId)
+        for (const k of Object.keys(out)) out[k] = out[k].filter(r => r.id !== target)
       }
     }
-    localStorage.removeItem(queueKey)
-    setToast('Synchronisé ✓')
-    if (hasExerciseSetOps) reloadExerciseSets()
+    Object.keys(out).forEach(k => out[k].sort((a, b) => a.set_index - b.set_index))
+    return out
+  }
+
+  const reloadExerciseSets = async () => {
+    if (!athlete) return
+    const { data, error } = await supabase.from('program_exercise_sets').select('*')
+      .eq('athlete_id', athlete.id).order('set_index')
+    if (error) return
+    const grouped = {}
+    ;(data || []).forEach(s => { (grouped[s.program_exercise_id] ||= []).push(s) })
+    setExerciseSets(applyQueueToSets(grouped))
+  }
+
+  // Rejoue la file dans l'ordre et NE RETIRE que ce qui est réellement passé. Avant, la clé était
+  // effacée en bloc à la fin : une opération en échec au milieu emportait tout le reste avec elle.
+  // L'ordre compte (un exercise_set_field référence le tempId créé par l'add_exercise_set qui le
+  // précède), donc on s'arrête à la première erreur et on garde la suite pour le prochain essai.
+  const flushQueue = async () => {
+    if (flushingRef.current) return
+    const q = loadQueue()
+    if (!q.length) { flushRetryRef.current = 0; return }
+    flushingRef.current = true
+
+    const tempIdMap = loadAliases() // tempId -> id réel, conservé d'un flush à l'autre
+    const resolveSetId = id => (isTempSetId(id) && tempIdMap[id]) ? tempIdMap[id] : id
+    let done = 0
+    let hasExerciseSetOps = false
+    let failed = false
+
+    try {
+      for (const op of q) {
+        if (op.type === 'exercise_log') {
+          const { error } = await supabase.from('program_exercise_logs').upsert(
+            { athlete_id: op.athleteId, program_exercise_id: op.exerciseId, ...op.updated },
+            { onConflict: 'athlete_id,program_exercise_id' }
+          )
+          if (error) { failed = true; break }
+          if (op.updated.kg_done || op.updated.reps_done || op.updated.sets_done || op.updated.note) {
+            await supabase.from('exercise_performance_history').insert({
+              athlete_id: op.athleteId,
+              program_exercise_id: op.exerciseId,
+              kg_done: op.updated.kg_done ? parseFloat(op.updated.kg_done) : null,
+              reps_done: op.updated.reps_done || null,
+              sets_done: op.updated.sets_done || null,
+              note: op.updated.note || null,
+            })
+          }
+        } else if (op.type === 'validate') {
+          const { error } = await supabase.from('program_completions').upsert(
+            { athlete_id: op.athleteId, program_session_id: op.sessId, skipped: false, ...op.feedback },
+            { onConflict: 'athlete_id,program_session_id' }
+          )
+          if (error) { failed = true; break }
+        } else if (op.type === 'add_exercise_set') {
+          hasExerciseSetOps = true
+          // upsert et non insert : rejouer une file partiellement passée (réseau coupé en plein
+          // vol) ne doit jamais créer une deuxième ligne pour la même série.
+          const { data, error } = await supabase.from('program_exercise_sets')
+            .upsert({ athlete_id: op.athleteId, program_exercise_id: op.exerciseId, set_index: op.setIndex },
+                    { onConflict: 'athlete_id,program_exercise_id,set_index' })
+            .select().single()
+          if (error || !data) { failed = true; break }
+          tempIdMap[op.tempId] = data.id
+          saveAliases(tempIdMap)
+        } else if (op.type === 'exercise_set_field') {
+          hasExerciseSetOps = true
+          const realId = resolveSetId(op.setId)
+          // Un id temporaire non résolu signifie que sa création n'est pas encore passée : on
+          // s'arrête là plutôt que d'abandonner la saisie, le prochain essai la reprendra dans l'ordre.
+          if (isTempSetId(realId)) { failed = true; break }
+          const { error } = await supabase.from('program_exercise_sets').update({ [op.field]: op.value }).eq('id', realId)
+          if (error) { failed = true; break }
+        } else if (op.type === 'delete_exercise_set') {
+          hasExerciseSetOps = true
+          const realId = resolveSetId(op.setId)
+          if (!isTempSetId(realId)) {
+            const { error } = await supabase.from('program_exercise_sets').delete().eq('id', realId)
+            if (error) { failed = true; break }
+          }
+        }
+        done++
+      }
+    } catch { failed = true }
+
+    // Les opérations qui suivent celles déjà passées peuvent référencer un tempId désormais résolu :
+    // on réécrit les ids connus pour que le prochain essai reparte sur les vraies lignes.
+    const rest = q.slice(done).map(op => {
+      const next = { ...op }
+      if (next.setId) next.setId = resolveSetId(next.setId)
+      return next
+    })
+    saveQueue(rest)
+    flushingRef.current = false
+
+    if (hasExerciseSetOps && done > 0) await reloadExerciseSets()
+
+    if (rest.length && failed) {
+      // Nouvelle tentative à intervalle croissant (2s, 4s, 8s… plafonné à 30s) : en salle, le réseau
+      // revient souvent sans que l'événement `online` soit jamais émis.
+      flushRetryRef.current = Math.min(flushRetryRef.current + 1, 4)
+      scheduleFlush(Math.min(2000 * 2 ** (flushRetryRef.current - 1), 30000))
+    } else {
+      flushRetryRef.current = 0
+      // Plus rien en attente : les alias n'ont plus personne à résoudre.
+      if (!rest.length) { try { localStorage.removeItem(aliasKey) } catch { /* pas bloquant */ } }
+      if (done > 0) setToast('Synchronisé ✓')
+    }
+  }
+
+  const scheduleFlush = (delay = 400) => {
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current)
+    flushTimerRef.current = setTimeout(() => { flushTimerRef.current = null; flushQueue() }, delay)
   }
 
   useEffect(() => {
@@ -373,14 +484,21 @@ function AthleteView({ params }) {
       setIsOffline(false)
       flushQueue()
     }
+    // Retour au premier plan : c'est le moment où le réseau est le plus souvent revenu sans que
+    // l'événement `online` ait jamais été émis (wifi de salle qui répond à nouveau, changement
+    // d'app). On retente la file à chaque fois que l'onglet redevient visible.
+    const onVisible = () => { if (document.visibilityState === 'visible') flushQueue() }
     window.addEventListener('offline', goOffline)
     window.addEventListener('online', goOnline)
+    document.addEventListener('visibilitychange', onVisible)
     if (typeof navigator !== 'undefined' && !navigator.onLine) goOffline()
     else Promise.resolve().then(flushQueue)
     return () => {
       window.removeEventListener('offline', goOffline)
       window.removeEventListener('online', goOnline)
+      document.removeEventListener('visibilitychange', onVisible)
       if (offlineTimer) clearTimeout(offlineTimer)
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current)
     }
   }, [])
 
@@ -462,7 +580,10 @@ function AthleteView({ params }) {
         if (!setsMap[s.program_exercise_id]) setsMap[s.program_exercise_id] = []
         setsMap[s.program_exercise_id].push(s)
       })
-      setExerciseSets(setsMap)
+      // Les saisies encore en file (pas encore confirmées par Supabase) sont rejouées par-dessus la
+      // réponse serveur : c'est ce qui fait qu'une séance reprend là où elle en était même si rien
+      // n'est parti — mode avion, ou réponse d'API resservie depuis le cache du service worker.
+      setExerciseSets(applyQueueToSets(setsMap))
       const completionSet = new Set((comps || []).map(c => c.program_session_id))
       setCompletions(completionSet)
       setSkippedSessions(new Set((comps || []).filter(c => c.skipped).map(c => c.program_session_id)))
@@ -505,6 +626,24 @@ function AthleteView({ params }) {
       for (const prog of progList) {
         const next = prog.sessions.find(s => !completionSet.has(s.id))
         if (next) { setOpenSessionId(next.id); break }
+      }
+
+      // Rappel d'abonnement pour un compte gratuit : la gate de fin d'accès gratuit (voir validate)
+      // ne se déclenche que si le sportif pousse un programme libre-service jusqu'à sa 3e séance —
+      // beaucoup n'y arrivaient jamais et ne voyaient donc jamais parler d'abonnement. Ici, une
+      // fois tous les 7 jours, et seulement après une première séance validée (un compte tout neuf
+      // n'a pas à être accueilli par un paywall).
+      const skippedSet = new Set((comps || []).filter(c => c.skipped).map(c => c.program_session_id))
+      if (!isCoachView && !ath.is_coach && ath.subscription_status !== 'active' && completionSet.size > 0
+          && !hasPendingDayPicker(progList, completionSet, skippedSet)) {
+        const upsellKey = `coachpro_upsell_last_${token}`
+        let lastShown = null
+        try { lastShown = localStorage.getItem(upsellKey) } catch { /* localStorage indisponible — pas bloquant */ }
+        const daysSince = lastShown ? (Date.now() - new Date(lastShown).getTime()) / 86400000 : Infinity
+        if (daysSince >= 7) {
+          setFreeGateUpsell({ programName: null })
+          try { localStorage.setItem(upsellKey, new Date().toISOString()) } catch { /* idem */ }
+        }
       }
 
       // Séances de groupe où le coach l'a marqué présent, à compléter (pas en vue coach — sauf
@@ -563,17 +702,6 @@ function AthleteView({ params }) {
   const dismissBirthdayPopup = () => {
     if (birthdayDismissKey) localStorage.setItem(birthdayDismissKey, '1')
     setBirthdayDismissed(true)
-  }
-
-  const subscribeFromGate = async (tier) => {
-    setSubscribingFromGate(true)
-    const res = await fetch(`/api/athlete-view/${token}/checkout`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tier }),
-    })
-    const json = await res.json().catch(() => ({}))
-    setSubscribingFromGate(false)
-    if (json.error) { alert('Erreur : ' + json.error); return }
-    window.location.assign(json.url)
   }
 
   // Synchronise un résultat de séance (allure + distance) vers le mouvement Metrics correspondant
@@ -715,6 +843,14 @@ function AthleteView({ params }) {
     setValidating(false)
   }
 
+  // Séance terminée : sa position n'a plus lieu d'être mémorisée. Les valeurs saisies, elles, ne
+  // sont effacées nulle part ici — elles quittent la file uniquement quand Supabase les a acceptées
+  // (voir flushQueue), pour qu'une validation faite hors réseau ne perde rien.
+  const clearSessionProgress = (sessId) => {
+    if (!athlete) return
+    try { localStorage.removeItem(sessionProgressKey(athlete.id, sessId)) } catch { /* pas bloquant */ }
+  }
+
   const skipSession = async (sessId, progSessions) => {
     if (!athlete) return
     if (!requireOnline()) return
@@ -727,6 +863,7 @@ function AthleteView({ params }) {
     setSkippedSessions(prev => new Set([...prev, sessId]))
     setCompletionDates(prev => ({ ...prev, [sessId]: prev[sessId] || new Date().toISOString() }))
     forgetOpenedSession(sessId)
+    clearSessionProgress(sessId)
     setValidating(false)
   }
 
@@ -763,6 +900,7 @@ function AthleteView({ params }) {
       setCompletionDates(prev => ({ ...prev, [sessId]: prev[sessId] || new Date().toISOString() }))
       if (!isUpdate) {
         forgetOpenedSession(sessId)
+        clearSessionProgress(sessId)
         const next = progSessions.find(s => !newSet.has(s.id))
         setOpenSessionId(next?.id || null)
       }
@@ -782,6 +920,7 @@ function AthleteView({ params }) {
     setCompletionDates(prev => ({ ...prev, [sessId]: prev[sessId] || new Date().toISOString() }))
     if (!isUpdate) {
       forgetOpenedSession(sessId)
+      clearSessionProgress(sessId)
       const next = progSessions.find(s => !newSet.has(s.id))
       setOpenSessionId(next?.id || null)
     }
@@ -893,21 +1032,19 @@ function AthleteView({ params }) {
     }
   }
 
+  // Les trois écritures de séries passent maintenant toutes par la file, en ligne comme hors ligne.
+  // Deux raisons : la ligne locale (id temporaire) existe immédiatement — l'ancien chemin "en ligne"
+  // attendait l'insert Supabase, et si l'athlète validait sa série pendant ce délai, la ligne cible
+  // n'existait pas encore, l'écran avançait quand même et la série partait à la poubelle ; et la
+  // saisie survit au rechargement de la WebView même si rien n'est encore parti au serveur.
   const addExerciseSet = async (exerciseId) => {
     if (!athlete) return
     const current = exerciseSets[exerciseId] || []
     const nextIndex = current.length ? Math.max(...current.map(s => s.set_index)) + 1 : 1
-    if (isOffline) {
-      const tempId = makeTempSetId()
-      setExerciseSets(prev => ({ ...prev, [exerciseId]: [...(prev[exerciseId] || []), { id: tempId, athlete_id: athlete.id, program_exercise_id: exerciseId, set_index: nextIndex }] }))
-      enqueue({ type: 'add_exercise_set', tempId, athleteId: athlete.id, exerciseId, setIndex: nextIndex })
-      return
-    }
-    const { data, error } = await supabase.from('program_exercise_sets')
-      .insert({ athlete_id: athlete.id, program_exercise_id: exerciseId, set_index: nextIndex })
-      .select().single()
-    if (error) { alert('Erreur : ' + error.message); return }
-    setExerciseSets(prev => ({ ...prev, [exerciseId]: [...(prev[exerciseId] || []), data] }))
+    const tempId = makeTempSetId()
+    setExerciseSets(prev => ({ ...prev, [exerciseId]: [...(prev[exerciseId] || []), { id: tempId, athlete_id: athlete.id, program_exercise_id: exerciseId, set_index: nextIndex }] }))
+    enqueue({ type: 'add_exercise_set', tempId, athleteId: athlete.id, exerciseId, setIndex: nextIndex })
+    scheduleFlush()
   }
 
   const ensureExerciseSets = async (exerciseId, count) => {
@@ -916,23 +1053,15 @@ function AthleteView({ params }) {
     const missing = count - current.length
     if (missing <= 0) return
     const startIndex = current.length ? Math.max(...current.map(s => s.set_index)) + 1 : 1
-    if (isOffline) {
-      const newRows = []
-      for (let i = 0; i < missing; i++) {
-        const tempId = makeTempSetId()
-        const setIndex = startIndex + i
-        newRows.push({ id: tempId, athlete_id: athlete.id, program_exercise_id: exerciseId, set_index: setIndex })
-        enqueue({ type: 'add_exercise_set', tempId, athleteId: athlete.id, exerciseId, setIndex })
-      }
-      setExerciseSets(prev => ({ ...prev, [exerciseId]: [...(prev[exerciseId] || []), ...newRows] }))
-      return
+    const newRows = []
+    for (let i = 0; i < missing; i++) {
+      const tempId = makeTempSetId()
+      const setIndex = startIndex + i
+      newRows.push({ id: tempId, athlete_id: athlete.id, program_exercise_id: exerciseId, set_index: setIndex })
+      enqueue({ type: 'add_exercise_set', tempId, athleteId: athlete.id, exerciseId, setIndex })
     }
-    const rows = Array.from({ length: missing }, (_, i) => ({
-      athlete_id: athlete.id, program_exercise_id: exerciseId, set_index: startIndex + i,
-    }))
-    const { data, error } = await supabase.from('program_exercise_sets').insert(rows).select()
-    if (error) { alert('Erreur : ' + error.message); return }
-    setExerciseSets(prev => ({ ...prev, [exerciseId]: [...(prev[exerciseId] || []), ...data] }))
+    setExerciseSets(prev => ({ ...prev, [exerciseId]: [...(prev[exerciseId] || []), ...newRows] }))
+    scheduleFlush()
   }
 
   const saveExerciseSet = async (exerciseId, setId, field, value) => {
@@ -941,27 +1070,20 @@ function AthleteView({ params }) {
       ...prev,
       [exerciseId]: (prev[exerciseId] || []).map(s => s.id === setId ? { ...s, [field]: parsedValue } : s),
     }))
-    if (isOffline || isTempSetId(setId)) {
-      enqueue({ type: 'exercise_set_field', setId, field, value: parsedValue })
-      return
-    }
-    const { error } = await supabase.from('program_exercise_sets').update({ [field]: parsedValue }).eq('id', setId)
-    if (error) alert('Erreur : ' + error.message)
+    enqueue({ type: 'exercise_set_field', setId, field, value: parsedValue })
+    scheduleFlush()
   }
 
   const deleteExerciseSet = async (exerciseId, setId) => {
     setExerciseSets(prev => ({ ...prev, [exerciseId]: (prev[exerciseId] || []).filter(s => s.id !== setId) }))
-    if (isTempSetId(setId)) {
-      // Jamais persistée : on retire juste les opérations en attente qui la concernaient.
-      const q = loadQueue().filter(op => op.tempId !== setId && op.setId !== setId)
-      localStorage.setItem(queueKey, JSON.stringify(q))
-      return
-    }
-    if (isOffline) {
-      enqueue({ type: 'delete_exercise_set', setId })
-      return
-    }
-    await supabase.from('program_exercise_sets').delete().eq('id', setId)
+    const q = loadQueue()
+    // Série jamais partie au serveur : on retire simplement ses opérations en attente, rien à
+    // supprimer côté Supabase.
+    const stillPending = q.some(op => op.type === 'add_exercise_set' && op.tempId === setId)
+    const rest = q.filter(op => op.tempId !== setId && op.setId !== setId)
+    if (stillPending) { saveQueue(rest); return }
+    saveQueue([...rest, { type: 'delete_exercise_set', setId }])
+    scheduleFlush()
   }
 
   // Crée une séance libre. mode 'standard' | 'cardio' — choisi dans AddActionSheet, même
@@ -1158,6 +1280,7 @@ function AthleteView({ params }) {
         {focusSession && playerStarted && isOwnAthleteSession && !focusSessionHasRun ? (
           <SessionPlayer
             session={focusSession}
+            athleteId={athlete.id}
             exerciseSets={exerciseSets}
             onEnsureExerciseSets={ensureExerciseSets}
             onSaveExerciseSet={saveExerciseSet}
@@ -1220,7 +1343,10 @@ function AthleteView({ params }) {
           <CelebrationModal tonnage={celebration.tonnage} muscles={celebration.muscles} records={celebration.records} onClose={() => { setCelebration(null); router.push(backHref) }} />
         )}
         {!celebration && freeGateUpsell && (
-          <FreeGateUpsellModal upsell={freeGateUpsell} subscribing={subscribingFromGate} onSubscribe={subscribeFromGate} onClose={() => setFreeGateUpsell(null)} />
+          <FreeGateUpsellModal upsell={freeGateUpsell} onSeeOffers={() => { setFreeGateUpsell(null); setShowSubscription(true) }} onClose={() => setFreeGateUpsell(null)} />
+        )}
+        {showSubscription && (
+          <SubscriptionScreen athlete={athlete} token={token} onClose={() => setShowSubscription(false)} />
         )}
         <Toast message={toast} show={!!toast} onDone={() => setToast(null)} />
         <Toast message={exerciseToast} show={!!exerciseToast} onDone={() => setExerciseToast(null)} position="top" />
@@ -1294,6 +1420,7 @@ function AthleteView({ params }) {
             noteBlocks={noteBlocks}
             programs={programs} completions={completions} skippedSessions={skippedSessions}
             completionDates={completionDates} openedSessionId={openedSessionId}
+            onOpenSubscription={() => setShowSubscription(true)}
             selectedType={selectedType} setSelectedType={setSelectedType}
             router={router} token={token} setActiveTab={setActiveTab}
             onUpdateProgramDays={updateProgramDays} isGroupLeader={isGroupLeader}
@@ -1340,6 +1467,7 @@ function AthleteView({ params }) {
           onClose={() => setShowAddSheet(false)}
           onAddActivity={() => { setShowAddSheet(false); setShowAddWizard(true) }}
           onFreeSession={(mode, timing) => { setShowAddSheet(false); startFreeSession([], mode, timing === 'now' ? 'focus' : 'builder') }}
+          onAddRecord={() => { setShowAddSheet(false); setActiveTab('pr') }}
         />
       )}
       {showAddWizard && (
@@ -1420,7 +1548,11 @@ function AthleteView({ params }) {
       )}
 
       {!celebration && pendingGroupSessions.length === 0 && !showBirthdayPopup && !showRenewalPopup && freeGateUpsell && (
-        <FreeGateUpsellModal upsell={freeGateUpsell} subscribing={subscribingFromGate} onSubscribe={subscribeFromGate} onClose={() => setFreeGateUpsell(null)} />
+        <FreeGateUpsellModal upsell={freeGateUpsell} onSeeOffers={() => { setFreeGateUpsell(null); setShowSubscription(true) }} onClose={() => setFreeGateUpsell(null)} />
+      )}
+
+      {showSubscription && (
+        <SubscriptionScreen athlete={athlete} token={token} onClose={() => setShowSubscription(false)} />
       )}
 
       <Toast message={toast} show={!!toast} onDone={() => setToast(null)} />
@@ -1428,20 +1560,29 @@ function AthleteView({ params }) {
   )
 }
 
-function FreeGateUpsellModal({ upsell, subscribing, onSubscribe, onClose }) {
+// Deux déclencheurs, une seule modale : la gate atteinte en fin d'accès gratuit d'un programme
+// (upsell.programName), et le rappel périodique pour un compte gratuit (voir loadAthlete) — avant,
+// seule la gate existait, et un sportif qui ne poussait aucun programme jusqu'au bout ne voyait
+// jamais parler d'abonnement (retour testeur).
+// Le bouton n'envoie plus directement vers le checkout de la formule A : il ouvre l'écran des
+// formules, où le sportif voit ce que chacune apporte avant de payer.
+function FreeGateUpsellModal({ upsell, onSeeOffers, onClose }) {
+  const isGate = !!upsell.programName
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300, padding: 16 }}>
       <div style={{ background: 'var(--bg)', borderRadius: 'var(--rl)', padding: 20, maxWidth: 380, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
-        <div style={{ fontSize: 32, marginBottom: 8, textAlign: 'center' }}>🎉</div>
+        <div style={{ fontSize: 32, marginBottom: 8, textAlign: 'center' }}>{isGate ? '🎉' : '🔓'}</div>
         <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontSize: 17, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>
-          Bravo pour ces 3 séances !
+          {isGate ? `Bravo pour ces ${FREE_SESSIONS_DEFAULT} séances !` : 'Tu es en accès gratuit'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16, textAlign: 'center' }}>
-          Tu as terminé l&apos;accès gratuit de « {upsell.programName} ». Abonne-toi pour débloquer la suite de ce programme, et l&apos;accès à tous les programmes de la plateforme.
+          {isGate
+            ? <>Tu as terminé l&apos;accès gratuit de « {upsell.programName} ». Abonne-toi pour débloquer la suite de ce programme, et l&apos;accès à tous les programmes de la plateforme.</>
+            : <>Ton compte s&apos;arrête aux {FREE_SESSIONS_DEFAULT} premières séances de chaque programme. L&apos;abonnement débloque tout le catalogue, à partir de {SUBSCRIPTION_TIERS.A.amount.toFixed(2).replace('.', ',')}€/mois.</>}
         </div>
-        <button onClick={() => onSubscribe('A')} disabled={subscribing}
+        <button onClick={onSeeOffers}
           style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '11px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%', marginBottom: 8 }}>
-          {subscribing ? '…' : "S'abonner"}
+          Voir les formules
         </button>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text3)', fontSize: 13, fontWeight: 600, cursor: 'pointer', width: '100%', padding: 6 }}>
           Plus tard

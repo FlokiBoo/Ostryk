@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Toast from '@/app/components/Toast'
 
-const METRICS = [
+// Exporté pour que l'appelant puisse dire ce qu'il manque encore (voir AddActivityWizard, qui
+// bloque son "Suivant" tant que les quatre ne sont pas renseignés).
+export const WELLNESS_METRICS = [
   { key: 'sommeil',     label: 'Sommeil',     emoji: '🌙', inverse: false },
   { key: 'stress',      label: 'Stress',      emoji: '😰', inverse: true  },
   { key: 'courbatures', label: 'Courbatures', emoji: '💪', inverse: true  },
   { key: 'forme',       label: 'Forme',       emoji: '⚡', inverse: false },
 ]
+const METRICS = WELLNESS_METRICS
 
 function scoreColor(val, inverse) {
   if (!val) return 'var(--text3)'
@@ -40,7 +43,13 @@ function WellnessSummary({ data, suffix = '' }) {
   )
 }
 
-export default function WellnessBlock({ athleteId, date, mode, athleteName }) {
+// `hideValidate` : masque le bouton "Valider mon bien-être du jour" quand l'écran appelant porte
+// déjà sa propre validation (wizard d'ajout d'activité) — deux validations à la suite pour la même
+// chose perdaient le sportif (retour testeur).
+// `onChange` : remonte la ligne courante à chaque saisie, pour que cet appelant sache ce qui
+// manque encore. Doit être stable (useCallback), il est dans les dépendances de l'effet de
+// chargement — une fonction recréée à chaque rendu relancerait le fetch en boucle.
+export default function WellnessBlock({ athleteId, date, mode, athleteName, hideValidate = false, onChange }) {
   const [row, setRow] = useState(null) // null = loading, {} = no data, {...} = data
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null)
@@ -50,8 +59,8 @@ export default function WellnessBlock({ athleteId, date, mode, athleteName }) {
     setRow(null)
     supabase.from('wellness').select('*')
       .eq('athlete_id', athleteId).eq('date', date).maybeSingle()
-      .then(({ data }) => setRow(data || {}))
-  }, [athleteId, date])
+      .then(({ data }) => { setRow(data || {}); onChange?.(data || {}) })
+  }, [athleteId, date, onChange])
 
   const set = async (key, val) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -63,6 +72,7 @@ export default function WellnessBlock({ athleteId, date, mode, athleteName }) {
     const newVal = row?.[field] === val ? null : val
     const updated = { ...(row || {}), athlete_id: athleteId, date, [field]: newVal }
     setRow(updated)
+    onChange?.(updated)
     setSaving(true)
     await supabase.from('wellness')
       .upsert({ athlete_id: athleteId, date, [field]: newVal }, { onConflict: 'athlete_id,date' })
@@ -77,6 +87,7 @@ export default function WellnessBlock({ athleteId, date, mode, athleteName }) {
     const newVal = !row?.validated
     const updated = { ...(row || {}), athlete_id: athleteId, date, validated: newVal }
     setRow(updated)
+    onChange?.(updated)
     setSaving(true)
     await supabase.from('wellness')
       .upsert({ athlete_id: athleteId, date, validated: newVal }, { onConflict: 'athlete_id,date' })
@@ -141,7 +152,7 @@ export default function WellnessBlock({ athleteId, date, mode, athleteName }) {
         ))}
       </div>
 
-      {mode !== 'coach' && (
+      {mode !== 'coach' && !hideValidate && (
         <button onClick={toggleValidated} style={{
           marginTop: 10, width: '100%', padding: '10px', borderRadius: 'var(--r)',
           border: row?.validated ? '1px solid var(--border2)' : 'none',

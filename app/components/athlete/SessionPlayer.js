@@ -421,12 +421,17 @@ function SingleExerciseScreen({ exo, exerciseSets, onEnsureExerciseSets, onSaveE
     if (validatedCount + 1 >= totalSets) onNext()
   }
 
+  // L'incrément était hors du `if (set)` : quand la ligne de série n'existait pas encore (le
+  // provisionnement passait par un insert Supabase attendu, et l'athlète validait plus vite que le
+  // réseau), l'écran avançait et la série n'était écrite nulle part. Au retour dans l'app, plus
+  // aucune série validée en base : la séance repartait à l'échauffement. Le provisionnement est
+  // désormais local et synchrone (voir ensureExerciseSets), donc `set` existe toujours — et si ce
+  // n'était plus le cas, on refuse d'avancer plutôt que de perdre la saisie en silence.
   const handleValidate = (reps, kg) => {
     const set = sets[validatedCount]
-    if (set) {
-      onSaveExerciseSet(exo.id, set.id, 'reps_done', String(reps))
-      onSaveExerciseSet(exo.id, set.id, 'kg_done', String(kg))
-    }
+    if (!set) { onEnsureExerciseSets(exo.id, totalSets); return }
+    onSaveExerciseSet(exo.id, set.id, 'reps_done', String(reps))
+    onSaveExerciseSet(exo.id, set.id, 'kg_done', String(kg))
     setLastValues({ reps, kg })
     onSetSaved?.()
     setValidatedCount(c => c + 1)
@@ -492,13 +497,13 @@ function SupersetScreen({ group, labels, exerciseSets, onEnsureExerciseSets, onS
     setExoIdx(0)
   }
 
+  // Même correction qu'en super série simple : ne jamais avancer sans avoir écrit la série.
   const handleValidate = (reps, kg) => {
     const sets = exerciseSets[exo.id] || []
     const set = sets[round - 1]
-    if (set) {
-      onSaveExerciseSet(exo.id, set.id, 'reps_done', String(reps))
-      onSaveExerciseSet(exo.id, set.id, 'kg_done', String(kg))
-    }
+    if (!set) { onEnsureExerciseSets(exo.id, totalRounds); return }
+    onSaveExerciseSet(exo.id, set.id, 'reps_done', String(reps))
+    onSaveExerciseSet(exo.id, set.id, 'kg_done', String(kg))
     setLastValuesByExo(prev => ({ ...prev, [exo.id]: { reps, kg } }))
     onSetSaved?.()
     if (!isLastOfGroup) { setExoIdx(i => i + 1); return }
@@ -562,7 +567,27 @@ function SupersetScreen({ group, labels, exerciseSets, onEnsureExerciseSets, onS
 // Player d'exécution de séance — remplace la liste à plat pour le logging des exercices/super
 // séries. Reçoit les mêmes fonctions d'écriture (avec queue offline) que l'écran de préparation
 // (SessionCard) : aucune nouvelle logique de sauvegarde, seulement un nouvel enchaînement d'écrans.
-export default function SessionPlayer({ session, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onExit }) {
+// Position dans la séance, persistée par sportif + séance. Les VALEURS saisies, elles, vivent dans
+// la file d'écritures (localStorage aussi, voir app/s/[token]/page.js) et sont rejouées par-dessus
+// la réponse serveur au chargement — d'où le fait qu'on ne stocke ici que l'index du bloc.
+export const sessionProgressKey = (athleteId, sessionId) => `ostryk_session_progress_${athleteId}_${sessionId}`
+// Au-delà, c'est une autre séance : on repart de ce que disent les séries en base plutôt que de
+// rouvrir un player sur une position vieille d'un jour.
+const PROGRESS_MAX_AGE_MS = 12 * 60 * 60 * 1000
+
+function readStoredProgress(athleteId, sessionId) {
+  if (!athleteId || !sessionId) return null
+  try {
+    const raw = localStorage.getItem(sessionProgressKey(athleteId, sessionId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (typeof parsed?.blockIndex !== 'number') return null
+    if (!parsed.updatedAt || Date.now() - parsed.updatedAt > PROGRESS_MAX_AGE_MS) return null
+    return parsed
+  } catch { return null }
+}
+
+export default function SessionPlayer({ session, athleteId, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onExit }) {
   useKeepAwake(true)
   const [toast, setToast] = useState(null)
   const exos = (session.exercises || []).filter(e => e.name)
@@ -576,13 +601,26 @@ export default function SessionPlayer({ session, exerciseSets, onEnsureExerciseS
     const totalRounds = Math.max(1, parseInt(block.exos[0]?.sets, 10) || 1)
     return block.exos.every(exo => countValidatedSets(exerciseSets[exo.id] || []) >= totalRounds)
   }
-  // Reprend sur le premier bloc pas encore entièrement validé plutôt que de toujours repartir de 0 —
-  // ce qui permet à SessionPlayer de "résister" à un remount complet (WebView tuée puis recréée en
-  // arrière-plan) en se resynchronisant sur les séries déjà en base, voir countValidatedSets ci-dessus.
+  // Reprise après un remount complet (WebView tuée puis recréée en arrière-plan, ou simple
+  // rechargement de la page). Deux sources, dans cet ordre :
+  //   1. la position mémorisée localement — elle seule sait que l'athlète est revenu en arrière
+  //      volontairement, ce que les séries en base ne peuvent pas exprimer ;
+  //   2. à défaut, le premier bloc pas entièrement validé, déduit des séries (countValidatedSets),
+  //      qui incluent désormais les saisies encore en file d'attente.
   const [blockIndex, setBlockIndex] = useState(() => {
+    const stored = readStoredProgress(athleteId, session.id)
+    if (stored && stored.blockIndex >= 0 && stored.blockIndex < blocks.length) return stored.blockIndex
     const idx = blocks.findIndex(b => !isBlockDone(b))
     return idx === -1 ? Math.max(0, blocks.length - 1) : idx
   })
+
+  // Réécrite à chaque changement de bloc : au prochain montage, on rouvre exactement ici.
+  useEffect(() => {
+    if (!athleteId || !session.id) return
+    try {
+      localStorage.setItem(sessionProgressKey(athleteId, session.id), JSON.stringify({ blockIndex, updatedAt: Date.now() }))
+    } catch { /* stockage indisponible — la reprise retombera sur les séries en base */ }
+  }, [athleteId, session.id, blockIndex])
 
   if (blocks.length === 0) {
     return (
