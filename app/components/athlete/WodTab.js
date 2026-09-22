@@ -9,7 +9,7 @@ import ChooseDaysModal from './ChooseDaysModal'
 
 // Un programme multi-séances que personne n'a daté (ni le coach via day_of_week, ni le sportif via
 // athlete_days_of_week) doit d'abord demander son rythme hebdomadaire — c'est ChooseDaysModal, plus
-// bas. Le prédicat est exporté parce que app/s/[token]/page.js doit savoir si ce popup est en
+// bas. Le conseil du coach y plafonne la sélection quand il existe (voir le commentaire du popup). Le prédicat est exporté parce que app/s/[token]/page.js doit savoir si ce popup est en
 // attente : il passe avant le rappel d'abonnement dans la file des popups, sinon les deux
 // s'affichent l'un sur l'autre au même chargement.
 export function hasPendingDayPicker(programs, completions, skippedSessions) {
@@ -411,6 +411,7 @@ export default function WodTab({
       {!isCoachView && dayPickerProgram && onUpdateProgramDays && (
         <ChooseDaysModal
           program={dayPickerProgram}
+          objectives={objectives}
           onSave={async (days) => {
             await onUpdateProgramDays(dayPickerProgram.id, days)
           }}
