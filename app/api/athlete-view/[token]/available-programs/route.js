@@ -82,6 +82,9 @@ export async function POST(request, { params }) {
       source_program_id: template.id, activity_type: template.activity_type,
       free_sessions_count: template.free_sessions_count ?? 3,
       is_self_service: true,
+      // Le conseil de rythme doit suivre la copie, sinon il reste invisible du sportif.
+      recommended_sessions_per_week: template.recommended_sessions_per_week ?? null,
+      min_hours_between_sessions: template.min_hours_between_sessions ?? null,
     })
     .select().single()
   if (progErr || !newProg) return NextResponse.json({ error: progErr?.message || 'création impossible' }, { status: 400 })

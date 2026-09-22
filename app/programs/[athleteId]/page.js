@@ -215,7 +215,13 @@ function ProgramsPageInner({ params }) {
     for (const targetId of selectedIds) {
       // Créer le programme pour cet athlète
       const { data: newProg } = await supabase.from('programs')
-        .insert({ athlete_id: targetId, title: assignModal.title, coach_id: coachId, source_program_id: assignModal.id, activity_type: assignModal.activity_type, group_id: assignGroupId, group_batch_id: batchId })
+        .insert({
+          athlete_id: targetId, title: assignModal.title, coach_id: coachId, source_program_id: assignModal.id,
+          activity_type: assignModal.activity_type, group_id: assignGroupId, group_batch_id: batchId,
+          // Le conseil de rythme doit suivre la copie, sinon il reste invisible du sportif.
+          recommended_sessions_per_week: assignModal.recommended_sessions_per_week ?? null,
+          min_hours_between_sessions: assignModal.min_hours_between_sessions ?? null,
+        })
         .select().single()
       if (!newProg) continue
 

@@ -55,6 +55,9 @@ async function copyProgramToAthletes(sourceProgram, targetAthleteIds, { coachId,
       .insert({
         athlete_id: targetId, title: sourceProgram.title, coach_id: coachId, source_program_id: sourceProgram.id,
         activity_type: sourceProgram.activity_type, group_id: groupId, group_batch_id: batchId, is_microcycle: sourceProgram.is_microcycle,
+        // Le conseil de rythme doit suivre la copie, sinon il reste invisible du sportif.
+        recommended_sessions_per_week: sourceProgram.recommended_sessions_per_week ?? null,
+        min_hours_between_sessions: sourceProgram.min_hours_between_sessions ?? null,
       })
       .select().single()
     if (!newProg) continue
