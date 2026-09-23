@@ -439,6 +439,11 @@ export default function AthletesPage() {
               </button>
             )}
             {!menu.athlete.is_coach && (
+              <button onClick={() => router.push(`/athletes/${menu.athlete.id}`)} style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
+                📋 Ouvrir la fiche
+              </button>
+            )}
+            {!menu.athlete.is_coach && (
               <button onClick={() => toggleFollowType(menu.athlete)} style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
                 {menu.athlete.is_1to1_client ? '↩︎ Retirer du suivi 1:1' : '🤝 Marquer en suivi 1:1'}
               </button>
