@@ -1049,7 +1049,7 @@ export default function FicheSportifCoach({
           ) : null}
         </main>
 
-        <aside style={{ flex: "0 1 280px", minWidth: 220, display: "flex", flexDirection: "column", gap: 10 }}>
+        <aside style={{ flex: "1 1 280px", minWidth: 220, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={carte}>
             <p style={{ ...titreEncart, display: "flex", alignItems: "center", gap: 7 }}><Target size={15} />Objectifs du sportif</p>
             {objectifs.length === 0 ? (
