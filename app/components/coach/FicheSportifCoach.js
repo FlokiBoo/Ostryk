@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from "react";
+import { ArrowLeft, CalendarBlank, CaretDown, CaretUp, ChatCircle, CheckCircle, Clock, NotePencil, Play, Target, TrendUp } from "@phosphor-icons/react";
 
 /*
   Fiche sportif côté coach + mode coaching.
@@ -292,9 +293,15 @@ function volume(v, avecCharge) {
   return avecCharge ? (v.kg || 0) * (v.reps || 0) : v.reps || 0;
 }
 
-const carte = { background: T.blanc, borderRadius: 12, padding: "10px 12px" };
-const titreSection = { fontFamily: "Cinzel, serif", fontSize: 14, margin: 0 };
-const titreEncart = { fontFamily: "Cinzel, serif", fontSize: 12, color: T.bordeaux, margin: "0 0 8px" };
+const carte = {
+  background: T.blanc,
+  border: `1px solid ${T.bordureLegere}`,
+  borderRadius: 16,
+  padding: 16,
+  boxShadow: `0 6px 18px ${T.bordureLegere}`,
+};
+const titreSection = { fontFamily: "Cinzel, serif", fontSize: 15, margin: 0, letterSpacing: "-0.01em" };
+const titreEncart = { fontFamily: "Cinzel, serif", fontSize: 12, color: T.bordeaux, margin: "0 0 10px", letterSpacing: "0.02em" };
 
 function Bouton({ children, principal, onClick, ...rest }) {
   return (
@@ -306,11 +313,17 @@ function Bouton({ children, principal, onClick, ...rest }) {
         border: principal ? "none" : `1px solid ${T.bordure}`,
         background: principal ? T.bordeaux : T.blanc,
         color: principal ? T.clair : T.texte,
-        borderRadius: 10,
-        padding: "0 14px",
-        height: 38,
+        borderRadius: 12,
+        padding: "0 15px",
+        minHeight: 44,
         fontSize: 13,
+        fontWeight: 600,
         cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 7,
+        boxShadow: principal ? `0 5px 12px ${T.bordureLegere}` : "none",
         ...(rest.style || {}),
       }}
     >
@@ -332,7 +345,8 @@ function Badge({ children, variante = "neutre" }) {
         ...styles[variante],
         borderRadius: 100,
         fontSize: 10,
-        padding: "2px 8px",
+        fontWeight: 600,
+        padding: "5px 9px",
         whiteSpace: "nowrap",
       }}
     >
@@ -396,7 +410,7 @@ function PlanifierCoaching({ seance, onPlanifier }) {
         }}
         style={{ height: 34, opacity: !valeur ? 0.5 : 1 }}
       >
-        {seance.starts_at ? "Déplacer" : "Planifier"}
+        <><CalendarBlank size={15} />{seance.starts_at ? "Déplacer" : "Planifier"}</>
       </Bouton>
     </div>
   );
@@ -480,7 +494,7 @@ function ApercuSeance({ seance, onLancer, onPersonnaliser, onRevenirVersionProgr
         {!faite ? <Bouton onClick={() => onPersonnaliser(seance)}>Modifier pour ce client</Bouton> : null}
         {aDesExercices ? (
           <Bouton principal={!faite} onClick={() => onLancer(seance)}>
-            {faite ? "Modifier la saisie" : "Lancer le coaching"}
+            {faite ? <><NotePencil size={16} />Modifier la saisie</> : <><Play size={16} weight="fill" />Lancer le coaching</>}
           </Bouton>
         ) : null}
       </div>
@@ -490,60 +504,52 @@ function ApercuSeance({ seance, onLancer, onPersonnaliser, onRevenirVersionProgr
 
 function LigneSeance({ seance, ouverte, onBasculer, ...actions }) {
   const couleur = TYPE_COULEUR[seance.type];
-  let droite;
-  if (seance.statut === "faite") {
-    droite = (
-      <>
-        <span style={{ fontSize: 11, color: T.texteCorps }}>
-          {seance.duree_min} min · effort{" "}
-          <strong style={{ fontWeight: 500, color: seance.effort === "Dur" ? T.bordeaux : T.vert }}>
-            {seance.effort}
-          </strong>
-        </span>
-        {seance.saisie_coach ? <Badge variante="vert">Saisie coach</Badge> : null}
-      </>
-    );
-  } else if (seance.statut === "manquee") {
-    droite = <Badge variante="pointille">Pas faite</Badge>;
+  const estFaite = seance.statut === "faite";
+  const estManquee = seance.statut === "manquee";
+  let meta;
+  if (estFaite) {
+    meta = `${seance.duree_min || "—"} min · ${seance.effort || "—"}`;
+  } else if (estManquee) {
+    meta = "Séance non réalisée";
   } else if (seance.is_coached) {
-    droite = seance.starts_at ? (
-      <span style={{ fontSize: 11, color: T.texteCorps }}>{dateHeure(seance.starts_at)}</span>
-    ) : (
-      <Badge variante="pointille">À planifier</Badge>
-    );
+    meta = seance.starts_at ? dateHeure(seance.starts_at) : "À planifier";
   } else {
-    droite = <span style={{ fontSize: 11, color: T.texteSec }}>≈ {seance.duree_estimee_min} min</span>;
+    meta = `≈ ${seance.duree_estimee_min || "—"} min`;
   }
 
   return (
     <div
-      style={{ ...carte, cursor: "pointer", opacity: seance.statut === "manquee" ? 0.85 : 1 }}
+      style={{
+        ...carte,
+        padding: 0,
+        overflow: "hidden",
+        opacity: estManquee ? 0.78 : 1,
+        cursor: "pointer",
+      }}
       onClick={onBasculer}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span
-          aria-label={TYPE_LABEL[seance.type]}
-          style={{ width: 8, height: 8, borderRadius: "50%", background: couleur, flex: "none" }}
-        />
-        <span style={{ fontSize: 11, color: T.texteSec, minWidth: 82 }}>{dateCourte(seance.date)}</span>
-        <span
-          style={{
-            fontSize: 13,
-            flex: 1,
-            minWidth: 120,
-            color: seance.statut === "manquee" ? T.texteSec : T.texte,
-          }}
-        >
-          {seance.titre}
-        </span>
-        {seance.is_coached ? <Badge variante="bordeaux">Coachée</Badge> : null}
-        {seance.customized_at && seance.statut !== "faite" ? <Badge>Personnalisée</Badge> : null}
-        {droite}
-        <span aria-hidden="true" style={{ fontSize: 12, color: T.muted }}>
-          {ouverte ? "▴" : "▾"}
-        </span>
+      <div style={{ display: "flex", alignItems: "stretch", minHeight: 72 }}>
+        <div style={{ width: 4, background: couleur, flex: "none" }} role="img" aria-label={TYPE_LABEL[seance.type]} />
+        <div style={{ flex: 1, minWidth: 0, padding: "13px 14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, color: T.texteSec, fontWeight: 600 }}>{dateCourte(seance.date)}</span>
+            {seance.is_coached ? <Badge variante="bordeaux">Coachée</Badge> : null}
+            {seance.customized_at && !estFaite ? <Badge>Personnalisée</Badge> : null}
+          </div>
+          <p style={{ fontSize: 14, fontWeight: 600, margin: "5px 0 3px", color: estManquee ? T.texteSec : T.texte }}>
+            {seance.titre}
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+            {estFaite ? <CheckCircle size={15} weight="fill" color={T.vert} /> : null}
+            <span style={{ fontSize: 11, color: estFaite && seance.effort === "Dur" ? T.bordeaux : T.texteSec }}>{meta}</span>
+            {seance.saisie_coach ? <Badge variante="vert">Saisie coach</Badge> : null}
+          </div>
+        </div>
+        <div style={{ width: 44, display: "flex", alignItems: "center", justifyContent: "center", color: T.muted }}>
+          {ouverte ? <CaretUp size={18} /> : <CaretDown size={18} />}
+        </div>
       </div>
-      {ouverte ? <ApercuSeance seance={seance} {...actions} /> : null}
+      {ouverte ? <div style={{ padding: "0 14px 14px" }}><ApercuSeance seance={seance} {...actions} /></div> : null}
     </div>
   );
 }
@@ -659,7 +665,7 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
         type="button"
         aria-label={`Diminuer ${champ === "kg" ? "la charge" : "les répétitions"} sur ${ex.nom}`}
         onClick={() => maj(ex, champ, -1)}
-        style={{ width: 38, height: 38, border: "none", borderRadius: "50%", background: T.blanc, color: T.vert, fontSize: 18 }}
+        style={{ width: 44, height: 44, border: `1px solid ${T.bordureLegere}`, borderRadius: "50%", background: T.blanc, color: T.vert, fontSize: 18, cursor: "pointer" }}
       >
         −
       </button>
@@ -678,7 +684,7 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
         type="button"
         aria-label={`Augmenter ${champ === "kg" ? "la charge" : "les répétitions"} sur ${ex.nom}`}
         onClick={() => maj(ex, champ, 1)}
-        style={{ width: 38, height: 38, border: "none", borderRadius: "50%", background: T.blanc, color: T.vert, fontSize: 18 }}
+        style={{ width: 44, height: 44, border: `1px solid ${T.bordureLegere}`, borderRadius: "50%", background: T.blanc, color: T.vert, fontSize: 18, cursor: "pointer" }}
       >
         +
       </button>
@@ -693,9 +699,9 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
           type="button"
           aria-label="Retour à la fiche"
           onClick={onRetour}
-          style={{ background: "none", border: "none", fontSize: 20, color: T.vert, padding: 6 }}
+          style={{ background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12, width: 44, height: 44, color: T.vert, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
         >
-          ←
+          <ArrowLeft size={20} weight="bold" />
         </button>
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>Coaching · {athlete.nom}</p>
@@ -719,7 +725,7 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
               flex: 1,
               border: "none",
               borderRadius: 100,
-              height: 36,
+              height: 44,
               fontSize: 12,
               background: i === blocIdx ? T.bordeaux : T.blanc,
               color: i === blocIdx ? T.clair : T.texte,
@@ -740,7 +746,7 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
           if (!v) return null;
           const noteVisible = notesOuvertes[ex.id] || notes[ex.id];
           return (
-            <section key={ex.id} style={{ ...carte, padding: "12px 12px" }}>
+            <section key={ex.id} style={{ ...carte, padding: 16, boxShadow: "none" }}>
               <p style={{ fontSize: 14, margin: "0 0 8px" }}>{ex.nom}</p>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {ex.unite === "kg" ? stepper(ex, "kg", v.kg, "kg", v.touche) : null}
@@ -770,7 +776,7 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
                     fontFamily: "inherit",
                     fontSize: 12,
                     color: T.texte,
-                    background: "#FBF9F5",
+                    background: T.fond,
                     resize: "vertical",
                   }}
                 />
@@ -855,7 +861,7 @@ export default function FicheSportifCoach({
         style={{
           background: T.page,
           minHeight: "100vh",
-          padding: 16,
+          padding: "16px 16px calc(24px + env(safe-area-inset-bottom))",
           fontFamily: "'Work Sans', system-ui, sans-serif",
           color: T.texte,
         }}
@@ -898,20 +904,21 @@ export default function FicheSportifCoach({
       style={{
         background: T.page,
         minHeight: "100vh",
-        padding: 18,
+        padding: "20px 16px calc(32px + env(safe-area-inset-bottom))",
         fontFamily: "'Work Sans', system-ui, sans-serif",
         color: T.texte,
       }}
     >
-      <header style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+      <header style={{ ...carte, display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap", padding: 14 }}>
         <span
           style={{
-            width: 44,
-            height: 44,
+            width: 52,
+            height: 52,
             borderRadius: "50%",
             background: T.bordeaux,
             color: T.clair,
-            fontSize: 14,
+            fontFamily: "Cinzel, serif",
+            fontSize: 15,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -934,21 +941,21 @@ export default function FicheSportifCoach({
               : ""}
           </p>
         </div>
-        <Bouton onClick={onMessage}>Message</Bouton>
+        <Bouton onClick={onMessage}><ChatCircle size={17} weight="bold" />Message</Bouton>
       </header>
 
       <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
         <main style={{ flex: "1 1 420px", minWidth: 0 }}>
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-            <div style={{ ...carte, flex: "1 1 110px" }}>
-              <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>Cette semaine</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 18 }}>
+            <div style={{ ...carte }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}><TrendUp size={16} color={T.bordeaux} /><p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>Cette semaine</p></div>
               <p style={{ fontFamily: "Cinzel, serif", fontSize: 18, margin: "2px 0 0" }}>
                 {stats.semaineFaites}
                 <span style={{ fontSize: 13, color: T.texteSec }}>/{stats.semainePrevues}</span>
               </p>
             </div>
-            <div style={{ ...carte, flex: "1 1 140px" }}>
-              <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>4 dernières semaines</p>
+            <div style={{ ...carte }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}><Clock size={16} color={T.vert} /><p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>4 dernières semaines</p></div>
               <div
                 style={{ display: "flex", gap: 3, marginTop: 8 }}
                 aria-label={stats.quatreSemaines.map((s) => `${s.faites} sur ${s.prevues}`).join(", ")}
@@ -969,8 +976,8 @@ export default function FicheSportifCoach({
                 })}
               </div>
             </div>
-            <div style={{ ...carte, flex: "1 1 110px" }}>
-              <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>Effort moyen</p>
+            <div style={{ ...carte }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}><Target size={16} color={T.ocre} /><p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>Effort moyen</p></div>
               <p style={{ fontFamily: "Cinzel, serif", fontSize: 18, margin: "2px 0 0", color: T.bordeaux }}>
                 {stats.effortMoyen || "—"}
               </p>
@@ -1042,9 +1049,9 @@ export default function FicheSportifCoach({
           ) : null}
         </main>
 
-        <aside style={{ flex: "0 1 220px", minWidth: 190, display: "flex", flexDirection: "column", gap: 10 }}>
+        <aside style={{ flex: "0 1 280px", minWidth: 220, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={carte}>
-            <p style={titreEncart}>Objectifs du sportif</p>
+            <p style={{ ...titreEncart, display: "flex", alignItems: "center", gap: 7 }}><Target size={15} />Objectifs du sportif</p>
             {objectifs.length === 0 ? (
               <p style={{ fontSize: 12, color: T.texteSec, margin: 0 }}>Aucun objectif renseigné.</p>
             ) : (
@@ -1062,7 +1069,7 @@ export default function FicheSportifCoach({
           </div>
 
           <div style={carte}>
-            <p style={titreEncart}>Programme</p>
+            <p style={{ ...titreEncart, display: "flex", alignItems: "center", gap: 7 }}><TrendUp size={15} />Programme</p>
             <p style={{ fontSize: 13, margin: 0 }}>{programme.titre}</p>
             <div
               role="progressbar"
