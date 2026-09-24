@@ -144,12 +144,12 @@ export default function ChooseDaysModal({ program, objectives = [], onSave, onDi
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
           {WEEK_DAYS.map(d => {
             const isSelected = selected.includes(d.key)
             return (
               <button key={d.key} onClick={() => toggleDay(d.key)} aria-label={d.label} aria-pressed={isSelected} style={{
-                width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
+                flex: '1 1 0', minWidth: 0, maxWidth: 46, aspectRatio: '1 / 1', borderRadius: '50%',
                 border: `1.5px solid ${isSelected ? 'var(--vert-foret)' : 'var(--ostryk-border-input)'}`,
                 background: isSelected ? 'var(--vert-foret)' : 'var(--card-white)',
                 color: isSelected ? '#fff' : 'var(--ostryk-text2)',
