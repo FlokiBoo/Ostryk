@@ -10,6 +10,8 @@
 // l'ancien éditeur plein écran côté coach).
 
 import { useState, useRef, useEffect, useMemo } from 'react'
+import VideoListEditor from '@/app/components/VideoListEditor'
+import { CIRCUIT_MODES } from '@/lib/circuitModes'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { setUnsavedChanges, hasUnsavedChanges } from '@/lib/unsavedChanges'
@@ -238,6 +240,11 @@ function toCircuitBlock(circuit) {
     name: circuit.name || '', description: '', note: '',
     exercises: [], sets: [], restSeconds: 60,
     circuitNote: circuit.text || '',
+    // videos et result_mode existaient dans la forme du jsonb mais n'étaient ni relus ni écrits :
+    // le champ vidéo restait vide quoi qu'il arrive, et l'espace sportif lisait un result_mode que
+    // rien ne renseignait.
+    circuitVideos: circuit.videos || [],
+    circuitResultMode: circuit.result_mode || null,
   }
 }
 
@@ -380,7 +387,8 @@ function flattenBlocksToCircuits(blocks) {
         id: block.dbCircuitId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name: block.name || '',
         text: block.circuitNote || '',
-        videos: [],
+        videos: block.circuitVideos || [],
+        result_mode: block.circuitResultMode || null,
         afterExerciseIndex: cursor,
       })
     } else {
@@ -869,6 +877,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     setUnsavedChanges(true)
   }
   const isCircuitBlock = activeBlock?.type === 'circuit'
+
+  const majCircuit = (champs) => {
+    setBlocks(blocks.map((b, i) => (i === activeBlockIndex ? { ...b, ...champs } : b)))
+    setUnsavedChanges(true)
+  }
 
   const openDescModal = () => {
     if (!activeBlock) return
@@ -2128,6 +2141,21 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                 </button>
 
                 {isCircuitBlock ? (
+                  <>
+                  {/* Les vidéos d'abord : en séance, le coach les montre avant de lire la
+                      consigne. L'explication reste sous le texte, et le mode de résultat ferme
+                      le bloc. */}
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: c.textFaint, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>
+                      Vidéos du circuit
+                    </div>
+                    <VideoListEditor
+                      videos={activeBlock.circuitVideos || []}
+                      onAdd={v => { majCircuit({ circuitVideos: [...(activeBlock.circuitVideos || []), v] }) }}
+                      onRemove={idx => { majCircuit({ circuitVideos: (activeBlock.circuitVideos || []).filter((_, i) => i !== idx) }) }}
+                      onUpdateUrl={(idx, url) => { majCircuit({ circuitVideos: (activeBlock.circuitVideos || []).map((v, i) => i === idx ? { ...v, video_url: url } : v) }) }}
+                    />
+                  </div>
                   <textarea
                     key={activeBlock.id}
                     defaultValue={activeBlock.circuitNote || ''}
@@ -2146,6 +2174,27 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                       background: c.bg, fontFamily: 'inherit', color: c.text, overflow: 'hidden', minHeight: 220,
                     }}
                   />
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: c.textFaint, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>
+                      Ce qu&apos;on note à la fin
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[{ key: null, label: 'Au choix du sportif' }, ...CIRCUIT_MODES].map(m => {
+                        const actif = (activeBlock.circuitResultMode || null) === m.key
+                        return (
+                          <button key={m.key || 'libre'} type="button" onClick={() => majCircuit({ circuitResultMode: m.key })}
+                            style={{
+                              background: actif ? c.blue : c.bg, color: actif ? '#fff' : c.text,
+                              border: `1px solid ${actif ? c.blue : c.border}`, borderRadius: 20,
+                              padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                            }}>
+                            {m.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  </>
                 ) : activityMode === 'cardio' ? (
                   // Pas de grille SET en mode cardio : un seul réglage d'allure (base + %low/%high)
                   // par exercice — l'allure ne varie pas set par set (voir updatePaceValue).
