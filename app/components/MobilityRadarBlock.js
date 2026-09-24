@@ -14,10 +14,8 @@ function polarPoint(cx, cy, r, angleDeg) {
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
 }
 
-// Radar articulaire (Épaule/Hanche/Cheville/Colonne) + liste simple des valeurs — le "Profil
-// Torque" et le questionnaire psychologique/discordance qui vivaient ici ont été retirés de cette
-// page (page Performances) ; NewMobilityTestModal (flux de saisie d'un nouveau test, ouvert en
-// touchant le radar) reste inchangé.
+// Radar articulaire (Épaule/Hanche/Cheville/Colonne) + liste simple des valeurs.
+// NewMobilityTestModal (flux de saisie d'un nouveau test) s'ouvre en touchant le radar.
 export default function MobilityRadarBlock({ athleteId }) {
   const [joints, setJoints] = useState(null) // { joint: score|null }
   const [showNewTest, setShowNewTest] = useState(false)

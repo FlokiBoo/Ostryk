@@ -1,13 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, ChartLineUp, Ruler, Bone, Scales, Key, EnvelopeSimple, PencilSimple, Warning, CheckCircle } from '@phosphor-icons/react'
+import { User, ChartLineUp, Ruler, Bone, Key, EnvelopeSimple, PencilSimple, Warning, CheckCircle } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import TrackedMovementsBlock from './TrackedMovementsBlock'
 import GoniometerView from './GoniometerView'
 import { unlockAudio } from '@/lib/audioBeep'
 import { unlockSpeech } from '@/lib/speak'
-import TorqueProfileSection from './TorqueProfileSection'
 import { JOINT_TESTS, isQualitativeJoint, QUALITY_LEVELS, qualityLevel, HAND_POSITION_OPTIONS, handPositionLabel } from '@/lib/jointTests'
 import { ADMP_NORMS, isADMPJoint, analyzeADMPRisk } from '@/lib/jointTestThresholds'
 
@@ -26,7 +25,6 @@ const SECTIONS = [
   { key: 'metrics', Icon: ChartLineUp, label: 'Metrics' },
   { key: 'mensurations', Icon: Ruler, label: 'Mensurations' },
   { key: 'tests', Icon: Bone, label: 'Tests articulaires' },
-  { key: 'torque', Icon: Scales, label: 'Test' },
 ]
 
 function FullscreenSection({ title, onClose, children }) {
@@ -853,11 +851,6 @@ export default function AthleteQuickNav({ athlete, onUpdate }) {
       {open === 'tests' && (
         <FullscreenSection title={<><Bone size={17} /> Tests articulaires</>} onClose={() => setOpen(null)}>
           <TestsArticulairesSection athleteId={athlete.id} />
-        </FullscreenSection>
-      )}
-      {open === 'torque' && (
-        <FullscreenSection title={<><Scales size={17} /> Test Torque</>} onClose={() => setOpen(null)}>
-          <TorqueProfileSection athleteId={athlete.id} />
         </FullscreenSection>
       )}
     </>
