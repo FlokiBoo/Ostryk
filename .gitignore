@@ -44,3 +44,7 @@ next-env.d.ts
 # éditeurs / IDE (config locale, propre à chaque poste)
 .vscode/
 android/.idea/
+
+# supabase cli (fichiers de session locaux)
+supabase/.temp/
+supabase/.branches/

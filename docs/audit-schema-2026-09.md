@@ -190,7 +190,7 @@ Numérotés « A » pour ne pas entrer en collision avec les numéros de PR GitH
 
 | Lot | Contenu | Dépend de | Risque |
 |---|---|---|---|
-| A0 | Créer `supabase/migrations/` et y verser l'existant | — | nul, mais c'est la cause racine : sans historique versionné, aucun audit n'est reproductible |
+| A0 | Dossier `supabase/migrations/` créé avec sa convention ; **reste à y verser le dump du schéma existant** (demande le mot de passe de la base) | — | nul, mais c'est la cause racine : sans historique versionné, aucun audit n'est reproductible |
 | A1 | (c) `recommended_rhythm_note` + contraintes (c)(d) | A0 | nul, additif |
 | A2 | (a) — annulée, `is_1to1_client` reste tel quel | — | — |
 | A3 | (b) `listed_at` + backfill | A1 | faible, additif |
@@ -200,6 +200,11 @@ Numérotés « A » pour ne pas entrer en collision avec les numéros de PR GitH
 | A7 | (h) `customized_at` + garde dans `propagateSessionToClients` | A4 | moyen |
 | A8 | (i) traçabilité des séries | A6 | faible, additif |
 | A9 | (j) `private_coach_note` — confirmée nécessaire, `note` est visible du sportif | — | nul |
+
+Les fichiers de migration des lots A1, A3, A4, A7, A8 et A9 sont **écrits** dans
+`supabase/migrations/`, tous additifs, et **aucun n'a été exécuté** — l'état d'exécution se suit
+dans le README de ce dossier. A5 et A6 ne sont volontairement pas écrits : ce sont les deux seuls
+qui peuvent refuser une écriture, ils attendent la fin de la phase de test Android.
 
 Contexte qui pèse sur tout l'ordre : une seule base, la prod, pas de staging (`CLAUDE.md`). Les
 lots A5 et A6 sont les seuls qui peuvent casser une saisie en cours côté sportif ; ils méritent un
