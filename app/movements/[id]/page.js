@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import AthletesSidebar from '@/app/components/AthletesSidebar'
+import EquipmentPicker from '@/app/components/EquipmentPicker'
 
 function today() {
   const n = new Date()
@@ -168,7 +169,7 @@ export default function MovementDetailPage({ params }) {
   const isNew = id === 'new'
 
   const [muscles, setMuscles] = useState([])
-  const [torque, setTorque] = useState('')
+  const [equipment, setEquipment] = useState([])
   const [form, setForm] = useState({ name: '', youtube_url: '', instructions: '' })
   const [originalState, setOriginalState] = useState(null)
   const [allMuscles, setAllMuscles] = useState([])
@@ -193,16 +194,16 @@ export default function MovementDetailPage({ params }) {
       if (data) {
         const f = { name: data.name || '', youtube_url: data.youtube_url || '', instructions: data.instructions || '' }
         const m = parseMuscles(data.muscles)
-        const t = data.torque || ''
+        const eq = data.equipment || []
         setForm(f)
         setMuscles(m)
-        setTorque(t)
-        setOriginalState({ ...f, muscles: serializeMuscles(m), torque: t })
+        setEquipment(eq)
+        setOriginalState({ ...f, muscles: serializeMuscles(m), equipment: eq })
       }
     })
   }, [id])
 
-  const currentState = { ...form, muscles: serializeMuscles(muscles), torque }
+  const currentState = { ...form, muscles: serializeMuscles(muscles), equipment }
   const isDirty = JSON.stringify(currentState) !== JSON.stringify(originalState)
 
   async function save() {
@@ -213,7 +214,7 @@ export default function MovementDetailPage({ params }) {
       youtube_url: form.youtube_url.trim() || null,
       instructions: form.instructions.trim() || null,
       muscles: muscles.length > 0 ? serializeMuscles(muscles) : null,
-      torque: torque || null,
+      equipment: equipment.length > 0 ? equipment : null,
     }
     if (isNew) {
       const { data } = await supabase.from('movements').insert(payload).select().single()
@@ -301,7 +302,7 @@ export default function MovementDetailPage({ params }) {
             />
           </div>
 
-          {/* Muscles + Torque */}
+          {/* Muscles + Matériel */}
           <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
             <div>
@@ -316,24 +317,9 @@ export default function MovementDetailPage({ params }) {
 
             <div>
               <label style={labelStyle}>
-                Torque <span style={optionalStyle}>Optionnel</span>
+                Matériel <span style={optionalStyle}>Optionnel</span>
               </label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {['Interne', 'Externe'].map(opt => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => setTorque(t => t === opt ? '' : opt)}
-                    style={{
-                      flex: 1, padding: '11px 0', border: '1px solid',
-                      borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                      borderColor: torque === opt ? 'transparent' : 'var(--border2)',
-                      background: torque === opt ? (opt === 'Interne' ? 'var(--green)' : 'var(--bordeaux)') : 'var(--bg)',
-                      color: torque === opt ? '#fff' : 'var(--text2)',
-                    }}
-                  >{opt}</button>
-                ))}
-              </div>
+              <EquipmentPicker selected={equipment} onChange={setEquipment} />
             </div>
           </div>
 

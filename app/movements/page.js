@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { VideoCamera, BookOpen, MagnifyingGlass, PencilSimple, Trash, Eye, EyeSlash } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import AthletesSidebar from '@/app/components/AthletesSidebar'
+import EquipmentPicker from '@/app/components/EquipmentPicker'
 
 function today() {
   const n = new Date()
@@ -13,16 +14,16 @@ function today() {
 
 const COLUMNS = [
   { key: 'name',        label: 'Nom du mouvement',   flex: 4 },
-  { key: 'torque',      label: 'Torque',              flex: 1 },
+  { key: 'equipment',   label: 'Matériel',            flex: 2 },
   { key: 'youtube_url', label: 'Vidéo',               flex: 1 },
 ]
 
 // Cycle des états de tri par colonne : name = alpha/inverse,
-// muscles/torque = alpha/inverse/vide d'abord, vidéo = avec/sans d'abord
+// muscles/matériel = alpha/inverse/vide d'abord, vidéo = avec/sans d'abord
 const SORT_CYCLES = {
   name: ['asc', 'desc'],
   muscles: ['asc', 'desc', 'empty'],
-  torque: ['asc', 'desc', 'empty'],
+  equipment: ['asc', 'desc', 'empty'],
   youtube_url: ['with', 'without'],
 }
 
@@ -43,9 +44,10 @@ function sortMovements(list, sort) {
     return arr
   }
 
-  if (key === 'muscles' || key === 'torque') {
+  if (key === 'muscles' || key === 'equipment') {
+    const text = m => (key === 'equipment' ? (m.equipment || []).join(', ') : (m[key] || '')).trim()
     arr.sort((a, b) => {
-      const av = (a[key] || '').trim(), bv = (b[key] || '').trim()
+      const av = text(a), bv = text(b)
       if (dir === 'empty') {
         if (!av && bv) return -1
         if (av && !bv) return 1
@@ -73,7 +75,7 @@ function sortMovements(list, sort) {
 }
 
 function emptyForm() {
-  return { name: '', muscles: '', torque: '', youtube_url: '' }
+  return { name: '', muscles: '', equipment: [], youtube_url: '' }
 }
 
 export default function MovementsPage() {
@@ -128,7 +130,7 @@ export default function MovementsPage() {
     const { data, error } = await supabase.from('movements').insert({
       name: newForm.name.trim(),
       muscles: newForm.muscles.trim() || null,
-      torque: newForm.torque.trim() || null,
+      equipment: newForm.equipment.length ? newForm.equipment : null,
       youtube_url: newForm.youtube_url.trim() || null,
       coach_id: isAdmin ? null : userId,
     }).select().single()
@@ -147,7 +149,7 @@ export default function MovementsPage() {
     await supabase.from('movements').update({
       name,
       muscles: editForm.muscles.trim() || null,
-      torque: editForm.torque.trim() || null,
+      equipment: editForm.equipment.length ? editForm.equipment : null,
       youtube_url: editForm.youtube_url.trim() || null,
     }).eq('id', editingId)
     // Garde le mouvement suivi (Metrics) lié en synchronisant son nom
@@ -177,7 +179,7 @@ export default function MovementsPage() {
   const filtered = movements.filter(m =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
     (m.muscles || '').toLowerCase().includes(search.toLowerCase()) ||
-    (m.torque || '').toLowerCase().includes(search.toLowerCase())
+    (m.equipment || []).join(' ').toLowerCase().includes(search.toLowerCase())
   )
   const sorted = sortMovements(filtered, sort)
 
@@ -222,10 +224,9 @@ export default function MovementsPage() {
               <input value={newForm.muscles} onChange={e => setNewForm(f => ({ ...f, muscles: e.target.value }))}
                 placeholder="Ex: Quadriceps, Fessiers" style={inputStyle} />
             </div>
-            <div style={{ flex: 1, minWidth: 100 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Torque</div>
-              <input value={newForm.torque} onChange={e => setNewForm(f => ({ ...f, torque: e.target.value }))}
-                placeholder="Ex: Interne" style={inputStyle} />
+            <div style={{ flex: 3, minWidth: 220 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Matériel</div>
+              <EquipmentPicker compact selected={newForm.equipment} onChange={equipment => setNewForm(f => ({ ...f, equipment }))} />
             </div>
             <div style={{ flex: 1, minWidth: 100 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 4 }}>Lien YouTube</div>
@@ -248,7 +249,7 @@ export default function MovementsPage() {
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', color: 'var(--text3)' }}><MagnifyingGlass size={14} /></span>
             <input
-              placeholder="Rechercher par nom, muscle…"
+              placeholder="Rechercher par nom, muscle, matériel…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{ ...inputStyle, paddingLeft: 34, background: 'var(--bg2)', fontSize: 14 }}
@@ -299,9 +300,8 @@ export default function MovementsPage() {
                     <input value={editForm.muscles} onChange={e => setEditForm(f => ({ ...f, muscles: e.target.value }))}
                       placeholder="Muscles" style={inputStyle} />
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <input value={editForm.torque} onChange={e => setEditForm(f => ({ ...f, torque: e.target.value }))}
-                      placeholder="Torque" style={inputStyle} />
+                  <div style={{ flex: 3 }}>
+                    <EquipmentPicker compact selected={editForm.equipment} onChange={equipment => setEditForm(f => ({ ...f, equipment }))} />
                   </div>
                   <div style={{ flex: 1 }}>
                     <input value={editForm.youtube_url} onChange={e => setEditForm(f => ({ ...f, youtube_url: e.target.value }))}
@@ -336,12 +336,12 @@ export default function MovementsPage() {
                       <div style={{ fontSize: 11, color: 'var(--ostryk-text2)', marginTop: 2 }}>{m.muscles}</div>
                     )}
                   </div>
-                  <div style={{ flex: 1, paddingRight: 12 }}>
-                    {m.torque && (
-                      <span style={{ fontSize: 12, fontWeight: 600, color: '#6D5F4D', background: 'var(--ostryk-border)', borderRadius: 20, padding: '3px 10px', display: 'inline-block' }}>
-                        {m.torque}
+                  <div style={{ flex: 2, paddingRight: 12, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {(m.equipment || []).map(e => (
+                      <span key={e} style={{ fontSize: 12, fontWeight: 600, color: '#6D5F4D', background: 'var(--ostryk-border)', borderRadius: 20, padding: '3px 10px', display: 'inline-block' }}>
+                        {e}
                       </span>
-                    )}
+                    ))}
                   </div>
                   <div style={{ flex: 1 }}>
                     {m.youtube_url
@@ -356,7 +356,7 @@ export default function MovementsPage() {
                   <div style={{ width: 72, display: 'flex', gap: 4, justifyContent: 'flex-end', flexShrink: 0 }}>
                     {(isAdmin || m.coach_id === userId) ? (
                       <>
-                        <button onClick={e => { e.stopPropagation(); setEditingId(m.id); setEditForm({ name: m.name, muscles: m.muscles || '', torque: m.torque || '', youtube_url: m.youtube_url || '' }) }}
+                        <button onClick={e => { e.stopPropagation(); setEditingId(m.id); setEditForm({ name: m.name, muscles: m.muscles || '', equipment: m.equipment || [], youtube_url: m.youtube_url || '' }) }}
                           style={{ background: 'none', border: 'none', color: 'var(--green)', display: 'flex', cursor: 'pointer', padding: '4px 6px', borderRadius: 4 }}><PencilSimple size={14} /></button>
                         <button onClick={e => { e.stopPropagation(); remove(m.id) }}
                           style={{ background: 'none', border: 'none', color: 'var(--ostryk-text3)', display: 'flex', cursor: 'pointer', padding: '4px 6px', borderRadius: 4 }}><Trash size={14} /></button>

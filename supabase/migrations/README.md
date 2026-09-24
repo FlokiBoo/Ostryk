@@ -38,6 +38,7 @@ décrivent les **changements** sans décrire l'état de départ.
 | `20260924090300_a7_seance_personnalisee.sql` | A7 | ☐ |
 | `20260924090400_a8_tracabilite_series.sql` | A8 | ☐ |
 | `20260924090500_a9_note_privee_coach.sql` | A9 | ☐ |
+| `20260924100000_materiel_mouvement.sql` | Bibliothèque | ☐ |
 
 Tous ces fichiers sont **additifs** : ils ajoutent des colonnes nullables, des contraintes qui ne
 mordent que sur des valeurs hors bornes, et une policy qui élargit l'accès. Aucun ne supprime, ne
