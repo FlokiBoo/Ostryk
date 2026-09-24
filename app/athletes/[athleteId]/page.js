@@ -25,10 +25,12 @@ function labelEffort(difficulty) {
   return 'Dur'
 }
 
-// Le composant raisonne en blocs × tours ; Ostryk stocke des exercices portant un nombre de séries.
-// Un bloc = un superset (superset_group), sinon un exercice seul. Le nombre de tours du bloc est le
-// plus grand nombre de séries qu'il contient : côté composant, prescriptionDe retombe sur la
-// dernière série connue pour les exercices qui en ont moins.
+// Le composant raisonne en blocs × tours ; Ostryk stocke une liste plate d'exercices portant chacun
+// un nombre de séries. Une séance = UN bloc, dont le nombre de tours est le plus grand nombre de
+// séries qu'il contient — côté composant, prescriptionDe retombe sur la dernière série connue pour
+// les exercices qui en ont moins. Un bloc par exercice (première version) donnait un onglet "Bloc A,
+// B, C…" par mouvement en mode coaching, illisible. Les supersets restent lisibles par l'ordre des
+// exercices, superset_group ne sert pas à découper.
 function blocsDeSeance(session, setsParExercice) {
   const exos = [...(session.program_exercises || [])]
     .filter(e => e.name)
@@ -38,35 +40,30 @@ function blocsDeSeance(session, setsParExercice) {
     return [{ id: 'A', texte: session.coach_notes || session.activation || 'Séance sans exercices détaillés.' }]
   }
 
-  const groupes = []
-  for (const e of exos) {
-    const cle = e.superset_group || `solo-${e.id}`
-    let g = groupes.find(x => x.cle === cle)
-    if (!g) { g = { cle, exos: [] }; groupes.push(g) }
-    g.exos.push(e)
-  }
-
-  return groupes.map((g, i) => ({
-    id: String.fromCharCode(65 + i),
-    tours: Math.max(1, ...g.exos.map(e => parseInt(e.sets, 10) || 1)),
-    exercices: g.exos.map(e => {
+  return [{
+    id: 'A',
+    tours: Math.max(1, ...exos.map(e => parseInt(e.sets, 10) || 1)),
+    exercices: exos.map(e => {
       const nbSeries = parseInt(e.sets, 10) || 1
       const kg = e.kg != null ? Number(e.kg) : null
-      // reps est du texte libre ("8", "8-10", "max") : parseInt donne la borne basse, et 1 à défaut.
-      const reps = parseInt(e.reps, 10) || 1
+      // reps est du texte libre : "8", "8-10", "max", "AMRAP". parseInt donne la borne basse quand
+      // il y en a une ; sinon on garde le texte pour l'affichage (prescritTexte) et 1 pour le
+      // stepper, qui a besoin d'un nombre.
+      const nombre = parseInt(e.reps, 10)
       const faites = [...(setsParExercice[e.id] || [])].sort((a, b) => a.set_index - b.set_index)
       return {
         id: e.id,
         nom: e.name,
         unite: kg != null ? 'kg' : null,
         pas: 2.5,
-        prescrit: Array.from({ length: nbSeries }, () => ({ kg, reps })),
+        prescritTexte: Number.isNaN(nombre) && e.reps ? String(e.reps) : null,
+        prescrit: Array.from({ length: nbSeries }, () => ({ kg, reps: Number.isNaN(nombre) ? 1 : nombre })),
         realise: faites.length
           ? faites.map(s => ({ kg: s.kg_done != null ? Number(s.kg_done) : null, reps: parseInt(s.reps_done, 10) || 0 }))
           : null,
       }
     }),
-  }))
+  }]
 }
 
 function debutDeSemaine(decalageSemaines = 0) {
@@ -132,6 +129,7 @@ async function chargerFiche(athleteId) {
       const fin = debutDeSemaine(k - 1)
       return { faites: faitesAvecDate.filter(c => { const d = new Date(c.completed_at); return d >= debut && d < fin }).length, prevues: semainePrevues }
     })
+    const restantes = seances.filter(s => s.statut === 'a_venir').length
     const difficultes = (completions || []).filter(c => c.difficulty != null).map(c => c.difficulty)
     const moyenne = difficultes.length ? Math.round(difficultes.reduce((a, b) => a + b, 0) / difficultes.length) : null
 
@@ -152,7 +150,12 @@ async function chargerFiche(athleteId) {
           Math.max(1, Math.ceil((seances.filter(s => s.statut !== 'a_venir').length + 1) / semainePrevues))
         ),
         athlete_days_of_week: programme?.athlete_days_of_week || [],
-        fin_estimee: null,
+        // Projection à partir d'aujourd'hui sur les séances qui RESTENT, pas depuis la date
+        // d'assignation : sur un programme entamé il y a deux mois, partir de created_at affichait
+        // une date de fin déjà passée.
+        fin_estimee: restantes
+          ? new Date(Date.now() + Math.ceil(restantes / semainePrevues) * 7 * 86400000).toISOString()
+          : null,
       },
       stats: {
         semaineFaites: quatreSemaines[3].faites,

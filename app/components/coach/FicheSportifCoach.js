@@ -460,9 +460,10 @@ function ApercuSeance({ seance, onLancer, onPersonnaliser, onRevenirVersionProgr
                             fleche = "↑";
                           }
                         }
+                        const reps = !(faite && ex.realise) && ex.prescritTexte ? ex.prescritTexte : v.reps;
                         const texte = avecCharge
-                          ? `${fmt(v.kg)}×${v.reps}`
-                          : `${v.reps}${ex.uniteReps ? " " + ex.uniteReps : ""}`;
+                          ? `${fmt(v.kg)}×${reps}`
+                          : `${reps}${ex.uniteReps ? " " + ex.uniteReps : ""}`;
                         return (
                           <span key={i} style={{ fontSize: 11, color: couleur, minWidth: 54 }}>
                             {texte}
@@ -485,13 +486,13 @@ function ApercuSeance({ seance, onLancer, onPersonnaliser, onRevenirVersionProgr
         </p>
       ) : null}
 
-      {seance.is_coached && !faite ? <PlanifierCoaching seance={seance} onPlanifier={onPlanifier} /> : null}
+      {seance.is_coached && !faite && onPlanifier ? <PlanifierCoaching seance={seance} onPlanifier={onPlanifier} /> : null}
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-        {!faite && seance.customized_at ? (
+        {!faite && seance.customized_at && onRevenirVersionProgramme ? (
           <Bouton onClick={() => onRevenirVersionProgramme(seance)}>Revenir à la version du programme</Bouton>
         ) : null}
-        {!faite ? <Bouton onClick={() => onPersonnaliser(seance)}>Modifier pour ce client</Bouton> : null}
+        {!faite && onPersonnaliser ? <Bouton onClick={() => onPersonnaliser(seance)}>Modifier pour ce client</Bouton> : null}
         {aDesExercices ? (
           <Bouton principal={!faite} onClick={() => onLancer(seance)}>
             {faite ? <><NotePencil size={16} />Modifier la saisie</> : <><Play size={16} weight="fill" />Lancer le coaching</>}
@@ -744,7 +745,7 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
         {bloc.exercices.map((ex) => {
           const v = valeurs[`${ex.id}|${tour - 1}`];
           if (!v) return null;
-          const noteVisible = notesOuvertes[ex.id] || notes[ex.id];
+          const noteVisible = onEnregistrerNote && (notesOuvertes[ex.id] || notes[ex.id]);
           return (
             <section key={ex.id} style={{ ...carte, padding: 16, boxShadow: "none" }}>
               <p style={{ fontSize: 14, margin: "0 0 8px" }}>{ex.nom}</p>
@@ -780,7 +781,7 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
                     resize: "vertical",
                   }}
                 />
-              ) : (
+              ) : onEnregistrerNote ? (
                 <button
                   type="button"
                   onClick={() => setNotesOuvertes((o) => ({ ...o, [ex.id]: true }))}
@@ -788,7 +789,7 @@ export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregist
                 >
                   + Ajouter une note
                 </button>
-              )}
+              ) : null}
             </section>
           );
         })}
@@ -825,11 +826,11 @@ export default function FicheSportifCoach({
   stats = demo.stats,
   seances = demo.seances,
   onEnregistrerSerie = () => {},
-  onEnregistrerNote = () => {},
+  onEnregistrerNote = null,
   onTerminerCoaching = () => {},
-  onPlanifierCoaching = () => {},
-  onPersonnaliser = () => {},
-  onRevenirVersionProgramme = () => {},
+  onPlanifierCoaching = null,
+  onPersonnaliser = null,
+  onRevenirVersionProgramme = null,
   onVoirHistorique = () => {},
   onMessage = () => {},
 }) {
@@ -896,7 +897,9 @@ export default function FicheSportifCoach({
     onPersonnaliser,
     onRevenirVersionProgramme,
     // coach_id n'est pas envoyé : la policy d'insert de coaching_schedule impose coach_id = auth.uid().
-    onPlanifier: (payload) => onPlanifierCoaching({ ...payload, athlete_id: athlete.id }),
+    onPlanifier: onPlanifierCoaching
+      ? (payload) => onPlanifierCoaching({ ...payload, athlete_id: athlete.id })
+      : null,
   };
 
   return (
