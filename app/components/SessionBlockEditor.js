@@ -210,7 +210,11 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
     })
     return {
       id: `block-${firstId}`,
-      type: g.block_type,
+      // block_type n'est écrit que par cet éditeur : les exercices venus d'une copie
+      // (assignation, libre-service, cloneTemplateToAthlete), de l'ancien éditeur ou de la route
+      // free-session/exercise l'ont à null. Sans ce repli, BLOCK_META[null].icon lève et l'éditeur
+      // s'ouvre sur un écran blanc.
+      type: g.block_type || 'exercise',
       name: '', description: '', note: '',
       exercises: g.rows.map(r => ({
         id: `ex-${r.id}`, name: r.name,
@@ -1983,7 +1987,12 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
               </div>
             </div>
 
-            {activeBlock.exercises?.length > 0 ? (
+            {/* Un bloc circuit n'a jamais d'exercices propres : toCircuitBlock renvoie
+                exercises: [] et les mouvements du circuit sont persistés comme program_exercises
+                à part. Sans ce || isCircuitBlock, on retombait sur l'état vide "Create from
+                library" au rechargement, et le texte du circuit devenait invisible et
+                immodifiable — comme ses vidéos et son mode de résultat. */}
+            {activeBlock.exercises?.length > 0 || isCircuitBlock ? (
               <div style={{ padding: 16 }}>
                 <SortableGroup ids={activeBlock.exercises.map(ex => ex.id)} onReorder={moveExercise}>
                   {activeBlock.exercises.map((ex, idx) => (
