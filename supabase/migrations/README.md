@@ -36,7 +36,7 @@ décrivent les **changements** sans décrire l'état de départ.
 | `20260924090100_a3_programme_listed_at.sql` | A3 | ☐ |
 | `20260924090200_a4_seance_coachee.sql` | A4 | ☐ |
 | `20260924090300_a7_seance_personnalisee.sql` | A7 | ☐ |
-| `20260924090400_a8_tracabilite_series.sql` | A8 | ☐ |
+| `20260924090400_a8_tracabilite_series.sql` | A8 | ☑ 2026-09-24 |
 | `20260924090500_a9_note_privee_coach.sql` | A9 | ☐ |
 | `20260924100000_materiel_mouvement.sql` | Bibliothèque | ☑ 2026-09-24 |
 
