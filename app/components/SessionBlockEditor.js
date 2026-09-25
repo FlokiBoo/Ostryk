@@ -969,6 +969,29 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     setExercisesModalOpen(true)
   }
 
+  // Mouvement créé depuis le "#" d'une section (EditeurSectionTexte) : inséré tout de suite dans la
+  // bibliothèque partagée, pour que le jeton porte son identifiant définitif — jamais un id
+  // provisoire à résoudre à l'enregistrement. Même format que createMovement ci-dessous (muscles en
+  // libellés séparés par des virgules, lien dans youtube_url, coach_id sauf pour l'admin). Nom déjà
+  // pris (movements.name est unique) : on reprend le mouvement existant plutôt que d'échouer.
+  const creerMouvementSection = async ({ nom, muscles, video_url }) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: coachRow } = await supabase.from('coaches').select('is_admin').eq('id', user?.id).maybeSingle()
+    let { data, error } = await supabase.from('movements').insert({
+      name: nom,
+      muscles: muscles.length ? muscles.join(', ') : null,
+      youtube_url: video_url || null,
+      coach_id: coachRow?.is_admin ? null : (user?.id || null),
+    }).select('id, name, video_url, youtube_url').single()
+    if (error?.code === '23505') {
+      ;({ data, error } = await supabase.from('movements').select('id, name, video_url, youtube_url').eq('name', nom).maybeSingle())
+    }
+    if (error || !data) throw new Error(error?.message ? `Création impossible : ${error.message}` : 'Création impossible, réessaie.')
+    const mouvement = { id: data.id, nom: data.name, video_url: data.video_url || data.youtube_url || null }
+    setBibliothequeSections(prev => (prev.some(m => m.id === mouvement.id) ? prev : [...prev, mouvement].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))))
+    return mouvement
+  }
+
   // Insère un protocole d'activation pré-construit (bibliothèque coach, app/library/activations)
   // dans l'échauffement / retour au calme actif — ajoute à la suite plutôt qu'écraser : un coach
   // compose parfois une activation à partir de plusieurs protocoles. Le texte du protocole devient
@@ -1882,6 +1905,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                   titre={activeBlock.type === 'warmup' ? 'Échauffement' : 'Retour au calme'}
                   contenu={sections[activeBlock.type]?.contenu || []}
                   bibliotheque={bibliothequeSections}
+                  onCreerMouvement={canManageCatalog ? creerMouvementSection : null}
+                  muscles={REAL_MUSCLE_GROUPS.map(g => g.label)}
                   onChange={contenu => {
                     setSections(prev => ({ ...prev, [activeBlock.type]: { videosLibres: [], version: 0, ...prev[activeBlock.type], contenu, modifiee: true } }))
                     setUnsavedChanges(true)

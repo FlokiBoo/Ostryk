@@ -16,6 +16,13 @@ import { useEffect, useRef, useState } from 'react'
 
   bibliotheque : [{ id, nom, video_url }]. Composant non contrôlé (contentEditable) : le contenu
   initial n'est lu qu'au montage — changer `key` pour recharger un autre contenu.
+
+  Création à la volée (si onCreerMouvement est fourni) : "+ Créer « … »" toujours proposé en bas
+  de la liste, même quand des mouvements correspondent. Nom pré-rempli avec ce qui suit le #,
+  muscles et vidéo facultatifs. onCreerMouvement({ nom, muscles, video_url }) doit renvoyer le
+  mouvement créé avec son identifiant définitif ({ id, nom, video_url }) ou lever une erreur : le
+  jeton n'est inséré qu'après une création réussie côté serveur, jamais sur un id provisoire.
+  muscles : libellés proposés en puces (sélection multiple).
 */
 
 const T = {
@@ -55,9 +62,10 @@ function creerJeton(id, nom, etat) {
   return span
 }
 
-export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque = [], onChange = () => {} }) {
+export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque = [], onChange = () => {}, onCreerMouvement = null, muscles = [] }) {
   const editeur = useRef(null)
   const [suggestions, setSuggestions] = useState(null) // { contexte, resultats, actif }
+  const [creation, setCreation] = useState(null) // { contexte, nom, muscles, video, envoi, erreur }
 
   // Chargement initial — une div par ligne.
   useEffect(() => {
@@ -132,9 +140,17 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
 
   function insererJeton(contexte, mouvement) {
     const plage = document.createRange()
-    plage.setStart(contexte.noeud, contexte.debut)
-    plage.setEnd(contexte.noeud, contexte.fin)
-    plage.deleteContents()
+    const intact = contexte.noeud.isConnected && contexte.noeud.textContent.slice(contexte.debut, contexte.fin).startsWith('#')
+    if (intact) {
+      plage.setStart(contexte.noeud, contexte.debut)
+      plage.setEnd(contexte.noeud, contexte.fin)
+      plage.deleteContents()
+    } else {
+      // Le "#…" a été modifié entre-temps (fiche de création ouverte) : jeton sur une nouvelle ligne.
+      const div = document.createElement('div')
+      editeur.current.appendChild(div)
+      plage.setStart(div, 0)
+    }
     const jeton = creerJeton(mouvement.id, mouvement.nom, mouvement.video_url ? 'video' : 'sansVideo')
     const espace = document.createTextNode(' ')
     plage.insertNode(jeton)
@@ -151,6 +167,7 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
   }
 
   function rafraichirSuggestions() {
+    if (creation) return
     const contexte = contexteCourant()
     if (!contexte) { setSuggestions(null); return }
     const q = contexte.requete.toLowerCase()
@@ -162,6 +179,23 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
       else if (nom.includes(q)) ailleurs.push(m)
     }
     setSuggestions({ contexte, resultats: [...debut, ...ailleurs].slice(0, NB_SUGGESTIONS), actif: 0 })
+  }
+
+  async function creer() {
+    const nom = creation.nom.trim()
+    if (!nom || creation.envoi) return
+    const video = creation.video.trim()
+    if (video && !/^https?:\/\//i.test(video)) { setCreation(c => ({ ...c, erreur: 'Le lien vidéo doit commencer par https://' })); return }
+    setCreation(c => ({ ...c, envoi: true, erreur: null }))
+    try {
+      const mouvement = await onCreerMouvement({ nom, muscles: creation.muscles, video_url: video || null })
+      if (!mouvement?.id) throw new Error('création impossible')
+      const contexte = creation.contexte
+      setCreation(null)
+      insererJeton(contexte, mouvement)
+    } catch (err) {
+      setCreation(c => ({ ...c, envoi: false, erreur: err?.message || 'Création impossible, réessaie.' }))
+    }
   }
 
   function surTouche(e) {
@@ -238,6 +272,75 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
                   <span style={{ fontSize: 10, color: T.texteSec, flex: 'none' }}>{m.video_url ? 'vidéo' : 'sans vidéo'}</span>
                 </button>
               ))}
+              {onCreerMouvement ? (
+                <button type="button"
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    setCreation({ contexte: suggestions.contexte, nom: suggestions.contexte.requete, muscles: [], video: '', envoi: false, erreur: null })
+                    setSuggestions(null)
+                  }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left', border: 'none', borderTop: `1px solid ${T.filet}`, background: '#FBF9F5',
+                    padding: '9px 12px', fontSize: 13, color: T.bordeaux, cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                  + Créer « {suggestions.contexte.requete || '…'} »
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {creation ? (
+            <div role="dialog" aria-label="Nouveau mouvement" style={{
+              position: 'absolute', left: 10, right: 10, background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12,
+              boxShadow: '0 8px 22px rgba(45,38,32,0.16)', padding: 12, zIndex: 21,
+            }}>
+              <p style={{ fontFamily: 'var(--font-title)', fontSize: 12, color: T.bordeaux, margin: '0 0 10px' }}>Nouveau mouvement</p>
+
+              <label htmlFor="nom-mouvement-section" style={{ fontSize: 11, color: T.texteSec, display: 'block', marginBottom: 4 }}>Nom</label>
+              <input id="nom-mouvement-section" autoFocus value={creation.nom}
+                onChange={e => { const nom = e.target.value; setCreation(c => ({ ...c, nom })) }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); creer() } if (e.key === 'Escape') setCreation(null) }}
+                style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.bordure}`, borderRadius: 8, height: 38, padding: '0 10px', fontFamily: 'inherit', fontSize: 14, marginBottom: 10 }} />
+
+              {muscles.length ? (
+                <>
+                  <p style={{ fontSize: 11, color: T.texteSec, margin: '0 0 6px' }}>Muscles (facultatif)</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
+                    {muscles.map(m => {
+                      const on = creation.muscles.includes(m)
+                      return (
+                        <button key={m} type="button" aria-pressed={on}
+                          onClick={() => setCreation(c => ({ ...c, muscles: c.muscles.includes(m) ? c.muscles.filter(x => x !== m) : [...c.muscles, m] }))}
+                          style={{
+                            border: `1px solid ${on ? T.bordeaux : T.bordure}`, background: on ? T.bordeaux : T.blanc, color: on ? '#F5EFE6' : T.texte,
+                            borderRadius: 100, fontSize: 11, padding: '5px 10px', cursor: 'pointer', fontFamily: 'inherit',
+                          }}>
+                          {m}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              ) : null}
+
+              <label htmlFor="video-mouvement-section" style={{ fontSize: 11, color: T.texteSec, display: 'block', marginBottom: 4 }}>Vidéo (facultatif)</label>
+              <input id="video-mouvement-section" value={creation.video} placeholder="https://youtu.be/…"
+                onChange={e => { const video = e.target.value; setCreation(c => ({ ...c, video, erreur: null })) }}
+                style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.bordure}`, borderRadius: 8, height: 38, padding: '0 10px', fontFamily: 'inherit', fontSize: 14, marginBottom: 10 }} />
+
+              {creation.erreur ? <p role="alert" style={{ fontSize: 12, color: T.bordeaux, margin: '0 0 10px' }}>{creation.erreur}</p> : null}
+
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" onClick={() => setCreation(null)} style={{ flex: 1, border: `1px solid ${T.bordure}`, background: T.blanc, borderRadius: 8, height: 40, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Annuler
+                </button>
+                <button type="button" onClick={creer} disabled={!creation.nom.trim() || creation.envoi} style={{
+                  flex: 2, border: 'none', background: T.bordeaux, color: '#F5EFE6', borderRadius: 8, height: 40, fontSize: 13, cursor: 'pointer',
+                  fontFamily: 'inherit', opacity: !creation.nom.trim() || creation.envoi ? 0.6 : 1,
+                }}>
+                  {creation.envoi ? 'Création…' : 'Créer et insérer'}
+                </button>
+              </div>
             </div>
           ) : null}
         </div>
