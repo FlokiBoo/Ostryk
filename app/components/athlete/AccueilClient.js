@@ -319,7 +319,8 @@ function CarteSeance({ date, seance, enAvant, onCommencer, onDecaler, onOuvrir }
         </span>
       </div>
 
-      <h2 style={{ fontFamily: TITRE, fontSize: 26, lineHeight: 1.15, margin: "0 0 6px", fontWeight: 600 }}>
+      {/* color explicite : globals.css met tous les h2 en bordeaux, illisible sur la carte verte. */}
+      <h2 style={{ fontFamily: TITRE, fontSize: 26, lineHeight: 1.15, margin: "0 0 6px", fontWeight: 600, color: couleurTexte }}>
         {seance.titre}
       </h2>
       {meta ? <p style={{ fontSize: 12, color: couleurSec, margin: "0 0 16px" }}>{meta}</p> : null}
