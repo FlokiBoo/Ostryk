@@ -9,7 +9,7 @@
 // Périmètre volontairement réduit (pas des types de séance avancés — ceux-ci restent gérés par
 // l'ancien éditeur plein écran côté coach).
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import VideoListEditor from '@/app/components/VideoListEditor'
 import { CIRCUIT_MODES } from '@/lib/circuitModes'
 import { useRouter } from 'next/navigation'
@@ -23,11 +23,13 @@ import CardioStepEditor from '@/app/components/CardioStepEditor'
 import {
   X, TextB, TextItalic, LinkSimple, ListBullets, TextTSlash,
   CaretLeft, CaretRight, ArrowsDownUp, Plus, FileText, Flame, Snowflake, Barbell,
-  DotsThreeVertical, PencilSimple, Info, MagnifyingGlass, Check, Timer, DotsSixVertical,
-  ArrowsClockwise, Heartbeat, VideoCamera, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack,
+  DotsThreeVertical, Info, MagnifyingGlass, Check, Timer, DotsSixVertical,
+  ArrowsClockwise, Heartbeat, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack,
 } from '@phosphor-icons/react'
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
+import EditeurSectionTexte from '@/app/components/EditeurSectionTexte'
+import { sectionDeSeance, lignesDeTexte } from '@/lib/sectionsTexte'
 
 // Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
 // petit helper autonome plutôt qu'un import cross-fichier).
@@ -464,6 +466,14 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [hiddenUntilRun, setHiddenUntilRun] = useState(false)
   const [isGroupProgram, setIsGroupProgram] = useState(false)
   const [movementsList, setMovementsList] = useState([]) // [{ id, name, muscles }]
+  // Échauffement / retour au calme rédigés à l'éditeur à jetons (lib/sectionsTexte.js) : un bloc
+  // warmup ou cooldown n'est plus une liste d'exercices mais une section texte. Par type de bloc :
+  // { contenu, videosLibres, modifiee, version } — contenu converti depuis l'ancien format à
+  // l'ouverture ; rien n'est écrit en base tant que le coach n'a pas modifié la section
+  // (modifiee), ce qui laisse intactes les séances qu'il ne touche pas. version force le remontage
+  // de l'éditeur (non contrôlé) quand on remplace son contenu de l'extérieur (protocole inséré).
+  const [sections, setSections] = useState({ warmup: null, cooldown: null })
+  const [bibliothequeSections, setBibliothequeSections] = useState([]) // [{ id, nom, video_url }]
 
   // Timer de séance (program_sessions.timer_config) — distinct des timers par bloc, qui vivent
   // sur `block.timerConfig` (voir groupExercisesIntoBlocks/flattenBlocksToExerciseRows, stockés
@@ -531,15 +541,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   // L'id, lui, continue de désigner le même bloc quel que soit son nouvel index.
   const [activeBlockId, setActiveBlockId] = useState(null)
   const [orderMode, setOrderMode] = useState(false)
-  const [descModalOpen, setDescModalOpen] = useState(false)
-  const [draftName, setDraftName] = useState('')
-  const [draftDescription, setDraftDescription] = useState('')
-  const [draftNote, setDraftNote] = useState('')
   const [activationPresets, setActivationPresets] = useState(null) // null = pas encore chargé
-  const [presetsMenuOpen, setPresetsMenuOpen] = useState(false)
   const [warmupLibraryOpen, setWarmupLibraryOpen] = useState(false)
-  const [mentionQuery, setMentionQuery] = useState(null)
-  const [mentionRange, setMentionRange] = useState(null)
   const [notesModalOpen, setNotesModalOpen] = useState(false)
   const [draftSetNote, setDraftSetNote] = useState('')
   const [applyNoteToNextSets, setApplyNoteToNextSets] = useState(false)
@@ -548,8 +551,6 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   // Popover "Dupliquer" ouvert sur une cellule reps/kg (setCellKey), voir copySetValueToNextSet /
   // copySetValueToAllSets — un seul à la fois, comme les autres popovers de ce fichier (RestDivider).
   const [copyMenuOpenKey, setCopyMenuOpenKey] = useState(null)
-  const descriptionRef = useRef(null)
-  const descriptionBackdropRef = useRef(null)
   const blockIdCounter = useRef(0)
 
   const nextBlockId = () => {
@@ -567,12 +568,12 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     let cancelled = false
     async function load() {
       const [{ data: sessionRow }, { data: exerciseRows }, { data: movs }] = await Promise.all([
-        supabase.from('program_sessions').select('id, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, timer_config, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
+        supabase.from('program_sessions').select('id, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, warmup_content, cooldown_content, timer_config, activation, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
         supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, materiel, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles, cardio_structure').eq('program_session_id', sessionId).order('order_index'),
         // Bibliothèque récupérée en entier (petit volume) plutôt que filtrée par nom — sensible à
         // la casse côté Postgres, raterait silencieusement un nom mal accordé. Même approche que
         // l'ancien éditeur plein écran (page.js:629-638).
-        supabase.from('movements').select('name, muscles, focus_groups'),
+        supabase.from('movements').select('id, name, muscles, focus_groups, video_url, youtube_url'),
       ])
       if (cancelled) return
       if (!sessionRow) {
@@ -597,7 +598,21 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       })
       setMovementMusclesMap(musclesMap)
       setMovementFocusGroupsMap(focusMap)
-      const builtBlocks = buildBlocksFromDb(exerciseRows || [], sessionRow.circuits || [], sessionRow.warmup_block || null, sessionRow.cooldown_block || null, musclesMap)
+      let builtBlocks = buildBlocksFromDb(exerciseRows || [], sessionRow.circuits || [], sessionRow.warmup_block || null, sessionRow.cooldown_block || null, musclesMap)
+      // Sections : lues depuis le nouveau format, sinon converties depuis l'ancien (texte
+      // d'activation + vidéos, ou bloc warmup d'exercices). Une section existante sans bloc dans
+      // le carrousel (ancien texte d'activation) y reçoit son bloc, pour rester modifiable.
+      setBibliothequeSections((movs || []).filter(m => m.id && m.name).map(m => ({ id: m.id, nom: m.name, video_url: m.video_url || m.youtube_url || null })))
+      const lues = {}
+      for (const [bloc, type] of [['warmup', 'echauffement'], ['cooldown', 'retourAuCalme']]) {
+        const section = sectionDeSeance({ ...sessionRow, exercises: exerciseRows || [] }, type, movs || [])
+        lues[bloc] = section ? { contenu: section.contenu, videosLibres: section.videosLibres, modifiee: false, version: 0 } : null
+        if (section && !builtBlocks.some(b => b.type === bloc)) {
+          const vide = { id: `${bloc}-section`, type: bloc, name: '', description: '', note: '', exercises: [], sets: [], restSeconds: 60 }
+          builtBlocks = bloc === 'warmup' ? [vide, ...builtBlocks] : [...builtBlocks, vide]
+        }
+      }
+      setSections(lues)
       setBlocks(builtBlocks)
       if (builtBlocks.length) setActiveBlockId(builtBlocks[0].id)
       setAddMenuOpen((exerciseRows || []).length === 0 && !(sessionRow.circuits || []).length)
@@ -607,18 +622,15 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     return () => { cancelled = true }
   }, [sessionId])
 
-  // Recherche de mouvements côté serveur (débounced), tant que la modale Exercises OU l'autocomplete
-  // "#mention" de la modale Description est active — pas de fetch fixe : la bibliothèque de
-  // mouvements peut dépasser largement une seule page. mentionQuery !== null couvre à la fois le
-  // clic sur "+ Exercises" (ouvre l'autocomplete avec une requête vide) et la frappe de "#" dans le
-  // texte : sans ce déclencheur, movementsList restait vide dans la modale Description et ni le
-  // bouton ni le "#" ne proposaient jamais rien.
-  const mentionActive = mentionQuery !== null
+  // Recherche de mouvements côté serveur (débounced), tant que la modale Exercises est ouverte —
+  // pas de fetch fixe : la bibliothèque de mouvements peut dépasser largement une seule page.
+  // (Le "#" de l'échauffement / retour au calme, lui, cherche dans bibliothequeSections, chargée
+  // en entier au montage : voir EditeurSectionTexte.)
   useEffect(() => {
-    if (!exercisesModalOpen && !mentionActive) return
+    if (!exercisesModalOpen) return
     let cancelled = false
     const isCardio = activityMode === 'cardio'
-    const searchTerm = exercisesModalOpen ? exerciseSearch : (mentionQuery || '')
+    const searchTerm = exerciseSearch
     const timer = setTimeout(async () => {
       // En mode cardio, le filtre Run/Row/Ski Erg/Bike (voir isCardioMovementName) s'applique
       // après coup en JS : il faut donc charger toute la bibliothèque (400+ mouvements chez ce
@@ -626,10 +638,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       // d'atteindre "Run EF" etc. si aucun texte de recherche ne réduit déjà la liste.
       let query = supabase.from('movements').select('id, name, muscles, joints, video_url, youtube_url').order('name').limit(isCardio ? 2000 : 100)
       if (searchTerm.trim()) query = query.ilike('name', `%${searchTerm.trim()}%`)
-      if (selectedMuscles.length > 0 && !isCardio && exercisesModalOpen) {
+      if (selectedMuscles.length > 0 && !isCardio) {
         query = query.or(selectedMuscles.map(m => `muscles.ilike.%${m}%`).join(','))
       }
-      if (selectedJoints.length > 0 && !isCardio && exercisesModalOpen) {
+      if (selectedJoints.length > 0 && !isCardio) {
         query = query.or(selectedJoints.map(j => `joints.ilike.%${j}%`).join(','))
       }
       const { data } = await query
@@ -643,16 +655,16 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       setMovementsList(list)
     }, 250)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [exercisesModalOpen, exerciseSearch, selectedMuscles, selectedJoints, activityMode, mentionActive, mentionQuery])
+  }, [exercisesModalOpen, exerciseSearch, selectedMuscles, selectedJoints, activityMode])
 
   // Bibliothèque d'activations pré-construites (app/library/activations) — chargée une seule fois,
-  // à la première ouverture de la modale Description OU du picker "Create from library" d'un bloc
-  // warmup/cooldown (voir openExercisePickerForBlock), pas à chaque frappe (contrairement aux
+  // à la première ouverture de "Insérer un protocole d'activation" (échauffement / retour au
+  // calme), pas à chaque frappe (contrairement aux
   // mouvements ci-dessus) : la liste est courte (protocoles créés à la main par le coach), pas
   // besoin de recherche serveur. Coach uniquement (canManageCatalog) : un athlète en "Séance libre"
   // n'a pas de bibliothèque d'activations à piocher.
   useEffect(() => {
-    if ((!descModalOpen && !warmupLibraryOpen) || !canManageCatalog || activationPresets !== null) return
+    if (!warmupLibraryOpen || !canManageCatalog || activationPresets !== null) return
     let cancelled = false
     async function loadPresets() {
       const [{ data: presets }, { data: hidden }] = await Promise.all([
@@ -665,7 +677,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     }
     loadPresets()
     return () => { cancelled = true }
-  }, [descModalOpen, warmupLibraryOpen, canManageCatalog, activationPresets])
+  }, [warmupLibraryOpen, canManageCatalog, activationPresets])
 
   useEffect(() => {
     const handler = (e) => {
@@ -696,7 +708,12 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     if (saving) return
     setSaving(true)
     try {
-      const rows = flattenBlocksToExerciseRows(blocks, activityMode)
+      // Section modifiée : son bloc ne porte plus rien d'autre (anciens exercices d'échauffement et
+      // nom/description du bloc sont remplacés par le contenu à jetons, lu en priorité partout).
+      const blocksAEcrire = blocks.map(b => (
+        sections[b.type]?.modifiee ? { ...b, exercises: [], name: '', description: '', note: '' } : b
+      ))
+      const rows = flattenBlocksToExerciseRows(blocksAEcrire, activityMode)
       const { data: existingRows } = await supabase
         .from('program_exercises')
         .select('id')
@@ -718,8 +735,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
 
       await supabase.from('program_sessions')
         .update({
-          title: sessionTitle, coach_notes: description, circuits: flattenBlocksToCircuits(blocks),
-          warmup_block: extractBlockMeta(blocks, 'warmup'), cooldown_block: extractBlockMeta(blocks, 'cooldown'),
+          title: sessionTitle, coach_notes: description, circuits: flattenBlocksToCircuits(blocksAEcrire),
+          warmup_block: extractBlockMeta(blocksAEcrire, 'warmup'), cooldown_block: extractBlockMeta(blocksAEcrire, 'cooldown'),
+          ...(sections.warmup?.modifiee ? { warmup_content: sections.warmup.contenu } : {}),
+          ...(sections.cooldown?.modifiee ? { cooldown_content: sections.cooldown.contenu } : {}),
           timer_config: sessionTimerConfig,
           activity_mode: activityMode,
           materiel: materiel.trim() || null,
@@ -742,6 +761,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         await supabase.from('movements').upsert(names.map(name => ({ name })), { onConflict: 'name', ignoreDuplicates: true })
       }
 
+      setBlocks(blocksAEcrire)
       setUnsavedChanges(false)
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 2000)
@@ -757,6 +777,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     } else {
       const newBlock = { id: nextBlockId(), type: 'warmup', name: '', description: '', note: '' }
       setBlocks([newBlock, ...blocks])
+      setSections(prev => ({ ...prev, warmup: prev.warmup || { contenu: [], videosLibres: [], modifiee: true, version: 0 } }))
       setActiveBlockId(newBlock.id)
     }
     setUnsavedChanges(true)
@@ -770,6 +791,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     } else {
       const newBlock = { id: nextBlockId(), type: 'cooldown', name: '', description: '', note: '' }
       setBlocks([...blocks, newBlock])
+      setSections(prev => ({ ...prev, cooldown: prev.cooldown || { contenu: [], videosLibres: [], modifiee: true, version: 0 } }))
       setActiveBlockId(newBlock.id)
     }
     setUnsavedChanges(true)
@@ -793,6 +815,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const addCircuitBlock = () => addExerciseLikeBlock('circuit')
 
   const removeBlock = (index) => {
+    const retire = blocks[index]
+    if (retire && ['warmup', 'cooldown'].includes(retire.type)) {
+      // Enregistrée vide plutôt que laissée à null : sinon l'ancien texte d'activation reviendrait.
+      setSections(prev => ({ ...prev, [retire.type]: { contenu: [], videosLibres: [], modifiee: true, version: (prev[retire.type]?.version || 0) + 1 } }))
+    }
     const newBlocks = blocks.filter((_, i) => i !== index)
     setBlocks(newBlocks)
     setActiveBlockId(newBlocks[Math.min(index, newBlocks.length - 1)]?.id ?? null)
@@ -887,45 +914,6 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     setUnsavedChanges(true)
   }
 
-  const openDescModal = () => {
-    if (!activeBlock) return
-    setDraftName(activeBlock.name)
-    setDraftDescription(activeBlock.description)
-    setDraftNote(activeBlock.note)
-    setMentionQuery(null)
-    setMentionRange(null)
-    setDescModalOpen(true)
-    requestAnimationFrame(resizeDescriptionTextarea)
-  }
-
-  const closeDescModal = () => {
-    setDescModalOpen(false)
-    setMentionQuery(null)
-    setMentionRange(null)
-    setPresetsMenuOpen(false)
-  }
-
-  // Insère un protocole d'activation pré-construit (bibliothèque coach, voir app/library/activations)
-  // — ajoute plutôt qu'écrase : un coach compose parfois une activation à partir de plusieurs
-  // protocoles (ex. mobilité épaule + activation genou), donc le nom ne remplace le champ que s'il
-  // est vide et le texte s'ajoute à la suite de ce qui est déjà écrit.
-  const applyPreset = (preset) => {
-    setDraftName(prev => prev || preset.name)
-    setDraftDescription(prev => (prev ? `${prev}\n\n${preset.text || ''}` : (preset.text || '')))
-    if (preset.note) setDraftNote(prev => (prev ? `${prev}\n\n${preset.note}` : preset.note))
-    setPresetsMenuOpen(false)
-    setUnsavedChanges(true)
-    requestAnimationFrame(resizeDescriptionTextarea)
-  }
-
-  const confirmDescModal = () => {
-    setBlocks(blocks.map((b, i) => (
-      i === activeBlockIndex ? { ...b, name: draftName, description: draftDescription, note: draftNote } : b
-    )))
-    setUnsavedChanges(true)
-    closeDescModal()
-  }
-
   // Timer de séance / timer de bloc — config seulement ici (EMOM/AMRAP/TABATA/Perso, voir
   // TimerConfigEditor) : le lancement réel (vue split timer/séance) se fait à l'exécution de la
   // séance (app/s/[token]/page.js, session groupe...), pas dans ce builder.
@@ -971,19 +959,6 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     setSelectedJoints(prev => prev.includes(jointKey) ? prev.filter(j => j !== jointKey) : [...prev, jointKey])
   }
 
-  // Pour warmup/cooldown, "Create from library" propose d'abord les activations pré-construites
-  // du coach (bibliothèque app/library/activations) plutôt que la recherche mouvement par
-  // mouvement — un échauffement se compose presque toujours d'un protocole déjà prêt, pas d'une
-  // recherche depuis zéro. openMovementPickerDirectly() reste accessible depuis cette modale pour
-  // le cas où le coach veut malgré tout piocher un mouvement précis.
-  const openExercisePickerForBlock = () => {
-    if (activeBlock && ['warmup', 'cooldown'].includes(activeBlock.type)) {
-      setWarmupLibraryOpen(true)
-      return
-    }
-    openMovementPickerDirectly()
-  }
-
   const openMovementPickerDirectly = () => {
     setAddingSecondaryExercise(false)
     setReplacingExerciseId(null)
@@ -992,28 +967,23 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     setExercisesModalOpen(true)
   }
 
-  // Ajoute en une seule fois tous les mouvements d'une activation pré-construite au bloc actif —
-  // en boucle, plusieurs appels à addExerciseToActiveBlock écraseraient chacun le résultat du
-  // précédent (même fermeture `blocks` non réactualisée entre deux appels synchrones). Le nom/texte
-  // du protocole s'ajoute au nom/description du bloc sans écraser ce qui y est déjà (même logique
-  // additive que applyPreset dans la modale Description — un coach compose parfois plusieurs
-  // protocoles dans le même bloc).
-  const applyPresetToActiveBlock = (preset) => {
-    if (!activeBlock) return
-    const newExercises = (preset.videos || []).map(v => ({ id: nextBlockId(), name: v.name, muscles: '' }))
-    setBlocks(blocks.map((b, i) => {
-      if (i !== activeBlockIndex) return b
-      const sets = b.sets?.length > 0 ? b.sets : [{ id: nextBlockId() }]
-      const restSeconds = b.restSeconds ?? 60
-      return {
-        ...b,
-        name: b.name || preset.name,
-        description: b.description ? `${b.description}\n\n${preset.text || ''}` : (preset.text || ''),
-        note: preset.note ? (b.note ? `${b.note}\n\n${preset.note}` : preset.note) : b.note,
-        exercises: [...(b.exercises || []), ...newExercises],
-        sets, restSeconds,
-      }
-    }))
+  // Insère un protocole d'activation pré-construit (bibliothèque coach, app/library/activations)
+  // dans l'échauffement / retour au calme actif — ajoute à la suite plutôt qu'écraser : un coach
+  // compose parfois une activation à partir de plusieurs protocoles. Le texte du protocole devient
+  // des lignes ; chacune de ses vidéos devient un jeton quand un mouvement du même nom existe dans
+  // la bibliothèque, sinon une ligne de texte (le coach pourra la citer avec #).
+  const insererProtocole = (preset) => {
+    if (!activeBlock || !['warmup', 'cooldown'].includes(activeBlock.type)) return
+    const parNom = new Map(bibliothequeSections.map(m => [m.nom.trim().toLowerCase(), m]))
+    const ajout = [...lignesDeTexte(preset.text), ...(preset.videos || []).map(v => {
+      const m = parNom.get((v.name || '').trim().toLowerCase())
+      return m ? { mouvementId: m.id, texte: '', mouvementNom: m.nom } : { texte: v.name || '' }
+    })]
+    setSections(prev => {
+      const actuelle = prev[activeBlock.type] || { contenu: [], videosLibres: [], version: 0 }
+      const contenu = actuelle.contenu.length ? [...actuelle.contenu, { texte: '' }, ...ajout] : ajout
+      return { ...prev, [activeBlock.type]: { ...actuelle, contenu, modifiee: true, version: actuelle.version + 1 } }
+    })
     setUnsavedChanges(true)
     setWarmupLibraryOpen(false)
   }
@@ -1487,96 +1457,6 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   // Le filtrage (nom + muscles) est déjà appliqué côté serveur par l'effet de recherche ci-dessus.
   const filteredExercises = movementsList
 
-  const movementNames = useMemo(() => movementsList.map(m => m.name), [movementsList])
-  const mentionPattern = useMemo(() => (
-    movementNames.length
-      ? new RegExp(`#(${movementNames.map(m => m.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})\\b`, 'g')
-      : null
-  ), [movementNames])
-
-  function renderHighlightedDescription(text) {
-    if (!mentionPattern) return text
-    const parts = []
-    let lastIndex = 0
-    let match
-    const regex = new RegExp(mentionPattern.source, 'g')
-    while ((match = regex.exec(text)) !== null) {
-      if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index))
-      parts.push(
-        <span key={match.index} style={{ color: c.blue, textDecoration: 'underline', fontWeight: 600 }}>
-          {match[0]}
-        </span>
-      )
-      lastIndex = match.index + match[0].length
-    }
-    if (lastIndex < text.length) parts.push(text.slice(lastIndex))
-    return parts
-  }
-
-  // Le textarea (transparent, texte réel invisible) est superposé à un calque de rendu qui
-  // surligne les mentions #exercice — les deux doivent occuper EXACTEMENT la même hauteur/largeur
-  // pour que le curseur reste aligné sur le texte affiché. Sans auto-grandissement, le textarea
-  // (rows=3 fixe) finit par scroller en interne dès qu'on dépasse 3 lignes : sa scrollbar réduit
-  // la largeur de saisie effective sans toucher au calque (overflow:hidden, jamais de scrollbar),
-  // donc les deux retombent le texte différemment et le curseur dérive visuellement.
-  const resizeDescriptionTextarea = () => {
-    const ta = descriptionRef.current
-    if (!ta) return
-    ta.style.height = 'auto'
-    ta.style.height = `${ta.scrollHeight}px`
-  }
-
-  const handleDescriptionChange = (e) => {
-    const value = e.target.value
-    const cursor = e.target.selectionStart
-    setDraftDescription(value)
-    setUnsavedChanges(true)
-    e.target.style.height = 'auto'
-    e.target.style.height = `${e.target.scrollHeight}px`
-    const uptoCursor = value.slice(0, cursor)
-    const hashIndex = uptoCursor.lastIndexOf('#')
-    const query = hashIndex === -1 ? null : uptoCursor.slice(hashIndex + 1)
-    const stillMatching = query !== null && !query.includes('\n') &&
-      (query === '' || movementNames.some(m => m.toLowerCase().startsWith(query.toLowerCase())))
-    if (stillMatching) {
-      setMentionQuery(query)
-      setMentionRange({ start: hashIndex, end: cursor })
-    } else {
-      setMentionQuery(null)
-      setMentionRange(null)
-    }
-  }
-
-  const openExercisePicker = () => {
-    const cursor = descriptionRef.current?.selectionStart ?? draftDescription.length
-    setMentionRange({ start: cursor, end: cursor })
-    setMentionQuery('')
-    descriptionRef.current?.focus()
-  }
-
-  const pickMovement = (name) => {
-    if (!mentionRange) return
-    const { start, end } = mentionRange
-    const before = draftDescription.slice(0, start)
-    const after = draftDescription.slice(end)
-    const insertion = `#${name} `
-    setDraftDescription(before + insertion + after)
-    setMentionQuery(null)
-    setMentionRange(null)
-    requestAnimationFrame(() => {
-      const ta = descriptionRef.current
-      if (!ta) return
-      ta.focus()
-      const pos = before.length + insertion.length
-      ta.setSelectionRange(pos, pos)
-      resizeDescriptionTextarea()
-    })
-  }
-
-  const mentionMatches = mentionQuery === null
-    ? []
-    : movementsList.filter(m => m.name.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0, 5)
-
   if (loading) {
     return (
       <div style={{ background: c.bg, minHeight: '100svh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.textMuted, fontFamily: 'var(--font-ui)' }}>
@@ -1992,7 +1872,37 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                 à part. Sans ce || isCircuitBlock, on retombait sur l'état vide "Create from
                 library" au rechargement, et le texte du circuit devenait invisible et
                 immodifiable — comme ses vidéos et son mode de résultat. */}
-            {activeBlock.exercises?.length > 0 || isCircuitBlock ? (
+            {['warmup', 'cooldown'].includes(activeBlock.type) ? (
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <EditeurSectionTexte
+                  key={`${activeBlock.type}-${sections[activeBlock.type]?.version || 0}`}
+                  titre={activeBlock.type === 'warmup' ? 'Échauffement' : 'Retour au calme'}
+                  contenu={sections[activeBlock.type]?.contenu || []}
+                  bibliotheque={bibliothequeSections}
+                  onChange={contenu => {
+                    setSections(prev => ({ ...prev, [activeBlock.type]: { videosLibres: [], version: 0, ...prev[activeBlock.type], contenu, modifiee: true } }))
+                    setUnsavedChanges(true)
+                  }}
+                />
+                {sections[activeBlock.type]?.videosLibres?.length > 0 && (
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: '#625B50', background: '#FBF3E7', border: '1px solid #A07A3F55', borderRadius: 8, padding: '10px 12px' }}>
+                    Ancien format : {sections[activeBlock.type].videosLibres.length} vidéo{sections[activeBlock.type].videosLibres.length > 1 ? 's' : ''} ajoutée{sections[activeBlock.type].videosLibres.length > 1 ? 's' : ''} à la main, sans lien avec la bibliothèque
+                    ({sections[activeBlock.type].videosLibres.map(v => v.nom).join(', ')}).
+                    {sections[activeBlock.type].modifiee
+                      ? ' Elles disparaîtront à l’enregistrement : cite ces mouvements avec # pour les garder en vidéo.'
+                      : ' Le sportif les voit toujours tant que tu ne modifies pas cette section.'}
+                  </div>
+                )}
+                {canManageCatalog && (
+                  <button onClick={() => setWarmupLibraryOpen(true)} style={{
+                    alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, border: `1px solid ${c.blue}`, color: c.blue,
+                    fontWeight: 700, fontSize: 13, borderRadius: 6, padding: '8px 14px', background: c.bg, cursor: 'pointer',
+                  }}>
+                    <Plus size={13} weight="bold" /> Insérer un protocole d’activation
+                  </button>
+                )}
+              </div>
+            ) : activeBlock.exercises?.length > 0 || isCircuitBlock ? (
               <div style={{ padding: 16 }}>
                 <SortableGroup ids={activeBlock.exercises.map(ex => ex.id)} onReorder={moveExercise}>
                   {activeBlock.exercises.map((ex, idx) => (
@@ -2421,7 +2331,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
               </div>
             ) : (
               <div style={{ padding: 16 }}>
-                <button onClick={openExercisePickerForBlock} style={{
+                <button onClick={openMovementPickerDirectly} style={{
                   width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   border: `1.5px solid ${c.blue}`, color: c.blue, fontWeight: 700, fontSize: 14, borderRadius: 6,
                   padding: '10px', background: c.bg, cursor: 'pointer',
@@ -2431,41 +2341,6 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
               </div>
             )}
 
-            {!['exercise', 'circuit'].includes(activeBlock.type) && (
-              <>
-                <button onClick={openDescModal} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '2px 16px 16px', width: '100%',
-                  border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
-                }}>
-                  <span style={{ flex: 1, fontStyle: 'italic', fontSize: 14, color: activeBlock.name ? c.text : c.textFaint }}>
-                    {activeBlock.name || BLOCK_META[activeBlock.type].namePlaceholder}
-                  </span>
-                  <PencilSimple size={16} style={{ color: c.textMuted, flexShrink: 0 }} />
-                </button>
-
-                <div style={{ padding: '0 16px 16px' }}>
-                  <button onClick={openDescModal} style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 10, background: c.disabledBg, borderRadius: 8,
-                    padding: '12px 14px', width: '100%', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
-                  }}>
-                    <span style={{ flex: 1, fontStyle: 'italic', fontSize: 14, color: activeBlock.description ? c.text : c.textFaint, whiteSpace: 'pre-wrap' }}>
-                      {activeBlock.description || BLOCK_META[activeBlock.type].descriptionPlaceholder}
-                    </span>
-                    <PencilSimple size={16} style={{ color: c.textMuted, flexShrink: 0, marginTop: 2 }} />
-                  </button>
-                </div>
-
-                <button onClick={openDescModal} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px 18px', width: '100%',
-                  border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
-                }}>
-                  <span style={{ flex: 1, fontStyle: 'italic', fontSize: 14, color: activeBlock.note ? c.text : c.textFaint, whiteSpace: 'pre-wrap' }}>
-                    {activeBlock.note || 'Write a note'}
-                  </span>
-                  <PencilSimple size={16} style={{ color: c.textMuted, flexShrink: 0 }} />
-                </button>
-              </>
-            )}
           </div>
         )}
         </>
@@ -2481,174 +2356,6 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
               style={{ ...input, width: '100%' }}
             />
           </div>
-        )}
-
-        {/* Modal Description (nom + description + notes) */}
-        {descModalOpen && (
-          <>
-            <div onClick={closeDescModal} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200 }} />
-            <div style={{
-              position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 201,
-              width: 640, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 64px)', overflowY: 'auto',
-              background: c.bg, borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: `1px solid ${c.border}` }}>
-                <span style={{ fontSize: 22, fontWeight: 700, color: c.text }}>Description</span>
-                <button onClick={closeDescModal} style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: c.text }}>
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div>
-                  <input
-                    value={draftName}
-                    onChange={e => setDraftName(e.target.value)}
-                    placeholder="Name (optional)"
-                    style={{ ...input, fontSize: 15, padding: '11px 14px' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ ...label, fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Description</label>
-                  <div style={{ border: `1px solid ${c.border}`, borderRadius: 6 }}>
-                    <div style={{ position: 'relative' }}>
-                      <div ref={descriptionBackdropRef} aria-hidden style={{
-                        position: 'absolute', inset: 0, padding: '12px 14px', fontSize: 14, lineHeight: 1.5,
-                        fontFamily: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: c.text,
-                        pointerEvents: 'none', overflow: 'hidden',
-                      }}>
-                        {renderHighlightedDescription(draftDescription)}
-                      </div>
-                      <textarea
-                        ref={descriptionRef}
-                        value={draftDescription}
-                        onChange={handleDescriptionChange}
-                        onScroll={e => { if (descriptionBackdropRef.current) descriptionBackdropRef.current.scrollTop = e.target.scrollTop }}
-                        onBlur={() => setMentionQuery(null)}
-                        placeholder={activeBlock ? BLOCK_META[activeBlock.type].descriptionPlaceholder : ''}
-                        rows={3}
-                        style={{
-                          position: 'relative', width: '100%', boxSizing: 'border-box', border: 'none', borderRadius: '6px 6px 0 0',
-                          padding: '12px 14px', fontSize: 14, lineHeight: 1.5, outline: 'none', resize: 'none', background: 'transparent',
-                          fontFamily: 'inherit', color: 'transparent', caretColor: c.text,
-                        }}
-                      />
-                      {mentionQuery !== null && mentionMatches.length > 0 && (
-                        <div style={{
-                          position: 'absolute', left: 0, right: 0, top: '100%', background: c.bg,
-                          border: `1px solid ${c.border}`, borderRadius: 8, boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
-                          zIndex: 10, padding: 6, display: 'flex', flexDirection: 'column', gap: 1,
-                          maxHeight: 320, overflowY: 'auto',
-                        }}>
-                          {mentionMatches.map((m, i) => (
-                            <button
-                              key={m.id}
-                              onMouseDown={e => e.preventDefault()}
-                              onClick={() => pickMovement(m.name)}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '12px 14px', borderRadius: 6, fontSize: 15,
-                                color: c.text, background: i === 0 ? c.blueBorder : 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
-                              }}
-                            >
-                              <span style={{ flex: 1 }}>{m.name}</span>
-                              {m.videoUrl && <VideoCamera size={15} style={{ color: c.blue, flexShrink: 0 }} />}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderTop: `1px solid ${c.border}`, borderRadius: '0 0 6px 6px', background: c.disabledBg, flexWrap: 'wrap' }}>
-                      <button onClick={openExercisePicker} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${c.blue}`, color: c.blue,
-                        fontWeight: 700, fontSize: 13, borderRadius: 6, padding: '6px 12px', background: c.bg, cursor: 'pointer',
-                      }}>
-                        <Plus size={13} weight="bold" /> Exercises
-                      </button>
-                      {canManageCatalog && (
-                        <div style={{ position: 'relative' }}>
-                          <button onClick={() => setPresetsMenuOpen(v => !v)} style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${c.border}`, color: c.text,
-                            fontWeight: 700, fontSize: 13, borderRadius: 6, padding: '6px 12px', background: c.bg, cursor: 'pointer',
-                          }}>
-                            <Heartbeat size={13} /> Pré-construites
-                          </button>
-                          {presetsMenuOpen && (
-                            <>
-                              <div onClick={() => setPresetsMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 210 }} />
-                              <div style={{
-                                position: 'absolute', bottom: '100%', left: 0, marginBottom: 6, width: 280, maxHeight: 280, overflowY: 'auto',
-                                background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8, boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
-                                zIndex: 211, padding: 6,
-                              }}>
-                                {activationPresets === null ? (
-                                  <div style={{ padding: 12, fontSize: 13, color: c.textMuted }}>Chargement…</div>
-                                ) : activationPresets.length === 0 ? (
-                                  <div style={{ padding: 12, fontSize: 13, color: c.textMuted }}>
-                                    Aucune activation pré-construite — gère-les dans Bibliothèque → Activations.
-                                  </div>
-                                ) : activationPresets.map(preset => (
-                                  <button
-                                    key={preset.id}
-                                    onClick={() => applyPreset(preset)}
-                                    style={{
-                                      display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', borderRadius: 6,
-                                      fontSize: 13, fontWeight: 600, color: c.text, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
-                                    }}
-                                  >
-                                    <span style={{ flex: 1 }}>{preset.name}</span>
-                                    {preset.videos?.length > 0 && <VideoCamera size={13} style={{ color: c.blue, flexShrink: 0 }} />}
-                                  </button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: c.textMuted }}>
-                        <Info size={13} /> You can also use the # character to add an exercise
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ ...label, fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Notes (optional)</label>
-                  <div style={{ border: `1px solid ${c.border}`, borderRadius: 6, overflow: 'hidden' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '8px 10px', borderBottom: `1px solid ${c.border}` }}>
-                      {[TextB, TextItalic, LinkSimple, ListBullets, TextTSlash].map((Icon, i) => (
-                        <button key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, border: 'none', background: 'none', borderRadius: 4, color: c.textMuted, cursor: 'pointer' }}>
-                          <Icon size={15} />
-                        </button>
-                      ))}
-                    </div>
-                    <textarea
-                      value={draftNote}
-                      onChange={e => setDraftNote(e.target.value)}
-                      placeholder="Write a note"
-                      rows={2}
-                      style={{ width: '100%', boxSizing: 'border-box', border: 'none', padding: '12px 14px', fontSize: 14, outline: 'none', resize: 'none', background: 'transparent', fontFamily: 'inherit', color: c.text }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '16px 24px', borderTop: `1px solid ${c.border}` }}>
-                <button onClick={closeDescModal} style={{
-                  border: `1px solid ${c.border}`, color: c.text, fontWeight: 600, fontSize: 14, borderRadius: 6,
-                  padding: '9px 20px', background: c.bg, cursor: 'pointer',
-                }}>
-                  Close
-                </button>
-                <button onClick={confirmDescModal} style={{
-                  border: `1px solid ${c.blue}`, color: c.blue, fontWeight: 600, fontSize: 14, borderRadius: 6,
-                  padding: '9px 20px', background: c.bg, cursor: 'pointer',
-                }}>
-                  Ok
-                </button>
-              </div>
-            </div>
-          </>
         )}
 
         {/* Modale timer (séance ou bloc) : configure seulement (EMOM/AMRAP/TABATA/Perso) — le
@@ -2721,7 +2428,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                         <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2 }}>{preset.videos.length} mouvement{preset.videos.length > 1 ? 's' : ''}</div>
                       )}
                     </div>
-                    <button onClick={() => applyPresetToActiveBlock(preset)} style={{
+                    <button onClick={() => insererProtocole(preset)} style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${c.blue}`, color: c.blue,
                       fontWeight: 700, fontSize: 13, borderRadius: 6, padding: '7px 14px', background: c.bg, cursor: 'pointer', flexShrink: 0,
                     }}>
@@ -2731,14 +2438,6 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                 ))}
               </div>
 
-              <div style={{ padding: '14px 24px', borderTop: `1px solid ${c.border}` }}>
-                <button onClick={openMovementPickerDirectly} style={{
-                  border: 'none', background: 'none', color: c.textMuted, fontSize: 13, fontWeight: 600,
-                  textDecoration: 'underline', cursor: 'pointer', padding: 0,
-                }}>
-                  Chercher un mouvement précis à la place
-                </button>
-              </div>
             </div>
           </>
         )}
