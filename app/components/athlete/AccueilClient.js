@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /*
-  Accueil client Ostryk — version v3.1 (relecture : états vides, statut dérivé de la date,
-  contrastes AA, dates locales, accessibilité).
-  Champs alignés sur le schéma réel : athletes.is_1to1_client, programs.listed_at,
-  program_sessions.is_coached, coaching_schedule.starts_at.
+  Accueil client Ostryk — v3 de la maquette, branchée sur le modèle réel des séances.
 
-  Le statut d'une séance n'est pas stocké : il se déduit de sa date et de `faite`
-  (faite → "faite", passée → "manquee", aujourd'hui → "a_faire", future → "a_venir").
+  L'app ne date pas les séances : chaque programme propose sa PROCHAINE séance non faite, le jour
+  prévu n'est qu'une indication (voir WodTab, qui construit les données). La bande de la semaine
+  montre donc ce qui a été fait (date de validation) et ce qui est prévu sur les jours à venir —
+  jamais de séance "manquée" : une séance en retard est simplement proposée aujourd'hui.
+
+  Statut d'une séance, déduit de sa date et de `faite` : faite → "faite", aujourd'hui → "a_faire",
+  future → "a_venir" (et "manquee" pour une date passée non faite, que WodTab ne produit pas).
 */
 
 const T = {
@@ -29,6 +31,8 @@ const T = {
   nav: "#E1D8C9",
 };
 
+const TITRE = "var(--font-title)";
+
 const TYPE_COULEUR = { force: T.bordeaux, endurance: T.vert, mobilite: T.ocre };
 const TYPE_LABEL = { force: "Force", endurance: "Endurance", mobilite: "Mobilité" };
 const STATUT_LABEL = { faite: "faite", manquee: "pas encore faite", a_faire: "à faire", a_venir: "à venir" };
@@ -39,13 +43,26 @@ const GAP_OBJECTIF = 18;
 const DEGRADES = ["linear-gradient(150deg,#3A4A3F,#232B26)", "linear-gradient(150deg,#8A3A40,#4A1219)"];
 
 // "AAAA-MM-JJ" lu en heure locale (et non minuit UTC, qui décale d'un jour hors métropole).
-function parseJour(iso) {
+export function parseJour(iso) {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
   return new Date(y, m - 1, d);
+}
+export function isoLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function aujourdhui() {
   const n = new Date();
   return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+}
+// Lundi → dimanche de la semaine en cours, en "AAAA-MM-JJ" locaux.
+export function joursDeLaSemaine() {
+  const lundi = aujourdhui();
+  lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(lundi);
+    d.setDate(lundi.getDate() + i);
+    return isoLocal(d);
+  });
 }
 // Écart en jours calendaires ; Math.round absorbe les changements d'heure.
 const ecartJours = (iso) => Math.round((parseJour(iso) - aujourdhui()) / 86400000);
@@ -79,89 +96,6 @@ function estNouveau(iso) {
   return iso && (Date.now() - new Date(iso)) / 86400000 < 30;
 }
 
-// Données de démonstration, calées sur la semaine en cours. Uniquement pour la prévisualisation :
-// passer `{...demoAccueil}` explicitement, jamais en valeur par défaut.
-function jourDeLaSemaine(n) {
-  const d = aujourdhui();
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-export const demoAccueil = {
-  athlete: { id: "a1", prenom: "Camille", is_1to1_client: false },
-  objectifs: [
-    { id: "o1", titre: "Semi de Bordeaux", date: "2026-10-25" },
-    { id: "o2", titre: "Premières tractions strictes", date: null },
-  ],
-  programme: { id: "p1", phase: "Développement", semaine: 3, duration_weeks: 8 },
-  semaine: [
-    {
-      date: jourDeLaSemaine(0),
-      seance: {
-        id: "s1",
-        titre: "Haut du corps",
-        type: "force",
-        faite: true,
-        duree_min: 52,
-        effort: "Ok",
-        blocs: ["A · Développé couché, Tirage horizontal", "B · Dips, Face pull"],
-      },
-    },
-    {
-      date: jourDeLaSemaine(1),
-      seance: {
-        id: "s2",
-        titre: "Footing 40 min",
-        type: "endurance",
-        duree_estimee_min: 40,
-        blocs: ["Allure confortable, conversation possible"],
-      },
-    },
-    {
-      date: jourDeLaSemaine(2),
-      seance: {
-        id: "s3",
-        titre: "Bas du corps",
-        type: "force",
-        duree_estimee_min: 55,
-        blocs: [
-          "A · Front squat, Nordic curl, Planche latérale",
-          "B · Fentes bulgares, Hip thrust",
-          "C · Air bike 40 cal",
-        ],
-      },
-    },
-    { date: jourDeLaSemaine(3), seance: null },
-    {
-      date: jourDeLaSemaine(4),
-      seance: {
-        id: "s4",
-        titre: "Fractionné 6 × 800 m",
-        type: "endurance",
-        duree_estimee_min: 50,
-        blocs: ["Échauffement 15 min", "6 × 800 m, récup 1 min 30", "Retour au calme 10 min"],
-      },
-    },
-    {
-      date: jourDeLaSemaine(5),
-      seance: {
-        id: "s5",
-        titre: "Séance avec ton coach",
-        type: "force",
-        is_coached: true,
-        starts_at: `${jourDeLaSemaine(5)}T10:00:00`,
-        duree_estimee_min: 60,
-        blocs: ["Bilan de mi-cycle et travail technique"],
-      },
-    },
-    { date: jourDeLaSemaine(6), seance: null },
-  ],
-  programmes: [
-    { id: "pr1", titre: "Hyrox Prép", duration_weeks: 8, recommended_sessions_per_week: 4, listed_at: "2026-09-10" },
-    { id: "pr2", titre: "10K en 12 semaines", duration_weeks: 12, recommended_sessions_per_week: 3, listed_at: "2026-04-02" },
-  ],
-};
-
 const libelleSection = {
   fontSize: 11,
   color: T.texteSec,
@@ -169,17 +103,27 @@ const libelleSection = {
   textTransform: "uppercase",
   margin: 0,
 };
+export const styleLibelleSection = libelleSection;
+export const couleursAccueil = T;
 
-function CarteObjectif({ objectif }) {
+function CarteObjectif({ objectif, onOuvrir }) {
   const jAvant = objectif.date ? ecartJours(objectif.date) : null;
   return (
-    <article
+    <button
+      type="button"
+      onClick={onOuvrir}
       style={{
         flex: "none",
         width: LARGEUR_OBJECTIF,
         scrollSnapAlign: "start",
+        background: "none",
+        border: "none",
         borderTop: `1px solid ${T.filet}`,
-        paddingTop: 14,
+        textAlign: "left",
+        cursor: onOuvrir ? "pointer" : "default",
+        font: "inherit",
+        color: "inherit",
+        padding: "14px 0 0",
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
@@ -187,7 +131,7 @@ function CarteObjectif({ objectif }) {
           <p style={{ ...libelleSection, fontSize: 10, marginBottom: 5 }}>Objectif</p>
           <p
             style={{
-              fontFamily: "Cinzel, serif",
+              fontFamily: TITRE,
               fontSize: 19,
               color: T.bordeaux,
               lineHeight: 1.2,
@@ -201,18 +145,15 @@ function CarteObjectif({ objectif }) {
           ) : null}
         </div>
         {jAvant !== null ? (
-          <p style={{ fontFamily: "Cinzel, serif", fontSize: 24, margin: 0 }}>J-{jAvant}</p>
+          <p style={{ fontFamily: TITRE, fontSize: 24, margin: 0 }}>J-{jAvant}</p>
         ) : null}
       </div>
-    </article>
+    </button>
   );
 }
 
 function Pastille({ seance, statut }) {
-  if (!seance) {
-    return <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: "50%", background: T.filet }} />;
-  }
-  const couleur = TYPE_COULEUR[seance.type];
+  const couleur = TYPE_COULEUR[seance.type] || T.bordeaux;
   // Séance avec le coach : anneau ocre autour de la pastille habituelle.
   const coach = seance.is_coached ? { outline: `1.5px solid ${T.ocre}`, outlineOffset: 2 } : null;
   if (statut === "faite") {
@@ -235,45 +176,41 @@ function Pastille({ seance, statut }) {
   );
 }
 
-function descriptionJour({ date, seance }) {
-  if (!seance) return `${dateLongue(date)}, repos`;
-  const coach = seance.is_coached ? ", avec ton coach" : "";
-  return `${dateLongue(date)}, ${seance.titre}${coach}, ${STATUT_LABEL[statutSeance(date, seance)]}`;
+function Pastilles({ date, seances }) {
+  if (seances.length === 0) {
+    return <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: "50%", background: T.filet }} />;
+  }
+  return (
+    <span aria-hidden="true" style={{ display: "flex", gap: 3, height: 8 }}>
+      {seances.slice(0, 3).map((s) => (
+        <Pastille key={s.id} seance={s} statut={statutSeance(date, s)} />
+      ))}
+    </span>
+  );
 }
 
-function CarteSeance({ entree, prochaine, onCommencer, onDecaler, onVoirPerformances }) {
-  const { date, seance } = entree;
+function descriptionJour({ date, seances }) {
+  if (seances.length === 0) return `${dateLongue(date)}, repos`;
+  const detail = seances
+    .map((s) => `${s.titre}${s.is_coached ? ", avec ton coach" : ""}, ${STATUT_LABEL[statutSeance(date, s)]}`)
+    .join(" ; ");
+  return `${dateLongue(date)}, ${detail}`;
+}
 
-  if (!seance) {
-    return (
-      <div style={{ padding: "4px 4px 0" }}>
-        <p style={{ fontSize: 11, color: T.texteSec, margin: "0 0 6px" }}>{dateLongue(date)}</p>
-        <p style={{ fontFamily: "Cinzel, serif", fontSize: 26, lineHeight: 1.15, margin: "0 0 8px" }}>
-          Jour de repos
-        </p>
-        <p style={{ fontSize: 13, color: T.texteCorps, margin: 0 }}>
-          {prochaine
-            ? `Prochaine séance : ${prochaine.seance.titre}, ${dateCourte(prochaine.date)}`
-            : "Aucune séance à venir"}
-        </p>
-      </div>
-    );
-  }
-
+function CarteSeance({ date, seance, enAvant, onCommencer, onDecaler, onOuvrir }) {
   const statut = statutSeance(date, seance);
-  const jour = statut === "a_faire";
+  const jour = enAvant;
   const fond = jour ? T.vert : T.blanc;
   const couleurTexte = jour ? T.clair : T.texte;
   const couleurSec = jour ? T.muted : T.texteSec;
   const fondBloc = jour ? "rgba(245,239,230,0.09)" : T.fond;
+  const peutDecaler = !!onDecaler && seance.decalable !== false;
 
   const meta = seance.is_coached
     ? seance.starts_at
       ? heure(seance.starts_at)
       : "à planifier avec ton coach"
-    : statut === "faite"
-      ? `${seance.duree_min} min · effort ${seance.effort}`
-      : `≈ ${seance.duree_estimee_min} minutes`;
+    : seance.meta || (seance.duree_estimee_min ? `≈ ${seance.duree_estimee_min} minutes` : "");
 
   const boutonLeger = {
     width: "100%",
@@ -284,12 +221,40 @@ function CarteSeance({ entree, prochaine, onCommencer, onDecaler, onVoirPerforma
     height: 46,
     fontSize: 13,
     color: T.texte,
+    fontFamily: "inherit",
+    cursor: "pointer",
   };
+  const lienDecaler = (
+    <button
+      type="button"
+      onClick={() => onDecaler(seance)}
+      style={{
+        width: "100%",
+        marginTop: 4,
+        background: "none",
+        border: "none",
+        color: jour ? T.muted : T.texteSec,
+        fontSize: 12,
+        textDecoration: "underline",
+        height: 44,
+        fontFamily: "inherit",
+        cursor: "pointer",
+      }}
+    >
+      Décaler
+    </button>
+  );
 
   let action;
-  if (seance.is_coached) {
+  if (seance.is_coached && statut !== "faite") {
     action = (
       <p style={{ fontSize: 12, color: couleurSec, margin: "16px 0 0" }}>Cette séance se fait avec ton coach.</p>
+    );
+  } else if (statut === "faite") {
+    action = (
+      <button type="button" onClick={() => onOuvrir(seance)} style={boutonLeger}>
+        Revoir la séance
+      </button>
     );
   } else if (jour) {
     action = (
@@ -306,58 +271,25 @@ function CarteSeance({ entree, prochaine, onCommencer, onDecaler, onVoirPerforma
             borderRadius: 12,
             height: 52,
             fontSize: 15,
+            fontWeight: 600,
+            fontFamily: "inherit",
+            cursor: "pointer",
           }}
         >
           Commencer la séance
         </button>
-        <button
-          type="button"
-          onClick={() => onDecaler(seance)}
-          style={{
-            width: "100%",
-            marginTop: 4,
-            background: "none",
-            border: "none",
-            color: T.muted,
-            fontSize: 12,
-            textDecoration: "underline",
-            height: 44,
-          }}
-        >
-          Décaler
-        </button>
+        {peutDecaler ? lienDecaler : null}
       </>
     );
-  } else if (statut === "manquee") {
-    action = (
-      <button
-        type="button"
-        onClick={() => onDecaler(seance)}
-        style={{
-          width: "100%",
-          marginTop: 16,
-          background: T.vert,
-          color: T.clair,
-          border: "none",
-          borderRadius: 12,
-          height: 48,
-          fontSize: 13,
-        }}
-      >
-        Décaler cette séance
-      </button>
-    );
-  } else if (statut === "faite") {
-    action = (
-      <button type="button" onClick={() => onVoirPerformances(seance)} style={boutonLeger}>
-        Voir mes performances
-      </button>
-    );
   } else {
+    // À venir, ou deuxième séance du jour : on peut toujours l'ouvrir en avance.
     action = (
-      <button type="button" onClick={() => onDecaler(seance)} style={boutonLeger}>
-        Décaler
-      </button>
+      <>
+        <button type="button" onClick={() => onOuvrir(seance)} style={boutonLeger}>
+          Voir la séance
+        </button>
+        {peutDecaler ? lienDecaler : null}
+      </>
     );
   }
 
@@ -366,10 +298,15 @@ function CarteSeance({ entree, prochaine, onCommencer, onDecaler, onVoirPerforma
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         <span
           aria-hidden="true"
-          style={{ width: 7, height: 7, borderRadius: "50%", background: jour ? T.beige : TYPE_COULEUR[seance.type] }}
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: jour ? T.beige : TYPE_COULEUR[seance.type] || T.bordeaux,
+          }}
         />
         <span style={{ ...libelleSection, fontSize: 10, color: couleurSec }}>
-          {TYPE_LABEL[seance.type]}
+          {seance.programme || TYPE_LABEL[seance.type]}
           {estAujourdhui(date) ? " · aujourd'hui" : ` · ${dateCourte(date)}`}
         </span>
         {seance.is_coached ? (
@@ -380,48 +317,96 @@ function CarteSeance({ entree, prochaine, onCommencer, onDecaler, onVoirPerforma
         </span>
       </div>
 
-      <h2 style={{ fontFamily: "Cinzel, serif", fontSize: 26, lineHeight: 1.15, margin: "0 0 6px", fontWeight: 600 }}>
+      <h2 style={{ fontFamily: TITRE, fontSize: 26, lineHeight: 1.15, margin: "0 0 6px", fontWeight: 600 }}>
         {seance.titre}
       </h2>
-      <p style={{ fontSize: 12, color: couleurSec, margin: "0 0 16px" }}>{meta}</p>
+      {meta ? <p style={{ fontSize: 12, color: couleurSec, margin: "0 0 16px" }}>{meta}</p> : null}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {(seance.blocs || []).map((b, i) => (
-          <p
-            key={i}
-            style={{
-              fontSize: 12,
-              background: fondBloc,
-              borderRadius: 9,
-              padding: "9px 11px",
-              margin: 0,
-              color: jour ? T.beige : T.texteCorps,
-            }}
-          >
-            {b}
-          </p>
-        ))}
-      </div>
+      {(seance.blocs || []).length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {seance.blocs.map((b, i) => (
+            <p
+              key={i}
+              style={{
+                fontSize: 12,
+                background: fondBloc,
+                borderRadius: 9,
+                padding: "9px 11px",
+                margin: 0,
+                color: jour ? T.beige : T.texteCorps,
+              }}
+            >
+              {b}
+            </p>
+          ))}
+        </div>
+      ) : null}
 
       {action}
     </div>
   );
 }
 
+function JourSelectionne({ entree, prochaine, onCommencer, onDecaler, onOuvrir }) {
+  const { date, seances } = entree;
+
+  if (seances.length === 0) {
+    return (
+      <div style={{ padding: "4px 4px 0" }}>
+        <p style={{ fontSize: 11, color: T.texteSec, margin: "0 0 6px" }}>{dateLongue(date)}</p>
+        <p style={{ fontFamily: TITRE, fontSize: 26, lineHeight: 1.15, margin: "0 0 8px" }}>
+          {ecartJours(date) < 0 ? "Pas de séance" : "Jour de repos"}
+        </p>
+        <p style={{ fontSize: 13, color: T.texteCorps, margin: 0 }}>
+          {prochaine
+            ? `Prochaine séance : ${prochaine.seances[0].titre}, ${dateCourte(prochaine.date)}`
+            : "Aucune séance à venir"}
+        </p>
+      </div>
+    );
+  }
+
+  // Une seule carte "en avant" (fond vert) : la première séance à faire aujourd'hui.
+  const indexEnAvant = seances.findIndex((s) => statutSeance(date, s) === "a_faire");
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {seances.map((s, i) => (
+        <CarteSeance
+          key={s.id}
+          date={date}
+          seance={s}
+          enAvant={i === indexEnAvant}
+          onCommencer={onCommencer}
+          onDecaler={onDecaler}
+          onOuvrir={onOuvrir}
+        />
+      ))}
+    </div>
+  );
+}
+
+/*
+  semaine : 7 entrées { date: "AAAA-MM-JJ", seances: [...] }, lundi → dimanche.
+  seance : { id, titre, type, faite, programme?, meta?, duree_estimee_min?, blocs?, decalable?,
+             is_coached?, starts_at? }
+  objectifs : { id, titre, date|null }
+  programmes : { id, titre, sousTitre?, listed_at? }
+  Sans onAjouterObjectif, la carte "+ Ajouter un objectif" disparaît (coach en prévisualisation).
+  `children` s'affiche sous les programmes (le reste de l'accueil : récurrentes, historique…).
+*/
 export default function AccueilClient({
   athlete = null,
   objectifs = [],
   programme = null,
   semaine = [],
   programmes = [],
-  afficherNav = false, // l'intégration dans app/s/[token] garde sa propre barre (AthleteTabBar)
-  ongletActif = "accueil",
   onCommencerSeance = () => {},
-  onDecalerSeance = () => {},
-  onVoirPerformances = () => {},
-  onAjouterObjectif = () => {},
+  onDecalerSeance = null,
+  onOuvrirSeance = () => {},
+  onAjouterObjectif = null,
+  onOuvrirObjectifs = null,
   onOuvrirProgramme = () => {},
-  onChangerOnglet = () => {},
+  children = null,
 }) {
   const indexInitial = Math.max(0, semaine.findIndex((e) => estAujourdhui(e.date)));
   const [selection, setSelection] = useState(indexInitial);
@@ -443,19 +428,18 @@ export default function AccueilClient({
   );
 
   const compteur = useMemo(() => {
-    const prevues = semaine.filter((e) => e.seance).length;
-    const faites = semaine.filter((e) => e.seance?.faite).length;
-    return { faites, prevues };
+    const toutes = semaine.flatMap((e) => e.seances);
+    return { faites: toutes.filter((s) => s.faite).length, prevues: toutes.length };
   }, [semaine]);
 
   const indexCourant = Math.min(selection, semaine.length - 1);
 
   const prochaine = useMemo(
-    () => semaine.slice(indexCourant + 1).find((e) => e.seance) || null,
+    () => semaine.slice(indexCourant + 1).find((e) => e.seances.some((s) => !s.faite)) || null,
     [semaine, indexCourant]
   );
 
-  const nbCartes = objectifsTries.length + 1;
+  const nbCartes = objectifsTries.length + (onAjouterObjectif ? 1 : 0);
   const afficherProgrammes = !athlete?.is_1to1_client && programmes.length > 0;
 
   // En fin de défilement, le dernier point s'allume même si la dernière carte ne peut pas
@@ -480,74 +464,80 @@ export default function AccueilClient({
     <div
       style={{
         background: T.beige,
-        minHeight: "100vh",
-        fontFamily: "'Work Sans', system-ui, sans-serif",
         color: T.texte,
-        paddingTop: "calc(20px + env(safe-area-inset-top, 0px))",
+        paddingTop: 20,
         display: "flex",
         flexDirection: "column",
       }}
     >
-      <p style={{ fontSize: 12, color: T.texteSec, margin: "0 18px 14px" }}>
-        {athlete?.prenom ? `Bonjour ${athlete.prenom}` : "Bonjour"}
-      </p>
-
-      <div
-        ref={rail}
-        onScroll={majPageObjectif}
-        style={{
-          display: "flex",
-          gap: GAP_OBJECTIF,
-          overflowX: "auto",
-          scrollSnapType: "x mandatory",
-          padding: "0 18px",
-          scrollbarWidth: "none",
-        }}
-      >
-        {objectifsTries.map((o) => (
-          <CarteObjectif key={o.id} objectif={o} />
-        ))}
-        <button
-          type="button"
-          onClick={onAjouterObjectif}
-          style={{
-            flex: "none",
-            width: LARGEUR_OBJECTIF,
-            scrollSnapAlign: "start",
-            textAlign: "left",
-            background: "none",
-            border: "none",
-            borderTop: `1px solid ${T.filet}`,
-            padding: "14px 0 0",
-            color: T.bordeaux,
-            fontSize: 13,
-          }}
-        >
-          + Ajouter un objectif
-        </button>
-      </div>
-
-      {nbCartes > 1 && railDefilable ? (
-        <div style={{ display: "flex", gap: 5, padding: "12px 18px 0" }} aria-hidden="true">
-          {Array.from({ length: nbCartes }, (_, i) => (
-            <span
-              key={i}
-              style={{
-                width: i === pageObjectif ? 18 : 6,
-                height: 4,
-                borderRadius: 100,
-                background: i === pageObjectif ? T.bordeaux : T.filet,
-              }}
-            />
-          ))}
-        </div>
+      {athlete?.prenom ? (
+        <p style={{ fontSize: 12, color: T.texteSec, margin: "0 18px 14px" }}>Bonjour {athlete.prenom}</p>
       ) : null}
 
-      <div style={{ height: 30 }} />
+      {nbCartes > 0 ? (
+        <>
+          <div
+            ref={rail}
+            onScroll={majPageObjectif}
+            style={{
+              display: "flex",
+              gap: GAP_OBJECTIF,
+              overflowX: "auto",
+              scrollSnapType: "x mandatory",
+              padding: "0 18px",
+              scrollbarWidth: "none",
+            }}
+          >
+            {objectifsTries.map((o) => (
+              <CarteObjectif key={o.id} objectif={o} onOuvrir={onOuvrirObjectifs || undefined} />
+            ))}
+            {onAjouterObjectif ? (
+              <button
+                type="button"
+                onClick={onAjouterObjectif}
+                style={{
+                  flex: "none",
+                  width: LARGEUR_OBJECTIF,
+                  scrollSnapAlign: "start",
+                  textAlign: "left",
+                  background: "none",
+                  border: "none",
+                  borderTop: `1px solid ${T.filet}`,
+                  padding: "14px 0 0",
+                  color: T.bordeaux,
+                  fontSize: 13,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                + Ajouter un objectif
+              </button>
+            ) : null}
+          </div>
+
+          {nbCartes > 1 && railDefilable ? (
+            <div style={{ display: "flex", gap: 5, padding: "12px 18px 0" }} aria-hidden="true">
+              {Array.from({ length: nbCartes }, (_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: i === pageObjectif ? 18 : 6,
+                    height: 4,
+                    borderRadius: 100,
+                    background: i === pageObjectif ? T.bordeaux : T.filet,
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          <div style={{ height: 30 }} />
+        </>
+      ) : null}
 
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 18px", marginBottom: 12 }}>
         <h2 style={{ ...libelleSection, fontWeight: 400 }}>Cette semaine</h2>
-        {semaine.length > 0 ? (
+        {compteur.prevues > 0 ? (
           <span style={{ fontSize: 11, color: T.texteSec }}>
             {compteur.faites} / {compteur.prevues}
             {programme ? ` · ${programme.phase.toLowerCase()}, semaine ${programme.semaine}` : ""}
@@ -581,6 +571,8 @@ export default function AccueilClient({
                     flexDirection: "column",
                     alignItems: "center",
                     gap: 7,
+                    fontFamily: "inherit",
+                    cursor: "pointer",
                   }}
                 >
                   <span style={{ fontSize: 10, color: T.texteSec }}>{JOURS[indexJour(e.date)]}</span>
@@ -595,23 +587,24 @@ export default function AccueilClient({
                       fontSize: 13,
                       background: on ? T.texte : "transparent",
                       color: on ? T.clair : T.texte,
+                      fontWeight: estAujourdhui(e.date) ? 700 : 400,
                     }}
                   >
                     {jourDuMois(e.date)}
                   </span>
-                  <Pastille seance={e.seance} statut={e.seance ? statutSeance(e.date, e.seance) : null} />
+                  <Pastilles date={e.date} seances={e.seances} />
                 </button>
               );
             })}
           </div>
 
           <div style={{ padding: "0 14px" }}>
-            <CarteSeance
+            <JourSelectionne
               entree={semaine[indexCourant]}
               prochaine={prochaine}
               onCommencer={onCommencerSeance}
               onDecaler={onDecalerSeance}
-              onVoirPerformances={onVoirPerformances}
+              onOuvrir={onOuvrirSeance}
             />
           </div>
         </>
@@ -636,6 +629,9 @@ export default function AccueilClient({
                   background: "none",
                   padding: 0,
                   marginRight: i === programmes.length - 1 ? 18 : 0,
+                  fontFamily: "inherit",
+                  color: T.texte,
+                  cursor: "pointer",
                 }}
               >
                 <div
@@ -662,55 +658,18 @@ export default function AccueilClient({
                     </span>
                   ) : null}
                 </div>
-                <p style={{ fontFamily: "Cinzel, serif", fontSize: 14, margin: "9px 2px 2px" }}>{p.titre}</p>
-                <p style={{ fontSize: 11, color: T.texteSec, margin: "0 2px" }}>
-                  {p.duration_weeks} semaines · {p.recommended_sessions_per_week} séances
-                </p>
+                <p style={{ fontFamily: TITRE, fontSize: 14, margin: "9px 2px 2px" }}>{p.titre}</p>
+                {p.sousTitre ? (
+                  <p style={{ fontSize: 11, color: T.texteSec, margin: "0 2px" }}>{p.sousTitre}</p>
+                ) : null}
               </button>
             ))}
           </div>
+          <div style={{ height: 30 }} />
         </>
       ) : null}
 
-      <div style={{ height: 26, flex: 1 }} />
-
-      {afficherNav ? (
-        <nav
-          aria-label="Navigation principale"
-          style={{
-            display: "flex",
-            justifyContent: "space-around",
-            background: T.nav,
-            padding: "13px 0",
-            paddingBottom: "calc(17px + env(safe-area-inset-bottom, 0px))",
-            position: "sticky",
-            bottom: 0,
-          }}
-        >
-          {[
-            { cle: "accueil", label: "Accueil" },
-            { cle: "planning", label: "Planning" },
-            { cle: "progres", label: "Progrès" },
-            { cle: "profil", label: "Profil" },
-          ].map((o) => (
-            <button
-              key={o.cle}
-              type="button"
-              aria-current={ongletActif === o.cle ? "page" : undefined}
-              onClick={() => onChangerOnglet(o.cle)}
-              style={{
-                background: "none",
-                border: "none",
-                fontSize: 11,
-                color: ongletActif === o.cle ? T.bordeaux : T.texteSec,
-                padding: "4px 12px",
-              }}
-            >
-              {o.label}
-            </button>
-          ))}
-        </nav>
-      ) : null}
+      {children}
     </div>
   );
 }

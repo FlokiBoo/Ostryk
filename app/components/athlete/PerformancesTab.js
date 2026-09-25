@@ -6,8 +6,8 @@ import TrackedMovementsBlock from '@/app/components/TrackedMovementsBlock'
 import SwipeCarousel from './SwipeCarousel'
 
 // Fusionne Force (radar bordeaux + liste Lift/Gym/Cardio) et Mobilité (radar vert-forêt + liste
-// des 4 articulations) dans un carrousel swipe à 2 slides — remplace l'ancien onglet "Records"
-// (PrTab.js, TrackedMovementsBlock seul) dans app/s/[token]/page.js.
+// des 4 articulations) dans un carrousel swipe à 2 slides. N'est plus un onglet à part : affiché
+// en bas de l'onglet Stats (StatsTab.js).
 export default function PerformancesTab({ athlete }) {
   const slides = [
     {

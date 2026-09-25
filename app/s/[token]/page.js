@@ -18,7 +18,6 @@ import StatsTab from '@/app/components/athlete/StatsTab'
 import TemplatesTab from '@/app/components/athlete/TemplatesTab'
 import AddActionSheet from '@/app/components/athlete/AddActionSheet'
 import AddActivityWizard from '@/app/components/athlete/AddActivityWizard'
-import PerformancesTab from '@/app/components/athlete/PerformancesTab'
 import ProfilTab from '@/app/components/athlete/ProfilTab'
 import SessionPlayer, { sessionProgressKey } from '@/app/components/athlete/SessionPlayer'
 import TempoBadge, { getTempoDisplay } from '@/app/components/TempoBadge'
@@ -153,7 +152,9 @@ function AthleteView({ params }) {
   const [isGroupLeader, setIsGroupLeader] = useState(false)
   const targetSessionId = searchParams.get('session')
   const focusMode = searchParams.get('focus') === '1'
-  const activeTab = searchParams.get('tab') || 'wod'
+  // 'pr' (ancien onglet Performances) redirige vers Stats, qui l'a absorbé : vieux liens, favoris.
+  const rawTab = searchParams.get('tab') || 'wod'
+  const activeTab = rawTab === 'pr' ? 'stats' : rawTab
   const setActiveTab = (tab) => {
     const url = new URL(window.location.href)
     url.searchParams.set('tab', tab)
@@ -1426,6 +1427,7 @@ function AthleteView({ params }) {
             onUpdateProgramDays={updateProgramDays} isGroupLeader={isGroupLeader}
             athlete={athlete} objectives={objectives} setObjectives={setObjectives}
             recurringTodayCounts={recurringTodayCounts}
+            onPostponeSession={postponeSession}
           />
         </div>
       )}
@@ -1440,11 +1442,6 @@ function AthleteView({ params }) {
       {visitedTabs.has('templates') && (
         <div style={{ display: activeTab === 'templates' ? 'block' : 'none' }}>
           <TemplatesTab token={token} programs={programs} setActiveTab={setActiveTab} />
-        </div>
-      )}
-      {visitedTabs.has('pr') && (
-        <div style={{ display: activeTab === 'pr' ? 'block' : 'none' }}>
-          <PerformancesTab athlete={athlete} />
         </div>
       )}
       {visitedTabs.has('profil') && (
@@ -1467,7 +1464,12 @@ function AthleteView({ params }) {
           onClose={() => setShowAddSheet(false)}
           onAddActivity={() => { setShowAddSheet(false); setShowAddWizard(true) }}
           onFreeSession={(mode, timing) => { setShowAddSheet(false); startFreeSession([], mode, timing === 'now' ? 'focus' : 'builder') }}
-          onAddRecord={() => { setShowAddSheet(false); setActiveTab('pr') }}
+          onAddRecord={() => {
+            setShowAddSheet(false)
+            setActiveTab('stats')
+            // Les records sont en bas de Stats : on y descend une fois l'onglet affiché.
+            setTimeout(() => document.getElementById('stats-records')?.scrollIntoView({ behavior: 'smooth' }), 300)
+          }}
         />
       )}
       {showAddWizard && (

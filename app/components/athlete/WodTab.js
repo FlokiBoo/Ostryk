@@ -6,6 +6,7 @@ import { WEEK_DAYS } from '@/lib/weekDays'
 import ObjectivesBlock from '@/app/components/ObjectivesBlock'
 import SwipeCarousel from './SwipeCarousel'
 import ChooseDaysModal from './ChooseDaysModal'
+import AccueilClient, { joursDeLaSemaine, isoLocal, styleLibelleSection } from './AccueilClient'
 
 // Un programme multi-séances que personne n'a daté (ni le coach via day_of_week, ni le sportif via
 // athlete_days_of_week) doit d'abord demander son rythme hebdomadaire — c'est ChooseDaysModal, plus
@@ -31,8 +32,31 @@ function estimateDurationMin(exercises) {
   return Math.round(base + perExo)
 }
 
-// Page d'accueil : la séance du jour doit être visible immédiatement, sans scroll. "Objectifs"
-// (déplacé depuis l'onglet Stats, qui garde le reste) et "Séance du jour" sont en tête.
+// Couleur de la séance sur l'accueil (force / endurance / mobilité) : l'app ne stocke pas de type
+// par séance, on le déduit du mode cardio de la séance ou du type d'activité du programme.
+function typeSeance(session, program) {
+  if (session.activity_mode === 'cardio') return 'endurance'
+  const t = (program.activity_type || '').toLowerCase()
+  if (/mobil|yoga|stretch|souplesse|pilates/.test(t)) return 'mobilite'
+  if (/course|run|trail|v[ée]lo|cycl|natation|swim|cardio|endurance|marche|rameur|row/.test(t)) return 'endurance'
+  return 'force'
+}
+
+// Aperçu du contenu : les noms d'exercices, trois par ligne, trois lignes au plus.
+function blocsSeance(exercises) {
+  const noms = (exercises || []).filter(e => e.name).map(e => e.name.trim())
+  const lignes = []
+  for (let i = 0; i < noms.length && lignes.length < 3; i += 3) lignes.push(noms.slice(i, i + 3).join(', '))
+  const reste = noms.length - 9
+  if (reste > 0) lignes[lignes.length - 1] += ` + ${reste} autre${reste > 1 ? 's' : ''}`
+  return lignes
+}
+
+const titreSection = { ...styleLibelleSection, fontWeight: 400, marginBottom: 12 }
+
+// Page d'accueil (onglet "Accueil") : rendue par AccueilClient — objectifs, semaine, séance du
+// jour, catalogue — et complétée en dessous par ce qui n'entre pas dans la semaine (séances
+// récurrentes, historique, notes du coach, groupes).
 // "Séance du jour" montre en permanence la PROCHAINE séance non complétée de chaque programme
 // actif — récurrente, datée par le coach, datée par l'athlète, ou même pas encore datée du tout
 // (voir programEntries plus bas) — peu importe le jour où elle est prévue. Retour terrain : filtrer
@@ -48,6 +72,7 @@ export default function WodTab({
   recurringTodayCounts = {},
   athlete, objectives, setObjectives,
   onUpdateProgramDays,
+  onPostponeSession,
 }) {
   const [leaderGroups, setLeaderGroups] = useState([])
   // Programmes pour lesquels l'athlète a fermé le popup de choix de jours sans valider — masqué
@@ -55,6 +80,9 @@ export default function WodTab({
   // athlete_days_of_week reste vide.
   const [dismissedDayPickerIds, setDismissedDayPickerIds] = useState(new Set())
   const [showAllPast, setShowAllPast] = useState(false)
+  const [showObjectives, setShowObjectives] = useState(false)
+  const [postponeTarget, setPostponeTarget] = useState(null)
+  const [catalogue, setCatalogue] = useState([])
 
   const openSession = (sessionId) => {
     router.push(`/s/${token}?session=${sessionId}&focus=1${isCoachView ? '&coach=1' : ''}`)
@@ -74,6 +102,14 @@ export default function WodTab({
   // Un programme assigné à un groupe (fan-out depuis la fiche groupe) ne doit pas apparaître ici :
   // le sportif le suit en direct pendant la séance collective, pas en autonomie — l'afficher aussi
   // dans sa liste perso fait doublon avec ce qu'il vit en cours et surcharge l'écran pour rien.
+  // Catalogue en libre-service ("Programmes" en bas de l'accueil) — inutile pour un client suivi
+  // en 1:1, dont le coach construit lui-même les programmes.
+  const showCatalogue = !isCoachView && !!athlete && !athlete.is_1to1_client
+  useEffect(() => {
+    if (!showCatalogue) return
+    fetch(`/api/athlete-view/${token}/available-programs`).then(r => r.json()).then(data => setCatalogue(data.programs || [])).catch(() => {})
+  }, [showCatalogue, token])
+
   const boardPrograms = programs.filter(p => p.pinned_board !== false && !p.archived && !p.group_id)
 
   // Deux façons d'obtenir un jour pour une séance : le coach le fixe séance par séance sur le
@@ -225,186 +261,252 @@ export default function WodTab({
 
   // Un compte gratuit n'entendait parler d'abonnement qu'au moment précis où il butait sur la
   // limite de séances d'un programme libre-service — autant dire presque jamais. Bandeau permanent
-  // mais volontairement fin (une ligne) : la séance du jour doit rester visible sans scroll, c'est
-  // la raison pour laquelle les Objectifs ont déjà été repoussés plus bas.
+  // mais volontairement fin (une ligne), placé sous la semaine : la séance du jour reste en tête.
   const showUpsellBanner = !isCoachView && !athlete?.is_coach && athlete?.subscription_status !== 'active' && !!onOpenSubscription
 
+  // Semaine de l'accueil (lundi → dimanche). Pas de calendrier daté en base : on y range
+  //  - les séances validées cette semaine, au jour de leur validation (completed_at) ;
+  //  - la prochaine séance de chaque programme (programEntries), sur son jour prévu s'il tombe plus
+  //    tard dans la semaine, sinon AUJOURD'HUI — une séance en retard n'est jamais "manquée", elle
+  //    reste à faire maintenant (même règle que l'ancienne carte "Séance du jour").
+  // Les séances récurrentes, hors calendrier, gardent leur propre encart plus bas.
+  const semaineDates = joursDeLaSemaine()
+  const todayIdx = semaineDates.indexOf(isoLocal(new Date()))
+  const toSeance = (s, prog, faite) => {
+    const nbExos = (s.exercises || []).filter(e => e.name).length
+    const exosLabel = `${nbExos} exercice${nbExos > 1 ? 's' : ''}`
+    const libre = !!prog.title?.startsWith('Séance libre')
+    return {
+      id: s.id,
+      titre: s.title || 'Séance',
+      type: typeSeance(s, prog),
+      faite,
+      programme: libre ? null : prog.title,
+      meta: faite ? exosLabel : `≈ ${estimateDurationMin(s.exercises)} minutes · ${exosLabel}`,
+      blocs: faite ? [] : blocsSeance(s.exercises),
+      decalable: !libre && !isCoachView && !!onPostponeSession,
+      is_coached: !!s.is_coached,
+    }
+  }
+  const semaine = semaineDates.map(date => ({ date, seances: [] }))
+  programs.forEach(prog => prog.sessions.forEach(s => {
+    if (s.session_type === 'recurrent' || s.hidden || !isValidated(s) || !completionDates[s.id]) return
+    const idx = semaineDates.indexOf(isoLocal(new Date(completionDates[s.id])))
+    if (idx !== -1) semaine[idx].seances.push(toSeance(s, prog, true))
+  }))
+  programEntries.forEach(({ session, program, dayKey }) => {
+    const idx = dayKey != null && dayKey > todayIdx ? dayKey : todayIdx
+    semaine[idx].seances.push(toSeance(session, program, false))
+  })
+
+  // Coach qui prévisualise un vrai client : ni objectifs ni ajout (voir le commentaire plus bas sur
+  // isCoachView) — sur son propre profil sportif, ce sont bien ses objectifs.
+  const showObjectivesRail = (!isCoachView || athlete?.is_coach) && !!athlete?.id
+  const objectifs = showObjectivesRail
+    ? (objectives || []).filter(o => !o.completed_at).map(o => ({ id: o.id, titre: o.text, date: o.target_date || null }))
+    : []
+  const prenom = (athlete?.name || '').trim().split(/\s+/)[0] || null
+
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {showUpsellBanner && (
-        <button onClick={onOpenSubscription} style={{
-          display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', margin: '0 2px',
-          background: 'var(--beige)', border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-pill-radius)',
-          padding: '10px 14px', cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          <span style={{ display: 'flex', flexShrink: 0, color: 'var(--bordeaux)' }}><LockSimpleOpen size={17} weight="light" /></span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--bordeaux)', lineHeight: 1.25 }}>
-              Tu es en accès gratuit
-            </span>
-            <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ostryk-text2)', lineHeight: 1.3 }}>
-              Débloque tous les programmes
-            </span>
-          </span>
-          <CaretRight size={13} weight="bold" color="var(--vert-foret)" style={{ flexShrink: 0 }} />
-        </button>
-      )}
-
-      {recurringDisplayEntries.length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text2)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Séance récurrente</div>
-          {recurringDisplayEntries.length === 1 ? (
-            renderDayCard(recurringDisplayEntries[0], true)
-          ) : (
-            <SwipeCarousel activeColor="var(--bordeaux)" peek slides={recurringDisplayEntries.map((entry, i) => ({
-              key: entry.session.id,
-              content: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text3)', textAlign: 'center' }}>
-                    {i + 1}/{recurringDisplayEntries.length}
-                  </div>
-                  {renderDayCard(entry, i === 0)}
-                </div>
-              ),
-            }))} />
+    <>
+      <AccueilClient
+        athlete={athlete ? { prenom, is_1to1_client: !!athlete.is_1to1_client } : null}
+        objectifs={objectifs}
+        semaine={semaine}
+        programmes={catalogue.slice(0, 6).map(p => ({
+          id: p.id,
+          titre: p.title,
+          sousTitre: `${p.sessionCount} séance${p.sessionCount > 1 ? 's' : ''}`,
+        }))}
+        onCommencerSeance={s => openSession(s.id)}
+        onOuvrirSeance={s => openSession(s.id)}
+        onDecalerSeance={onPostponeSession && !isCoachView ? s => setPostponeTarget(s) : null}
+        onAjouterObjectif={showObjectivesRail ? () => setShowObjectives(true) : null}
+        onOuvrirObjectifs={showObjectivesRail ? () => setShowObjectives(true) : null}
+        onOuvrirProgramme={() => setActiveTab?.('templates')}
+      >
+        <div style={{ padding: '0 14px 16px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {showUpsellBanner && (
+            <button onClick={onOpenSubscription} style={{
+              display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left',
+              background: 'var(--card-white)', border: '1px solid var(--ostryk-border)', borderRadius: 14,
+              padding: '10px 14px', cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+              <span style={{ display: 'flex', flexShrink: 0, color: 'var(--bordeaux)' }}><LockSimpleOpen size={17} weight="light" /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--bordeaux)', lineHeight: 1.25 }}>
+                  Tu es en accès gratuit
+                </span>
+                <span style={{ display: 'block', fontSize: 11.5, color: '#625B50', lineHeight: 1.3 }}>
+                  Débloque tous les programmes
+                </span>
+              </span>
+              <CaretRight size={13} weight="bold" color="var(--vert-foret)" style={{ flexShrink: 0 }} />
+            </button>
           )}
-        </div>
-      )}
 
-      {programEntries.length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text2)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Séance du jour</div>
-          {programEntries.length === 1 ? (
-            renderDayCard(programEntries[0], recurringDisplayEntries.length === 0)
-          ) : (
-            <SwipeCarousel activeColor="var(--bordeaux)" peek slides={programEntries.map((entry, i) => ({
-              key: entry.session.id,
-              content: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text3)', textAlign: 'center' }}>
-                    {i + 1}/{programEntries.length}
-                  </div>
-                  {renderDayCard(entry, recurringDisplayEntries.length === 0 && i === 0)}
-                </div>
-              ),
-            }))} />
-          )}
-        </div>
-      )}
-
-      {pastEntries.length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text2)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <ClockCounterClockwise size={13} weight="light" /> Séances passées
-          </div>
-          <div style={{ background: 'var(--card-white)', border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-card-radius)', margin: '0 2px', overflow: 'hidden' }}>
-            {visiblePast.map((entry, i) => (
-              <button key={entry.session.id} onClick={() => openSession(entry.session.id)} style={{
-                display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
-                background: 'none', border: 'none', borderTop: i > 0 ? '1px solid var(--ostryk-border)' : 'none',
-                padding: '12px 14px', cursor: 'pointer', fontFamily: 'inherit',
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--bordeaux)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {entry.session.title || 'Séance'}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--ostryk-text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {[
-                      entry.date ? new Date(entry.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : null,
-                      entry.program.title,
-                    ].filter(Boolean).join(' · ')}
-                  </div>
-                </div>
-                {entry.skipped && (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--ostryk-text3)', border: '1px solid var(--ostryk-border)', borderRadius: 20, padding: '2px 7px', flexShrink: 0 }}>Non faite</span>
-                )}
-                <CaretRight size={14} weight="bold" color="var(--vert-foret)" style={{ flexShrink: 0 }} />
-              </button>
-            ))}
-            {pastEntries.length > 5 && (
-              <button onClick={() => setShowAllPast(v => !v)} style={{
-                background: 'none', border: 'none', borderTop: '1px solid var(--ostryk-border)', width: '100%',
-                padding: '10px 14px', fontSize: 12, fontWeight: 700, color: 'var(--vert-foret)', cursor: 'pointer', fontFamily: 'inherit',
-              }}>
-                {showAllPast ? 'Réduire' : `Voir tout (${pastEntries.length})`}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* isCoachView (?coach=1) est vrai à la fois quand un coach prévisualise un VRAI client et
-          quand il consulte son propre profil sportif via "Switch to athlete" (voir backHref dans
-          app/s/[token]/page.js — même distinction déjà faite là-bas) : dans ce second cas ce sont
-          bien ses objectifs perso, pas ceux d'un client, ils doivent rester visibles. Placé après
-          Séance récurrente/Séance du jour (plutôt qu'en tête) pour que la séance à faire reste
-          visible sans scroll — un objectif avec échéance ne doit pas la repousser sous la ligne
-          de flottaison. */}
-      {(!isCoachView || athlete?.is_coach) && athlete?.id && (
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ostryk-text2)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }}>Objectifs</div>
-          <ObjectivesBlock athleteId={athlete.id} objectives={objectives} setObjectives={setObjectives} isCoach={false} bare />
-        </div>
-      )}
-
-      {noteBlocks.map(b => (
-        <div key={b.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', overflow: 'hidden' }}>
-          {b.title && (
-            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{b.title}</span>
+          {recurringDisplayEntries.length > 0 && (
+            <div>
+              <h2 style={titreSection}>Séance récurrente</h2>
+              {recurringDisplayEntries.length === 1 ? (
+                renderDayCard(recurringDisplayEntries[0], false)
+              ) : (
+                <SwipeCarousel activeColor="var(--bordeaux)" peek slides={recurringDisplayEntries.map((entry, i) => ({
+                  key: entry.session.id,
+                  content: (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#625B50', textAlign: 'center' }}>
+                        {i + 1}/{recurringDisplayEntries.length}
+                      </div>
+                      {renderDayCard(entry, false)}
+                    </div>
+                  ),
+                }))} />
+              )}
             </div>
           )}
-          {b.content && (
-            <div className="font-editorial" style={{ padding: 14, fontSize: 14, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{b.content}</div>
-          )}
-        </div>
-      ))}
 
-      {leaderGroups.map(g => (
-        <div key={g.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', overflow: 'hidden' }}>
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 700, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <UsersThree size={14} /> {g.name}
-          </div>
-          {g.sessions.map(s => (
-            <div key={s.id} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--border)',
-            }}>
-              <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{s.title || 'Séance'}</span>
-              {g.canLaunch && (
-                <button onClick={() => router.push(`/s/${token}/groupe/${s.id}`)} style={{
-                  background: s.ranToday ? 'var(--bg2)' : 'var(--green)', color: s.ranToday ? 'var(--text2)' : '#fff',
-                  border: s.ranToday ? '1px solid var(--border2)' : 'none', borderRadius: 20, padding: '6px 12px',
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
-                }}>
-                  <Play size={11} weight="fill" />{s.ranToday ? 'Modifier' : 'Lancer'}
-                </button>
+          {pastEntries.length > 0 && (
+            <div>
+              <h2 style={{ ...titreSection, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <ClockCounterClockwise size={13} weight="light" /> Séances passées
+              </h2>
+              <div style={{ background: 'var(--card-white)', borderRadius: 20, overflow: 'hidden' }}>
+                {visiblePast.map((entry, i) => (
+                  <button key={entry.session.id} onClick={() => openSession(entry.session.id)} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+                    background: 'none', border: 'none', borderTop: i > 0 ? '1px solid var(--ostryk-border)' : 'none',
+                    padding: '12px 16px', cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--bordeaux)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entry.session.title || 'Séance'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#625B50', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {[
+                          entry.date ? new Date(entry.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : null,
+                          entry.program.title,
+                        ].filter(Boolean).join(' · ')}
+                      </div>
+                    </div>
+                    {entry.skipped && (
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#625B50', border: '1px solid var(--ostryk-border)', borderRadius: 20, padding: '2px 7px', flexShrink: 0 }}>Non faite</span>
+                    )}
+                    <CaretRight size={14} weight="bold" color="var(--vert-foret)" style={{ flexShrink: 0 }} />
+                  </button>
+                ))}
+                {pastEntries.length > 5 && (
+                  <button onClick={() => setShowAllPast(v => !v)} style={{
+                    background: 'none', border: 'none', borderTop: '1px solid var(--ostryk-border)', width: '100%',
+                    padding: '12px 16px', fontSize: 12, fontWeight: 700, color: 'var(--vert-foret)', cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                    {showAllPast ? 'Réduire' : `Voir tout (${pastEntries.length})`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {noteBlocks.map(b => (
+            <div key={b.id} style={{ background: 'var(--card-white)', borderRadius: 20, overflow: 'hidden' }}>
+              {b.title && (
+                <div style={{ padding: '14px 16px 0' }}>
+                  <h2 style={{ ...styleLibelleSection, fontWeight: 400 }}>{b.title}</h2>
+                </div>
+              )}
+              {b.content && (
+                <div className="font-editorial" style={{ padding: '10px 16px 16px', fontSize: 14, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{b.content}</div>
               )}
             </div>
           ))}
-        </div>
-      ))}
 
-      {programs.length === 0 && (
-        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: '40px 20px', border: '1px dashed var(--border2)', borderRadius: 'var(--rl)', background: 'var(--bg)' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><ClipboardText size={36} /></div>
-          <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Aucun programme actif</div>
-          {!isCoachView && (
-            <>
-              <div style={{ fontSize: 13, marginBottom: 16 }}>Sélectionne ton premier programme pour commencer.</div>
-              <button onClick={() => setActiveTab?.('templates')} style={{
-                background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--rl)',
-                padding: '11px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              }}>
-                Choisir un programme
-              </button>
-            </>
+          {leaderGroups.map(g => (
+            <div key={g.id}>
+              <h2 style={{ ...titreSection, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <UsersThree size={14} /> {g.name}
+              </h2>
+              <div style={{ background: 'var(--card-white)', borderRadius: 20, overflow: 'hidden' }}>
+                {g.sessions.map((s, i) => (
+                  <div key={s.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderTop: i > 0 ? '1px solid var(--ostryk-border)' : 'none',
+                  }}>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{s.title || 'Séance'}</span>
+                    {g.canLaunch && (
+                      <button onClick={() => router.push(`/s/${token}/groupe/${s.id}`)} style={{
+                        background: s.ranToday ? 'var(--bg2)' : 'var(--green)', color: s.ranToday ? 'var(--text2)' : '#fff',
+                        border: s.ranToday ? '1px solid var(--border2)' : 'none', borderRadius: 20, padding: '6px 12px',
+                        fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                      }}>
+                        <Play size={11} weight="fill" />{s.ranToday ? 'Modifier' : 'Lancer'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {programs.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#625B50', padding: '32px 20px', borderRadius: 20, background: 'var(--card-white)' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><ClipboardText size={32} weight="light" /></div>
+              <div style={{ fontFamily: 'var(--font-title)', fontSize: 18, color: 'var(--text)', marginBottom: 4 }}>Aucun programme actif</div>
+              {!isCoachView && (
+                <>
+                  <div style={{ fontSize: 13, marginBottom: 16 }}>Sélectionne ton premier programme pour commencer.</div>
+                  <button onClick={() => setActiveTab?.('templates')} style={{
+                    background: 'var(--vert-foret)', color: '#F5EFE6', border: 'none', borderRadius: 12,
+                    height: 48, padding: '0 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                    Choisir un programme
+                  </button>
+                </>
+              )}
+            </div>
           )}
+
+          {boardPrograms.length === 0 && programs.length > 0 && (
+            <div style={{ textAlign: 'center', color: '#625B50', fontSize: 13 }}>
+              Aucun programme épinglé au tableau de bord
+            </div>
+          )}
+        </div>
+      </AccueilClient>
+
+      {showObjectives && (
+        <div onClick={() => setShowObjectives(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Mes objectifs" style={{
+            background: 'var(--bg2)', width: '100%', maxWidth: 480, maxHeight: '85svh', overflowY: 'auto',
+            borderRadius: '20px 20px 0 0', padding: '18px 16px calc(24px + env(safe-area-inset-bottom, 0px))',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+              <h2 style={{ ...styleLibelleSection, fontWeight: 400, flex: 1 }}>Mes objectifs</h2>
+              <button onClick={() => setShowObjectives(false)} style={{ background: 'none', border: 'none', color: '#625B50', fontSize: 13, height: 44, padding: '0 4px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                Fermer
+              </button>
+            </div>
+            <ObjectivesBlock athleteId={athlete.id} objectives={objectives} setObjectives={setObjectives} isCoach={false} bare />
+          </div>
         </div>
       )}
 
-      {boardPrograms.length === 0 && programs.length > 0 && (
-        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: '20px', fontSize: 13 }}>
-          Aucun programme épinglé au tableau de bord
+      {postponeTarget && (
+        <div onClick={() => setPostponeTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Décaler la séance" style={{ background: 'var(--card-white)', borderRadius: 20, padding: 20, maxWidth: 320, width: '100%' }}>
+            <div style={{ fontFamily: 'var(--font-title)', fontSize: 18, marginBottom: 4 }}>Décaler « {postponeTarget.titre} »</div>
+            <div style={{ fontSize: 13, color: '#625B50', marginBottom: 14 }}>De combien de séances veux-tu la repousser dans ton programme ?</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[1, 2, 3].map(n => (
+                <button key={n} onClick={() => { onPostponeSession(postponeTarget.id, n); setPostponeTarget(null) }} style={{
+                  height: 46, borderRadius: 12, border: '1px solid #D9CFC1', background: 'none', fontSize: 14, color: 'var(--text)', cursor: 'pointer', fontFamily: 'inherit',
+                }}>
+                  {n} séance{n > 1 ? 's' : ''} plus tard
+                </button>
+              ))}
+              <button onClick={() => setPostponeTarget(null)} style={{ height: 44, background: 'none', border: 'none', color: '#625B50', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Annuler
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -418,7 +520,6 @@ export default function WodTab({
           onDismiss={() => setDismissedDayPickerIds(prev => new Set(prev).add(dayPickerProgram.id))}
         />
       )}
-
-    </div>
+    </>
   )
 }

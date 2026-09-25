@@ -1,13 +1,14 @@
 'use client'
 
-import { Barbell, ChartBar, Trophy, User } from '@phosphor-icons/react'
+import { ChartBar, House, User } from '@phosphor-icons/react'
 
+// Performances a été fusionné dans Stats : deux onglets à gauche du "+", un à droite. Chaque côté
+// prend la même largeur pour que le "+" reste centré.
 const TABS = [
-  { key: 'wod', label: 'Séance', Icon: Barbell },
+  { key: 'wod', label: 'Accueil', Icon: House },
   { key: 'stats', label: 'Stats', Icon: ChartBar },
 ]
 const TABS_RIGHT = [
-  { key: 'pr', label: 'Performances', Icon: Trophy },
   { key: 'profil', label: 'Profil', Icon: User },
 ]
 
@@ -45,7 +46,7 @@ export default function AthleteTabBar({ active, onChange, onAdd, addActive = fal
       display: 'flex', alignItems: 'center', paddingBottom: 'calc(env(safe-area-inset-bottom) + 14px)',
       maxWidth: 480, margin: '0 auto',
     }}>
-      {TABS.map(renderTab)}
+      <div style={{ flex: 1, display: 'flex' }}>{TABS.map(renderTab)}</div>
 
       <button onClick={onAdd} style={{
         flex: '0 0 auto', width: 48, height: 48, borderRadius: '50%', margin: '0 6px',
@@ -56,7 +57,7 @@ export default function AthleteTabBar({ active, onChange, onAdd, addActive = fal
         +
       </button>
 
-      {TABS_RIGHT.map(renderTab)}
+      <div style={{ flex: 1, display: 'flex' }}>{TABS_RIGHT.map(renderTab)}</div>
     </div>
   )
 }
