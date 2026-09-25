@@ -63,7 +63,7 @@ function sortMovements(list, sort) {
 
   if (key === 'youtube_url') {
     arr.sort((a, b) => {
-      const aHas = !!a.youtube_url, bHas = !!b.youtube_url
+      const aHas = !!(a.youtube_url || a.video_url), bHas = !!(b.youtube_url || b.video_url)
       if (aHas === bHas) return a.name.localeCompare(b.name, 'fr')
       const aFirst = dir === 'with' ? aHas : !aHas
       return aFirst ? -1 : 1
@@ -82,6 +82,10 @@ export default function MovementsPage() {
   const router = useRouter()
   const [movements, setMovements] = useState([])
   const [search, setSearch] = useState('')
+  // Fiches sans vidéo : souvent créées à la volée depuis le "#" d'un échauffement (éditeur de
+  // séance), où la vidéo est facultative. Sans elle, le mouvement reste en texte chez le sportif
+  // et n'apparaît pas dans le carrousel — ce filtre permet de les retrouver pour les compléter.
+  const [sansVideoSeulement, setSansVideoSeulement] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(emptyForm())
   const [showCreate, setShowCreate] = useState(false)
@@ -176,11 +180,14 @@ export default function MovementsPage() {
     })
   }
 
-  const filtered = movements.filter(m =>
+  // Deux colonnes possibles pour la vidéo : youtube_url (saisie ici) et video_url (plus ancienne).
+  const aUneVideo = m => !!(m.youtube_url || m.video_url)
+  const nbSansVideo = movements.filter(m => !aUneVideo(m)).length
+  const filtered = movements.filter(m => (!sansVideoSeulement || !aUneVideo(m)) && (
     m.name.toLowerCase().includes(search.toLowerCase()) ||
     (m.muscles || '').toLowerCase().includes(search.toLowerCase()) ||
     (m.equipment || []).join(' ').toLowerCase().includes(search.toLowerCase())
-  )
+  ))
   const sorted = sortMovements(filtered, sort)
 
   const inputStyle = {
@@ -245,8 +252,8 @@ export default function MovementsPage() {
         )}
 
         {/* Barre de recherche */}
-        <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ position: 'relative' }}>
+        <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 240px' }}>
             <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', color: 'var(--text3)' }}><MagnifyingGlass size={14} /></span>
             <input
               placeholder="Rechercher par nom, muscle, matériel…"
@@ -255,6 +262,13 @@ export default function MovementsPage() {
               style={{ ...inputStyle, paddingLeft: 34, background: 'var(--bg2)', fontSize: 14 }}
             />
           </div>
+          <button type="button" aria-pressed={sansVideoSeulement} onClick={() => setSansVideoSeulement(v => !v)} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, height: 36, padding: '0 14px', borderRadius: 20,
+            border: `1px solid ${sansVideoSeulement ? '#A07A3F' : 'var(--ostryk-border-input)'}`, cursor: 'pointer', fontFamily: 'inherit',
+            background: sansVideoSeulement ? '#A07A3F' : 'var(--bg)', color: sansVideoSeulement ? '#fff' : 'var(--text2)', fontSize: 13, fontWeight: 600,
+          }}>
+            <VideoCamera size={14} /> Sans vidéo ({nbSansVideo})
+          </button>
         </div>
 
         {/* En-tête colonnes */}
@@ -281,7 +295,7 @@ export default function MovementsPage() {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {sorted.length === 0 && (
             <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
-              {search ? 'Aucun résultat pour cette recherche' : 'Aucun mouvement — clique sur "+ Ajouter"'}
+              {sansVideoSeulement && !search ? 'Toutes les fiches ont une vidéo' : search ? 'Aucun résultat pour cette recherche' : 'Aucun mouvement — clique sur "+ Ajouter"'}
             </div>
           )}
 
@@ -344,13 +358,15 @@ export default function MovementsPage() {
                     ))}
                   </div>
                   <div style={{ flex: 1 }}>
-                    {m.youtube_url
-                      ? <a href={m.youtube_url} target="_blank" rel="noreferrer"
+                    {aUneVideo(m)
+                      ? <a href={m.youtube_url || m.video_url} target="_blank" rel="noreferrer"
                           onClick={e => e.stopPropagation()}
                           style={{ fontSize: 12, color: 'var(--green)', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           ▶ Vidéo
                         </a>
-                      : <span style={{ color: 'var(--border2)', fontSize: 13 }}>—</span>
+                      : <span style={{ fontSize: 11, fontWeight: 700, color: '#7A5B2C', background: '#FBF3E7', border: '1px solid #A07A3F55', borderRadius: 20, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+                          Vidéo à ajouter
+                        </span>
                     }
                   </div>
                   <div style={{ width: 72, display: 'flex', gap: 4, justifyContent: 'flex-end', flexShrink: 0 }}>
