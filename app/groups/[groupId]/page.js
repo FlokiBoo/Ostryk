@@ -68,6 +68,7 @@ async function copyProgramToAthletes(sourceProgram, targetAthleteIds, { coachId,
           program_id: newProg.id, order_index: sess.order_index, title: sess.title || '', source_session_id: sess.id,
           activation: sess.activation || null, coach_notes: sess.coach_notes || null,
           activation_videos: sess.activation_videos || [], circuits: sess.circuits || [],
+          warmup_content: sess.warmup_content || null, cooldown_content: sess.cooldown_content || null,
           session_type: sess.session_type || null, recurring_daily_target: sess.recurring_daily_target ?? null,
           week_number: sess.week_number, day_of_week: sess.day_of_week ?? null, hidden_until_run: !!sess.hidden_until_run,
         })
@@ -324,6 +325,7 @@ export default function GroupDetailPage({ params }) {
         activation: s.activation || null, coach_notes: s.coach_notes || null,
         activation_videos: s.activation_videos || [], activation_links: s.activation_links || {},
         warmup_block: s.warmup_block || null, cooldown_block: s.cooldown_block || null,
+        warmup_content: s.warmup_content || null, cooldown_content: s.cooldown_content || null,
         session_type: s.session_type || null, recurring_daily_target: s.recurring_daily_target ?? null,
         materiel: s.materiel || null, week_number: s.week_number, day_of_week: s.day_of_week,
       })

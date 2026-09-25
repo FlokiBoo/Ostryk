@@ -86,7 +86,7 @@ export async function GET(request, { params }) {
           ...p,
           program_sessions: (p.program_sessions || []).map(s =>
             lockedIds.has(s.id)
-              ? { ...s, locked: true, program_exercises: [], activation: null, coach_notes: null, circuits: [], activation_videos: [] }
+              ? { ...s, locked: true, program_exercises: [], activation: null, coach_notes: null, circuits: [], activation_videos: [], warmup_content: null, cooldown_content: null }
               : s
           ),
         }
@@ -111,7 +111,7 @@ export async function GET(request, { params }) {
       ...p,
       program_sessions: (p.program_sessions || []).map(s => {
         if (!s.hidden_until_run || revealedKeys.has(`${p.group_id}::${s.source_session_id}`)) return s
-        return { ...s, hidden: true, program_exercises: [], activation: null, coach_notes: null, circuits: [], activation_videos: [] }
+        return { ...s, hidden: true, program_exercises: [], activation: null, coach_notes: null, circuits: [], activation_videos: [], warmup_content: null, cooldown_content: null }
       }),
     }
   })

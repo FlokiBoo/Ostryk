@@ -414,7 +414,7 @@ function ProgramEditorPage({ params }) {
       if (!clientSess) {
         // Nouvelle séance côté template, jamais vue par ce client : on la crée
         const { data: created } = await supabase.from('program_sessions')
-          .insert({ program_id: cp.id, order_index: sessOrderIndex, title: fields.title, source_session_id: sessId, session_type: fields.session_type || null, materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run })
+          .insert({ program_id: cp.id, order_index: sessOrderIndex, title: fields.title, source_session_id: sessId, session_type: fields.session_type || null, materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run, warmup_content: fields.warmup_content ?? null, cooldown_content: fields.cooldown_content ?? null })
           .select().single()
         clientSess = created
         if (!clientSess) continue
@@ -429,6 +429,7 @@ function ProgramEditorPage({ params }) {
           coach_notes: fields.coach_notes, activation_videos: fields.activation_videos,
           circuits: fields.circuits, session_type: fields.session_type || null,
           materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run,
+          warmup_content: fields.warmup_content ?? null, cooldown_content: fields.cooldown_content ?? null,
         }).eq('id', clientSess.id)
       }
 
@@ -502,6 +503,7 @@ function ProgramEditorPage({ params }) {
         coach_notes: s.coach_notes || null, activation_videos: s.activation_videos || [],
         circuits: s.circuits || [], session_type: s.session_type || null,
         materiel: s.materiel || null, day_of_week: s.day_of_week ?? null, hidden_until_run: !!s.hidden_until_run,
+        warmup_content: s.warmup_content || null, cooldown_content: s.cooldown_content || null,
       recurring_daily_target: s.session_type === 'recurrent' ? (s.recurring_daily_target || 1) : null,
       }
       const exos = s.exercises.filter(e => e.name.trim()).map((e, j) => ({
@@ -629,6 +631,7 @@ function ProgramEditorPage({ params }) {
         activation: srcSession.activation || null, coach_notes: srcSession.coach_notes || null,
         activation_videos: srcSession.activation_videos || [], circuits: srcSession.circuits || [],
         warmup_block: srcSession.warmup_block || null, cooldown_block: srcSession.cooldown_block || null,
+        warmup_content: srcSession.warmup_content || null, cooldown_content: srcSession.cooldown_content || null,
         materiel: srcSession.materiel || null, activity_mode: srcSession.activity_mode || 'standard',
       })
       .select().single()
@@ -667,6 +670,7 @@ function ProgramEditorPage({ params }) {
         // addSessionFromWorkout ci-dessus pour le pattern correct), ce qui faisait disparaître le
         // circuit d'une séance dupliquée sans toucher à ses exercices.
         circuits: s.circuits || [], warmup_block: s.warmup_block || null, cooldown_block: s.cooldown_block || null,
+        warmup_content: s.warmup_content || null, cooldown_content: s.cooldown_content || null,
         activity_mode: s.activity_mode || 'standard', timer_config: s.timer_config || null,
         // Garde le même jour que l'originale (au lieu de retomber "non planifiée") : dans la
         // grille Jour 1→N, dupliquer une séance sert surtout à en poser une copie juste à côté,
@@ -823,6 +827,7 @@ function ProgramEditorPage({ params }) {
             program_id: newProg.id, order_index: sess.order_index, title: sess.title || '', source_session_id: sess.id,
             activation: sess.activation || null, coach_notes: sess.coach_notes || null,
             activation_videos: sess.activation_videos || [], circuits: sess.circuits || [],
+            warmup_content: sess.warmup_content || null, cooldown_content: sess.cooldown_content || null,
             session_type: sess.session_type || null, recurring_daily_target: sess.recurring_daily_target ?? null,
             week_number: sess.week_number, day_of_week: sess.day_of_week ?? null, hidden_until_run: !!sess.hidden_until_run,
           })
