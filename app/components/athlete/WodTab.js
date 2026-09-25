@@ -6,7 +6,8 @@ import { WEEK_DAYS } from '@/lib/weekDays'
 import ObjectivesBlock from '@/app/components/ObjectivesBlock'
 import SwipeCarousel from './SwipeCarousel'
 import ChooseDaysModal from './ChooseDaysModal'
-import AccueilClient, { joursDeLaSemaine, isoLocal, styleLibelleSection } from './AccueilClient'
+import AccueilClient, { joursDeLaSemaine, isoLocal, parseJour, styleLibelleSection } from './AccueilClient'
+import { addDays } from '@/lib/programSchedule'
 
 // Un programme multi-séances que personne n'a daté (ni le coach via day_of_week, ni le sportif via
 // athlete_days_of_week) doit d'abord demander son rythme hebdomadaire — c'est ChooseDaysModal, plus
@@ -54,6 +55,53 @@ function blocsSeance(exercises) {
 
 const titreSection = { ...styleLibelleSection, fontWeight: 400, marginBottom: 12 }
 
+const dateLisible = (iso) => parseJour(iso).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+
+// "Décaler" : le sportif choisit le jour où il fera la séance ; les suivantes du programme se
+// recalent derrière (voir lib/programSchedule.js). Raccourcis demain / après-demain + calendrier.
+function DecalerModal({ seance, onConfirm, onClose }) {
+  const today = isoLocal(new Date())
+  const depart = seance.jour && seance.jour >= today ? seance.jour : today
+  const [date, setDate] = useState(addDays(depart, 1))
+  const [saving, setSaving] = useState(false)
+  const raccourcis = [
+    { label: 'Demain', value: addDays(today, 1) },
+    { label: 'Après-demain', value: addDays(today, 2) },
+  ]
+  const choix = (actif) => ({
+    flex: 1, height: 44, borderRadius: 12, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+    border: actif ? 'none' : '1px solid #D9CFC1', background: actif ? 'var(--vert-foret)' : 'none', color: actif ? '#F5EFE6' : 'var(--text)',
+  })
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Décaler la séance" style={{ background: 'var(--card-white)', borderRadius: 20, padding: 20, maxWidth: 340, width: '100%' }}>
+        <div style={{ fontFamily: 'var(--font-title)', fontSize: 18, marginBottom: 4 }}>Décaler « {seance.titre} »</div>
+        <div style={{ fontSize: 13, color: '#625B50', marginBottom: 16 }}>
+          Choisis le jour où tu la feras. Les séances suivantes du programme se décalent derrière, dans le même ordre.
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          {raccourcis.map(r => (
+            <button key={r.value} type="button" onClick={() => setDate(r.value)} style={choix(date === r.value)}>{r.label}</button>
+          ))}
+        </div>
+        <label style={{ display: 'block', fontSize: 12, color: '#625B50', marginBottom: 6 }} htmlFor="decaler-date">Ou une autre date</label>
+        <input id="decaler-date" type="date" min={today} value={date} onChange={e => e.target.value && setDate(e.target.value)} style={{
+          width: '100%', height: 44, borderRadius: 12, border: '1px solid #D9CFC1', padding: '0 12px', fontSize: 16, fontFamily: 'inherit', boxSizing: 'border-box', background: 'none', color: 'var(--text)',
+        }} />
+        <button type="button" disabled={saving || date < today} onClick={async () => { setSaving(true); await onConfirm(date); onClose() }} style={{
+          width: '100%', marginTop: 16, height: 48, borderRadius: 12, border: 'none', background: 'var(--vert-foret)', color: '#F5EFE6',
+          fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1,
+        }}>
+          {saving ? 'Décalage…' : `Décaler au ${dateLisible(date)}`}
+        </button>
+        <button type="button" onClick={onClose} style={{ width: '100%', height: 44, marginTop: 4, background: 'none', border: 'none', color: '#625B50', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+          Annuler
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // Page d'accueil (onglet "Accueil") : rendue par AccueilClient — objectifs, semaine, séance du
 // jour, catalogue — et complétée en dessous par ce qui n'entre pas dans la semaine (séances
 // récurrentes, historique, notes du coach, groupes).
@@ -72,7 +120,7 @@ export default function WodTab({
   recurringTodayCounts = {},
   athlete, objectives, setObjectives,
   onUpdateProgramDays,
-  onPostponeSession,
+  onRescheduleSession,
 }) {
   const [leaderGroups, setLeaderGroups] = useState([])
   // Programmes pour lesquels l'athlète a fermé le popup de choix de jours sans valider — masqué
@@ -81,7 +129,7 @@ export default function WodTab({
   const [dismissedDayPickerIds, setDismissedDayPickerIds] = useState(new Set())
   const [showAllPast, setShowAllPast] = useState(false)
   const [showObjectives, setShowObjectives] = useState(false)
-  const [postponeTarget, setPostponeTarget] = useState(null)
+  const [decalerTarget, setDecalerTarget] = useState(null)
   const [catalogue, setCatalogue] = useState([])
 
   const openSession = (sessionId) => {
@@ -264,15 +312,18 @@ export default function WodTab({
   // mais volontairement fin (une ligne), placé sous la semaine : la séance du jour reste en tête.
   const showUpsellBanner = !isCoachView && !athlete?.is_coach && athlete?.subscription_status !== 'active' && !!onOpenSubscription
 
-  // Semaine de l'accueil (lundi → dimanche). Pas de calendrier daté en base : on y range
+  // Semaine de l'accueil (lundi → dimanche). On y range
   //  - les séances validées cette semaine, au jour de leur validation (completed_at) ;
-  //  - la prochaine séance de chaque programme (programEntries), sur son jour prévu s'il tombe plus
-  //    tard dans la semaine, sinon AUJOURD'HUI — une séance en retard n'est jamais "manquée", elle
-  //    reste à faire maintenant (même règle que l'ancienne carte "Séance du jour").
+  //  - la prochaine séance de chaque programme (programEntries) : à sa date si le sportif l'a
+  //    décalée (program_sessions.date), sinon sur son jour prévu s'il tombe plus tard dans la
+  //    semaine, sinon AUJOURD'HUI — une séance en retard n'est jamais "manquée", elle reste à
+  //    faire maintenant (même règle que l'ancienne carte "Séance du jour") ;
+  //  - les séances suivantes déjà datées par un "Décaler", sur leur jour.
   // Les séances récurrentes, hors calendrier, gardent leur propre encart plus bas.
   const semaineDates = joursDeLaSemaine()
   const todayIdx = semaineDates.indexOf(isoLocal(new Date()))
-  const toSeance = (s, prog, faite) => {
+  const todayIso = semaineDates[todayIdx]
+  const toSeance = (s, prog, faite, jour = null) => {
     const nbExos = (s.exercises || []).filter(e => e.name).length
     const exosLabel = `${nbExos} exercice${nbExos > 1 ? 's' : ''}`
     const libre = !!prog.title?.startsWith('Séance libre')
@@ -286,7 +337,8 @@ export default function WodTab({
       programme: libre ? null : (prog.title || '').replace(/^programme\s*[:\-–—]?\s*/i, '') || prog.title,
       meta: faite ? exosLabel : `≈ ${estimateDurationMin(s.exercises)} minutes · ${exosLabel}`,
       blocs: faite ? [] : blocsSeance(s.exercises),
-      decalable: !libre && !isCoachView && !!onPostponeSession,
+      jour,
+      decalable: !isCoachView && !!onRescheduleSession,
       is_coached: !!s.is_coached,
     }
   }
@@ -296,9 +348,20 @@ export default function WodTab({
     const idx = semaineDates.indexOf(isoLocal(new Date(completionDates[s.id])))
     if (idx !== -1) semaine[idx].seances.push(toSeance(s, prog, true))
   }))
+  // Prochaine séance datée au-delà de dimanche : annoncée sur un jour de repos ("Prochaine séance").
+  let prochaineApres = null
   programEntries.forEach(({ session, program, dayKey }) => {
-    const idx = dayKey != null && dayKey > todayIdx ? dayKey : todayIdx
-    semaine[idx].seances.push(toSeance(session, program, false))
+    const iso = session.date
+      ? (session.date < todayIso ? todayIso : session.date)
+      : semaineDates[dayKey != null && dayKey > todayIdx ? dayKey : todayIdx]
+    const idx = semaineDates.indexOf(iso)
+    if (idx !== -1) semaine[idx].seances.push(toSeance(session, program, false, iso))
+    else if (!prochaineApres || iso < prochaineApres.date) prochaineApres = { titre: session.title || 'Séance', date: iso }
+    program.sessions.forEach(s => {
+      if (s.id === session.id || s.session_type === 'recurrent' || s.hidden || isValidated(s) || !s.date || s.date <= iso) return
+      const j = semaineDates.indexOf(s.date)
+      if (j !== -1) semaine[j].seances.push(toSeance(s, program, false, s.date))
+    })
   })
 
   // Coach qui prévisualise un vrai client : ni objectifs ni ajout (voir le commentaire plus bas sur
@@ -322,7 +385,8 @@ export default function WodTab({
         }))}
         onCommencerSeance={s => openSession(s.id)}
         onOuvrirSeance={s => openSession(s.id)}
-        onDecalerSeance={onPostponeSession && !isCoachView ? s => setPostponeTarget(s) : null}
+        prochaineHorsSemaine={prochaineApres}
+        onDecalerSeance={onRescheduleSession && !isCoachView ? s => setDecalerTarget(s) : null}
         onAjouterObjectif={showObjectivesRail ? () => setShowObjectives(true) : null}
         onOuvrirObjectifs={showObjectivesRail ? () => setShowObjectives(true) : null}
         onOuvrirProgramme={() => setActiveTab?.('templates')}
@@ -491,25 +555,12 @@ export default function WodTab({
         </div>
       )}
 
-      {postponeTarget && (
-        <div onClick={() => setPostponeTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Décaler la séance" style={{ background: 'var(--card-white)', borderRadius: 20, padding: 20, maxWidth: 320, width: '100%' }}>
-            <div style={{ fontFamily: 'var(--font-title)', fontSize: 18, marginBottom: 4 }}>Décaler « {postponeTarget.titre} »</div>
-            <div style={{ fontSize: 13, color: '#625B50', marginBottom: 14 }}>De combien de séances veux-tu la repousser dans ton programme ?</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[1, 2, 3].map(n => (
-                <button key={n} onClick={() => { onPostponeSession(postponeTarget.id, n); setPostponeTarget(null) }} style={{
-                  height: 46, borderRadius: 12, border: '1px solid #D9CFC1', background: 'none', fontSize: 14, color: 'var(--text)', cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                  {n} séance{n > 1 ? 's' : ''} plus tard
-                </button>
-              ))}
-              <button onClick={() => setPostponeTarget(null)} style={{ height: 44, background: 'none', border: 'none', color: '#625B50', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
+      {decalerTarget && (
+        <DecalerModal
+          seance={decalerTarget}
+          onConfirm={date => onRescheduleSession(decalerTarget.id, date)}
+          onClose={() => setDecalerTarget(null)}
+        />
       )}
 
       {!isCoachView && dayPickerProgram && onUpdateProgramDays && (

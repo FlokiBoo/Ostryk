@@ -350,7 +350,7 @@ function CarteSeance({ date, seance, enAvant, onCommencer, onDecaler, onOuvrir }
   );
 }
 
-function JourSelectionne({ entree, prochaine, onCommencer, onDecaler, onOuvrir }) {
+function JourSelectionne({ entree, prochaine, prochaineHorsSemaine, onCommencer, onDecaler, onOuvrir }) {
   const { date, seances } = entree;
 
   if (seances.length === 0) {
@@ -362,8 +362,10 @@ function JourSelectionne({ entree, prochaine, onCommencer, onDecaler, onOuvrir }
         </p>
         <p style={{ fontSize: 13, color: T.texteCorps, margin: 0 }}>
           {prochaine
-            ? `Prochaine séance : ${prochaine.seances[0].titre}, ${dateCourte(prochaine.date)}`
-            : "Aucune séance à venir"}
+            ? `Prochaine séance : ${prochaine.seances.find((s) => !s.faite).titre}, ${dateCourte(prochaine.date)}`
+            : prochaineHorsSemaine
+              ? `Prochaine séance : ${prochaineHorsSemaine.titre}, ${dateLongue(prochaineHorsSemaine.date)}`
+              : "Aucune séance à venir"}
         </p>
       </div>
     );
@@ -403,6 +405,7 @@ export default function AccueilClient({
   programme = null,
   semaine = [],
   programmes = [],
+  prochaineHorsSemaine = null, // { titre, date } : prochaine séance après dimanche
   onCommencerSeance = () => {},
   onDecalerSeance = null,
   onOuvrirSeance = () => {},
@@ -634,6 +637,7 @@ export default function AccueilClient({
             <JourSelectionne
               entree={semaine[indexCourant]}
               prochaine={prochaine}
+              prochaineHorsSemaine={prochaineHorsSemaine}
               onCommencer={onCommencerSeance}
               onDecaler={onDecalerSeance}
               onOuvrir={onOuvrirSeance}

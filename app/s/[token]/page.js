@@ -887,6 +887,25 @@ function AthleteView({ params }) {
     }))
   }
 
+  // "Décaler" de l'accueil : date choisie pour la séance, séances suivantes recalées derrière
+  // (voir reschedule-session). L'ordre du programme ne bouge pas, seules les dates changent.
+  const rescheduleSession = async (sessId, date) => {
+    if (!athlete) return
+    if (!requireOnline()) return
+    const res = await fetch(`/api/athlete-view/${token}/reschedule-session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: sessId, date }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { alert('Erreur : ' + (json.error || 'impossible de décaler la séance')); return }
+    const dateById = new Map(json.dates.map(d => [d.id, d.date]))
+    setPrograms(prev => prev.map(p => (
+      p.sessions.some(s => dateById.has(s.id))
+        ? { ...p, sessions: p.sessions.map(s => (dateById.has(s.id) ? { ...s, date: dateById.get(s.id) } : s)) }
+        : p
+    )))
+  }
+
   const validate = async (sessId, progSessions, feedback = {}, opts = {}) => {
     if (!athlete) return
     const isUpdate = !!opts.isUpdate
@@ -1427,7 +1446,7 @@ function AthleteView({ params }) {
             onUpdateProgramDays={updateProgramDays} isGroupLeader={isGroupLeader}
             athlete={athlete} objectives={objectives} setObjectives={setObjectives}
             recurringTodayCounts={recurringTodayCounts}
-            onPostponeSession={postponeSession}
+            onRescheduleSession={rescheduleSession}
           />
         </div>
       )}
