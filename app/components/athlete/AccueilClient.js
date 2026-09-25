@@ -127,7 +127,9 @@ function CarteObjectif({ objectif, onOuvrir }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Pas de flex: 1 : le J-x suit le titre au lieu d'être collé au bord droit de la carte,
+            où il se confondait avec l'objectif suivant. */}
+        <div style={{ flex: "0 1 auto", minWidth: 0 }}>
           <p style={{ ...libelleSection, fontSize: 10, marginBottom: 5 }}>Objectif</p>
           <p
             style={{
