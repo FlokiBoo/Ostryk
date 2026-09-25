@@ -29,7 +29,7 @@ import {
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
 
-// Dupliqué depuis app/components/athlete/SessionPlayer.js (même convention que ce fichier :
+// Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
 // petit helper autonome plutôt qu'un import cross-fichier).
 function extractYouTubeId(url) {
   if (!url) return null

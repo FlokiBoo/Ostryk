@@ -1,0 +1,791 @@
+'use client'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Toast from '@/app/components/Toast'
+import { parseMusclesFromText } from '@/app/components/CelebrationModal'
+
+/*
+  Écran de séance (maquette Seance.jsx) — étape 1 : mode client, blocs uniquement (échauffement,
+  retour au calme et mode coach viendront dans les étapes suivantes, voir les consignes
+  d'intégration). Remplace l'ancien SessionPlayer exercice-par-exercice.
+
+  Un bloc = un exercice seul (séries classiques) ou une super série (exercices enchaînés, même
+  superset_group). Tour N = série N (set_index) de chaque exercice du bloc. Toutes les écritures
+  passent par les fonctions de la page (onEnsureExerciseSets / onSaveExerciseSet), donc par la file
+  hors ligne existante : aucune nouvelle logique de sauvegarde ici.
+
+  Une série est "faite" dès qu'elle porte une valeur saisie OU une prescription figée
+  (reps_prescribed / kg_prescribed, écrites à la validation du tour — lot A8). C'est ce qui permet
+  d'enregistrer un champ vidé comme absent (null) sans que la série redevienne "à faire" au
+  rechargement, ni que la prescription revienne à sa place.
+*/
+
+const T = {
+  beige: '#E8E0D5',
+  blanc: '#FFFFFF',
+  fond: '#F7F3EC',
+  bordeaux: '#6D1A22',
+  vert: '#2D3A30',
+  ocre: '#A07A3F',
+  texte: '#2D2620',
+  texteSec: '#625B50', // ≥ 4.5:1 sur beige et blanc (le #8a8378 de la maquette n'y est pas)
+  texteCorps: '#5A5348',
+  muted: '#B0A796',
+  bordure: '#D9CFC1',
+  clair: '#F5EFE6',
+  sable: '#F3ECE2',
+  sableClair: '#FBF3E7',
+  vertClair: '#E6EAE5',
+  videFond: '#FFF8F0',
+}
+const TITRE = 'var(--font-title)'
+
+/* ------------------------------------------------------------------ */
+/* Lecture des données de la séance                                     */
+/* ------------------------------------------------------------------ */
+
+// Repris de l'ancien SessionPlayer (même champ `rest`, texte libre saisi par le coach).
+function parseRestSeconds(raw) {
+  if (!raw) return null
+  const s = raw.toString().trim().toLowerCase().replace(/\s+/g, '').replace(',', '.')
+  const range = s.match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)(min|m|sec|s)?$/)
+  if (range) {
+    const avg = (parseFloat(range[1]) + parseFloat(range[2])) / 2
+    const unit = range[3]
+    return Math.round(unit === 'sec' || unit === 's' ? avg : avg * 60)
+  }
+  const minSec = s.match(/^(\d+(?:\.\d+)?)(?:min|m)(\d+)?$/)
+  if (minSec) return Math.round(parseFloat(minSec[1]) * 60 + (minSec[2] ? parseInt(minSec[2]) : 0))
+  const sec = s.match(/^(\d+(?:\.\d+)?)(?:sec|s)$/)
+  if (sec) return Math.round(parseFloat(sec[1]))
+  const colon = s.match(/^(\d+):(\d{1,2})$/)
+  if (colon) return parseInt(colon[1]) * 60 + parseInt(colon[2])
+  const bare = s.match(/^(\d+(?:\.\d+)?)$/)
+  if (bare) return Math.round(parseFloat(bare[1]))
+  return null
+}
+
+function extractYouTubeId(url) {
+  if (!url) return null
+  const patterns = [
+    /youtu\.be\/([a-zA-Z0-9_-]{6,})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/,
+    /youtube\.com\/watch\?v=([a-zA-Z0-9_-]{6,})/,
+    /youtube\.com\/embed\/([a-zA-Z0-9_-]{6,})/,
+  ]
+  for (const p of patterns) {
+    const m = url.match(p)
+    if (m) return m[1]
+  }
+  return null
+}
+
+// "8-10" → 8, "30s" → 30, "12" → 12 : la prescription reste un texte libre côté coach ; le champ
+// part de sa première valeur chiffrée.
+function premierNombre(v) {
+  if (v === null || v === undefined || v === '') return null
+  const m = String(v).replace(',', '.').match(/\d+(?:\.\d+)?/)
+  return m ? parseFloat(m[0]) : null
+}
+
+function uniteReps(v) {
+  const s = String(v ?? '').toLowerCase()
+  if (/\d\s*(s|sec|secondes?|")\b/.test(s) || /\d\s*"$/.test(s)) return 'secondes'
+  if (/\d\s*min/.test(s)) return 'minutes'
+  if (/\d\s*cal/.test(s)) return 'cal'
+  if (/\d\s*m\b/.test(s)) return 'mètres'
+  return 'reps'
+}
+
+// Exercices à plat → blocs (exercice seul, ou super série entière).
+function grouperEnBlocs(exos) {
+  const groupes = []
+  let i = 0
+  while (i < exos.length) {
+    const g = exos[i].superset_group
+    if (!g) { groupes.push([exos[i]]); i++; continue }
+    let j = i
+    while (j < exos.length && exos[j].superset_group === g) j++
+    groupes.push(exos.slice(i, j))
+    i = j
+  }
+  return groupes
+}
+
+function construireBlocs(session) {
+  const exos = (session.exercises || []).filter(e => e.name)
+  return grouperEnBlocs(exos).map((groupe, gi) => {
+    const lettre = String.fromCharCode(65 + gi)
+    return {
+      id: lettre,
+      tours: Math.max(1, ...groupe.map(e => parseInt(e.sets, 10) || 1)),
+      repos_sec: Math.max(0, ...groupe.map(e => parseRestSeconds(e.rest) || 0)),
+      enchaine: groupe.length > 1,
+      exercices: groupe.map((e, i) => {
+        const details = Array.isArray(e.set_details) ? e.set_details : []
+        const nbSeries = Math.max(1, parseInt(e.sets, 10) || 1)
+        const repsRef = details.find(d => d?.reps)?.reps ?? e.reps
+        const unite_reps = uniteReps(repsRef)
+        // Prescription explicite par série (set_details), ou, pour la première, les reps/kg de
+        // l'exercice. null quand le coach n'a rien écrit pour cette série : le tour reprend alors les
+        // valeurs du tour précédent (voir valeursTour).
+        const prescriptions = Array.from({ length: nbSeries }, (_, k) => {
+          const d = details[k] || {}
+          const repsTexte = d.reps || (k === 0 ? e.reps : null) || null
+          const kgBrut = d.kg ?? (k === 0 && e.kg !== undefined && e.kg !== '' ? e.kg : null)
+          if (!repsTexte && kgBrut === null) return null
+          const kg = kgBrut === null ? null : parseFloat(kgBrut)
+          return { reps: premierNombre(repsTexte), repsTexte: repsTexte ? String(repsTexte) : null, kg: Number.isNaN(kg) ? null : kg }
+        })
+        return {
+          id: e.id,
+          code: groupe.length > 1 ? `${lettre}${i + 1}` : lettre,
+          nom: e.name,
+          // Charge proposée sur tout exercice compté en répétitions (même au poids du corps, où elle
+          // reste simplement vide) ; pas sur un exercice au temps, aux calories ou à la distance.
+          unite: unite_reps === 'reps' ? 'kg' : undefined,
+          pas: 2.5,
+          unite_reps,
+          pas_reps: unite_reps === 'secondes' ? 5 : 1,
+          tempo: details.map(d => d?.tempo).find(Boolean) || null,
+          note: e.note || null,
+          video_url: e.video_url || null,
+          prescriptions,
+        }
+      }),
+    }
+  })
+}
+
+function musclesDeLaSeance(session) {
+  const exos = (session.exercises || []).filter(e => e.name)
+  const principaux = [...new Set(exos.flatMap(e => [
+    ...(e.movement_focus_groups ? e.movement_focus_groups.split(',') : []),
+    ...(e.focus_muscles ? e.focus_muscles.split(',') : []),
+  ]).map(m => m.trim()).filter(Boolean))]
+  const deduits = parseMusclesFromText(exos.map(e => e.movement_muscles || '').join(', '))
+  if (principaux.length === 0) return { principaux: deduits, secondaires: [] }
+  return { principaux, secondaires: deduits.filter(m => !principaux.includes(m)) }
+}
+
+const libelleMuscle = (m) => (m.charAt(0).toUpperCase() + m.slice(1)).replace(/-/g, ' ')
+
+/* ------------------------------------------------------------------ */
+/* Séries en base ↔ tours                                               */
+/* ------------------------------------------------------------------ */
+
+const rempli = (v) => v !== null && v !== undefined && v !== ''
+const serieFaite = (s) => !!s && [s.reps_done, s.kg_done, s.reps_prescribed, s.kg_prescribed].some(rempli)
+
+// Tours déjà validés d'un bloc : séries faites en tête de liste, pour TOUS les exercices du bloc.
+function toursValides(bloc, exerciseSets) {
+  return Math.min(...bloc.exercices.map(e => {
+    const sets = exerciseSets[e.id] || []
+    let n = 0
+    while (n < sets.length && serieFaite(sets[n])) n++
+    return n
+  }))
+}
+
+// Prescription qui s'applique au tour `index` : la sienne, sinon la dernière écrite avant lui (le
+// coach ne répète pas une série identique). Sert de référence (première flèche sur une case vide)
+// et de prescription figée à la validation.
+function prescriptionEffective(e, index) {
+  for (let k = Math.min(index, e.prescriptions.length - 1); k >= 0; k--) if (e.prescriptions[k]) return e.prescriptions[k]
+  return {}
+}
+
+// Valeurs proposées pour le tour `index` : sa prescription si elle existe, sinon celles du tour précédent.
+function valeursTour(bloc, index, precedent) {
+  const out = {}
+  bloc.exercices.forEach(e => {
+    const p = e.prescriptions[index]
+    if (p) out[e.id] = { kg: e.unite === 'kg' ? p.kg : null, reps: p.reps }
+    else out[e.id] = { kg: precedent?.[e.id]?.kg ?? null, reps: precedent?.[e.id]?.reps ?? null }
+  })
+  return out
+}
+
+// État initial d'un bloc à partir des séries en base : tours validés relus tels quels (un champ
+// vide reste vide), puis le tour suivant pré-rempli — ou, bloc déjà fini, retour sur son dernier tour.
+function etatInitialBloc(bloc, exerciseSets) {
+  const faits = toursValides(bloc, exerciseSets)
+  const liste = []
+  for (let i = 0; i < faits; i++) {
+    const t = {}
+    bloc.exercices.forEach(e => {
+      const s = (exerciseSets[e.id] || [])[i]
+      t[e.id] = { kg: e.unite === 'kg' && rempli(s.kg_done) ? parseFloat(s.kg_done) : null, reps: premierNombre(s.reps_done) }
+    })
+    liste.push(t)
+  }
+  if (faits === 0) return { liste: [valeursTour(bloc, 0, null)], courant: 0 }
+  if (faits < bloc.tours) return { liste: [...liste, valeursTour(bloc, faits, liste[faits - 1])], courant: faits }
+  return { liste, courant: faits - 1 }
+}
+
+/* ------------------------------------------------------------------ */
+/* Utilitaires d'affichage et hooks                                     */
+/* ------------------------------------------------------------------ */
+
+const fmt = (v) => (v === null || v === undefined ? '' : (Math.round(v * 10) / 10).toString().replace('.', ','))
+const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+function consigneBloc(bloc) {
+  const codes = bloc.exercices.map(e => e.code)
+  if (bloc.enchaine) {
+    const repos = bloc.repos_sec ? ` Repose-toi ${bloc.repos_sec} secondes, puis recommence.` : ''
+    const liste = `${codes.slice(0, -1).join(', puis ')}, puis ${codes[codes.length - 1]}`
+    return `Fais ${liste}.${repos}`
+  }
+  // Séries classiques : dans les données actuelles, un bloc non enchaîné n'a qu'un exercice.
+  const repos = bloc.repos_sec ? ` Repos ${bloc.repos_sec} secondes entre les séries.` : ''
+  if (codes.length === 1) return `Fais tes ${bloc.tours} série${bloc.tours > 1 ? 's' : ''} de ${codes[0]}.${repos}`
+  return `Fais tes ${bloc.tours} séries de ${codes[0]} avant de passer à ${codes[1]}.${repos}`
+}
+
+// Empêche l'écran de s'éteindre pendant la séance ; se ré-acquiert au retour au premier plan.
+function useKeepAwake() {
+  useEffect(() => {
+    let lock = null
+    let annule = false
+    const prendre = async () => {
+      try {
+        if ('wakeLock' in navigator) lock = await navigator.wakeLock.request('screen')
+      } catch { /* non supporté */ }
+    }
+    prendre()
+    const surVisibilite = () => { if (document.visibilityState === 'visible' && !annule) prendre() }
+    document.addEventListener('visibilitychange', surVisibilite)
+    return () => {
+      annule = true
+      document.removeEventListener('visibilitychange', surVisibilite)
+      if (lock) lock.release().catch(() => {})
+    }
+  }, [])
+}
+
+// Chrono basé sur un horodatage de fin : juste même après un passage en arrière-plan (le JS d'une
+// WebView est suspendu écran verrouillé), recalculé au retour au premier plan.
+function useChrono() {
+  const [etat, setEtat] = useState(null) // { fin: timestamp, duree: secondes }
+  const [restant, setRestant] = useState(0)
+  const timer = useRef(null)
+
+  useEffect(() => {
+    if (!etat) return undefined
+    const tick = () => {
+      const r = Math.max(0, Math.ceil((etat.fin - Date.now()) / 1000))
+      setRestant(r)
+      if (r <= 0) {
+        clearInterval(timer.current)
+        setEtat(null)
+        try { navigator.vibrate?.([140, 70, 140]) } catch { /* vibration indisponible */ }
+      }
+    }
+    tick()
+    timer.current = setInterval(tick, 500)
+    const surVisibilite = () => { if (document.visibilityState === 'visible') tick() }
+    document.addEventListener('visibilitychange', surVisibilite)
+    return () => {
+      clearInterval(timer.current)
+      document.removeEventListener('visibilitychange', surVisibilite)
+    }
+  }, [etat])
+
+  return {
+    actif: Boolean(etat),
+    restant,
+    duree: etat?.duree ?? 0,
+    lancer: (secondes) => setEtat({ fin: Date.now() + secondes * 1000, duree: secondes }),
+    ajouter: (secondes) => setEtat(e => (e ? { ...e, fin: e.fin + secondes * 1000, duree: e.duree + secondes } : e)),
+    arreter: () => setEtat(null),
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Briques d'interface                                                  */
+/* ------------------------------------------------------------------ */
+
+function FeuilleModale({ children, onFermer }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 900, display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={onFermer} aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'rgba(45,38,32,0.5)' }} />
+      <div role="dialog" aria-modal="true" style={{
+        position: 'relative', width: '100%', maxWidth: 480, margin: '0 auto', background: T.fond,
+        borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom, 0px))',
+        maxHeight: '90vh', overflowY: 'auto',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 100, background: T.bordure, margin: '0 auto 14px' }} />
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function ExplicationTempo({ tempo, onFermer }) {
+  const phases = [
+    ['Descente', 'phase où tu résistes au mouvement'],
+    ['Pause basse', 'en position basse, sous tension'],
+    ['Montée', 'phase où tu produis la force'],
+    ['Pause haute', 'avant de repartir'],
+  ]
+  const lire = (c) => (c.toUpperCase() === 'X' ? 'le plus vite possible' : c === '0' ? "sans temps d'arrêt" : `${c} seconde${+c > 1 ? 's' : ''}`)
+  return (
+    <FeuilleModale onFermer={onFermer}>
+      <p style={{ fontFamily: TITRE, fontSize: 17, margin: '0 0 4px' }}>
+        Le tempo <span style={{ color: T.ocre }}>{tempo}</span>
+      </p>
+      <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 14px' }}>Quatre chiffres, quatre phases du mouvement, en secondes.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {tempo.split('').slice(0, 4).map((c, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.blanc, borderRadius: 10, padding: '9px 12px' }}>
+            <span style={{
+              width: 26, height: 26, borderRadius: 8, background: T.ocre, color: T.blanc, fontFamily: TITRE, fontSize: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none',
+            }}>{c}</span>
+            <div>
+              <p style={{ fontSize: 13, margin: 0 }}>{phases[i]?.[0]} · <span style={{ color: T.ocre }}>{lire(c)}</span></p>
+              <p style={{ fontSize: 11, color: T.texteSec, margin: '1px 0 0' }}>{phases[i]?.[1]}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={onFermer} style={{ width: '100%', marginTop: 14, background: T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 46, fontSize: 14, fontFamily: 'inherit', cursor: 'pointer' }}>
+        J&apos;ai compris
+      </button>
+    </FeuilleModale>
+  )
+}
+
+// Vidéo chargée uniquement à l'ouverture (pas d'autoplay d'une vignette dans la grille).
+function FenetreVideo({ exercice, onFermer }) {
+  const id = extractYouTubeId(exercice.video_url)
+  return (
+    <div onClick={onFermer} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      {id ? (
+        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative' }}>
+          <button type="button" aria-label="Fermer la vidéo" onClick={onFermer} style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(0,0,0,.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer' }}>✕</button>
+          <div style={{ position: 'relative', paddingTop: '56.25%' }}>
+            <iframe title={exercice.nom} src={`https://www.youtube.com/embed/${id}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+              allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+          </div>
+        </div>
+      ) : (
+        <a href={exercice.video_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: '12px 20px', fontWeight: 600, color: T.texte }}>
+          Ouvrir la vidéo ↗
+        </a>
+      )}
+    </div>
+  )
+}
+
+function Champ({ exercice, champ, valeur, suffixe, onPas, onSaisie }) {
+  const vide = valeur === null
+  // Texte en cours de frappe ("67," avant la décimale) gardé localement ; la valeur numérique ne
+  // remonte qu'une fois lisible, et une frappe vide remonte null (valeur absente).
+  const [brouillon, setBrouillon] = useState(null)
+  const bouton = {
+    width: 30, height: 30, flex: 'none', border: 'none', borderRadius: '50%', background: T.blanc,
+    color: T.vert, fontSize: 16, padding: 0, cursor: 'pointer', fontFamily: 'inherit',
+  }
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', background: vide ? T.videFond : T.fond,
+      border: `1px solid ${vide ? `${T.ocre}55` : 'transparent'}`, borderRadius: 100, padding: 3, marginTop: 6,
+    }}>
+      <button type="button" aria-label={`Diminuer ${champ === 'kg' ? 'la charge' : 'la valeur'} sur ${exercice.nom}`} onClick={() => { setBrouillon(null); onPas(-1) }} style={bouton}>−</button>
+      <input
+        value={brouillon ?? fmt(valeur)}
+        placeholder="—"
+        inputMode="decimal"
+        aria-label={`${champ === 'kg' ? 'Charge' : 'Valeur'} sur ${exercice.nom}`}
+        onFocus={e => e.target.scrollIntoView({ block: 'center', behavior: 'smooth' })}
+        onChange={e => {
+          const propre = e.target.value.replace(/[^0-9,.]/g, '').replace('.', ',')
+          setBrouillon(propre)
+          onSaisie(propre)
+        }}
+        onBlur={() => setBrouillon(null)}
+        onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
+        style={{
+          flex: 1, minWidth: 0, width: '100%', border: 'none', background: 'none', fontFamily: TITRE, fontSize: 17,
+          textAlign: 'center', color: T.texte, outline: 'none', padding: 0,
+        }}
+      />
+      <button type="button" aria-label={`Augmenter ${champ === 'kg' ? 'la charge' : 'la valeur'} sur ${exercice.nom}`} onClick={() => { setBrouillon(null); onPas(1) }} style={bouton}>+</button>
+      <span style={{ fontSize: 10, color: T.texteSec, padding: '0 7px 0 3px', whiteSpace: 'nowrap' }}>{suffixe}</span>
+    </div>
+  )
+}
+
+function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo }) {
+  const [noteOuverte, setNoteOuverte] = useState(false)
+  return (
+    <div style={{ flex: pleineLargeur ? '1 1 100%' : '1 1 calc(50% - 4px)', minWidth: 0, boxSizing: 'border-box', background: T.blanc, borderRadius: 14, padding: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ background: T.texteSec, color: T.blanc, borderRadius: 100, fontSize: 10, padding: '2px 7px', flex: 'none' }}>{exercice.code}</span>
+        {/* minWidth: 0 : sans lui, un nom long impose sa largeur à la carte et casse la grille à deux colonnes. */}
+        <span title={exercice.nom} style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exercice.nom}</span>
+        {exercice.video_url ? (
+          <button type="button" aria-label={`Vidéo de ${exercice.nom}`} onClick={() => onVideo(exercice)} style={{ border: 'none', background: 'none', color: T.texteSec, fontSize: 12, padding: '4px 2px', cursor: 'pointer' }}>
+            ▶
+          </button>
+        ) : null}
+      </div>
+
+      {exercice.tempo ? (
+        <button type="button" onClick={() => onTempo(exercice.tempo)} style={{
+          display: 'flex', alignItems: 'center', gap: 5, marginTop: 8, background: T.sableClair, border: `1px solid ${T.ocre}33`,
+          borderRadius: 8, padding: '5px 8px', width: '100%', cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+          <span style={{ fontSize: 10, color: T.texteSec, letterSpacing: '0.04em' }}>TEMPO</span>
+          <span style={{ fontFamily: TITRE, fontSize: 14, color: T.ocre, flex: 1, textAlign: 'left' }}>{exercice.tempo}</span>
+          <span style={{ fontSize: 11, color: T.ocre }}>?</span>
+        </button>
+      ) : null}
+
+      {exercice.note ? (
+        <button type="button" onClick={() => setNoteOuverte(o => !o)} aria-expanded={noteOuverte} style={{
+          display: 'flex', gap: 7, width: '100%', textAlign: 'left', marginTop: 8, background: T.sable, border: 'none',
+          borderLeft: `3px solid ${T.bordeaux}`, borderRadius: 6, padding: '7px 9px', cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+          <span style={{ fontSize: 11, color: T.bordeaux, flex: 'none' }}>✎</span>
+          <span style={{
+            fontSize: 11, lineHeight: 1.45, color: T.texteCorps, whiteSpace: 'pre-wrap',
+            ...(noteOuverte ? {} : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }),
+          }}>
+            {exercice.note}
+          </span>
+        </button>
+      ) : null}
+
+      <div style={{ display: pleineLargeur ? 'flex' : 'block', gap: 8 }}>
+        {exercice.unite === 'kg' ? (
+          <div style={{ flex: 1 }}>
+            <Champ exercice={exercice} champ="kg" valeur={valeur.kg} suffixe="kg" onPas={d => onPas('kg', d)} onSaisie={v => onSaisie('kg', v)} />
+          </div>
+        ) : null}
+        <div style={{ flex: 1 }}>
+          <Champ exercice={exercice} champ="reps" valeur={valeur.reps} suffixe={exercice.unite_reps} onPas={d => onPas('reps', d)} onSaisie={v => onSaisie('reps', v)} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Repos({ secondes, chrono }) {
+  if (!secondes) return null
+  if (!chrono.actif) {
+    return (
+      <button type="button" onClick={() => chrono.lancer(secondes)} style={{
+        width: '100%', marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: T.blanc,
+        color: T.vert, border: `1px solid ${T.bordure}`, borderRadius: 12, height: 46, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+      }}>
+        ◷ Repos {secondes} secondes <span style={{ fontSize: 11, color: T.texteSec }}>· lancer</span>
+      </button>
+    )
+  }
+  const pct = Math.round(((chrono.duree - chrono.restant) / chrono.duree) * 100)
+  const petit = { borderRadius: 100, fontSize: 11, height: 32, padding: '0 11px', cursor: 'pointer', fontFamily: 'inherit' }
+  return (
+    <div style={{ marginTop: 12, background: T.vert, borderRadius: 12, padding: '10px 12px', color: T.beige }} role="status" aria-live="polite">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontFamily: TITRE, fontSize: 22, minWidth: 56 }}>{mmss(chrono.restant)}</span>
+        <span style={{ fontSize: 12, color: T.muted, flex: 1 }}>repos</span>
+        <button type="button" onClick={() => chrono.ajouter(15)} style={{ ...petit, background: 'none', border: `1px solid ${T.muted}`, color: T.beige }}>+15 s</button>
+        <button type="button" onClick={chrono.arreter} style={{ ...petit, background: T.beige, border: 'none', color: T.vert }}>Passer</button>
+      </div>
+      <div style={{ height: 4, borderRadius: 100, background: '#4A5A50', marginTop: 9 }}>
+        <div style={{ width: `${pct}%`, height: 4, borderRadius: 100, background: T.beige }} />
+      </div>
+    </div>
+  )
+}
+
+function Muscles({ muscles }) {
+  if (!muscles.principaux.length) return null
+  const pastille = (fond, couleur) => ({ background: fond, color: couleur, borderRadius: 100, fontSize: 11, padding: '3px 10px' })
+  return (
+    <div style={{ background: T.blanc, borderRadius: 12, padding: 12 }}>
+      <p style={{ fontFamily: TITRE, fontSize: 12, color: T.bordeaux, margin: '0 0 8px' }}>Muscles travaillés</p>
+      <p style={{ fontSize: 10, color: T.texteSec, margin: '0 0 5px' }}>Principaux</p>
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: muscles.secondaires.length ? 9 : 0 }}>
+        {muscles.principaux.map(m => <span key={m} style={pastille(T.bordeaux, T.clair)}>{libelleMuscle(m)}</span>)}
+      </div>
+      {muscles.secondaires.length ? (
+        <>
+          <p style={{ fontSize: 10, color: T.texteSec, margin: '0 0 5px' }}>Secondaires</p>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {muscles.secondaires.map(m => <span key={m} style={pastille(T.vertClair, T.vert)}>{libelleMuscle(m)}</span>)}
+          </div>
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function Page({ titre, blocs, index, faits, fin, onNaviguer, onFermer, children }) {
+  return (
+    <div style={{ background: T.beige, minHeight: '100svh', color: T.texte, paddingBottom: 'calc(18px + env(safe-area-inset-bottom, 0px))' }}>
+      <div style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', marginBottom: 14 }}>
+          <button type="button" aria-label="Retour" onClick={onFermer} style={{ background: 'none', border: 'none', fontSize: 20, color: T.vert, width: 44, height: 44, cursor: 'pointer', flex: 'none' }}>
+            ←
+          </button>
+          <span style={{ flex: 1, textAlign: 'center', fontFamily: TITRE, fontSize: 13, color: T.bordeaux, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.35 }}>
+            {titre}
+          </span>
+          <span style={{ width: 44, flex: 'none' }} />
+        </div>
+
+        <nav aria-label="Blocs de la séance" style={{ display: 'flex', gap: 7, justifyContent: 'center', marginBottom: 5, flexWrap: 'wrap', padding: '0 14px' }}>
+          {blocs.map((b, i) => {
+            const actif = i === index && !fin
+            const termine = Boolean(faits[b.id])
+            return (
+              <button key={b.id} type="button" aria-current={actif ? 'step' : undefined}
+                aria-label={`Bloc ${b.id}${termine ? ', terminé' : ''}`} onClick={() => onNaviguer(i)} style={{
+                  width: 44, height: 44, border: 'none', borderRadius: '50%', cursor: 'pointer',
+                  background: actif ? T.bordeaux : termine ? T.vert : T.blanc,
+                  color: actif || termine ? T.clair : T.texte, fontFamily: TITRE, fontSize: 14,
+                }}>
+                {b.id}
+              </button>
+            )
+          })}
+        </nav>
+
+        <p style={{ textAlign: 'center', fontSize: 11, color: T.texteSec, margin: '0 0 14px' }}>
+          {fin ? 'Séance terminée' : `Bloc ${blocs[index]?.id}`}
+        </p>
+
+        <div style={{ padding: '0 14px' }}>{children}</div>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Écran principal                                                      */
+/* ------------------------------------------------------------------ */
+
+// Position (bloc affiché) mémorisée par sportif + séance — même clé que l'ancien player, que la
+// page efface à la validation (clearSessionProgress). Les valeurs, elles, vivent dans les séries.
+export const sessionProgressKey = (athleteId, sessionId) => `ostryk_session_progress_${athleteId}_${sessionId}`
+const PROGRESS_MAX_AGE_MS = 12 * 60 * 60 * 1000
+
+function lirePosition(athleteId, sessionId) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(sessionProgressKey(athleteId, sessionId)) || 'null')
+    if (typeof parsed?.blockIndex !== 'number' || !parsed.updatedAt || Date.now() - parsed.updatedAt > PROGRESS_MAX_AGE_MS) return null
+    return parsed.blockIndex
+  } catch { return null }
+}
+
+export default function Seance({ session, athleteId, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onQuitter }) {
+  useKeepAwake()
+  const chrono = useChrono()
+  const [debut] = useState(() => Date.now())
+  const blocs = useMemo(() => construireBlocs(session), [session])
+  const muscles = useMemo(() => musclesDeLaSeance(session), [session])
+  const [toast, setToast] = useState(null)
+
+  const [tours, setTours] = useState(() => Object.fromEntries(blocs.map(b => [b.id, etatInitialBloc(b, exerciseSets)])))
+  const [faits, setFaits] = useState(() => Object.fromEntries(blocs.map(b => [b.id, toursValides(b, exerciseSets) >= b.tours])))
+  const [index, setIndex] = useState(() => {
+    const memo = lirePosition(athleteId, session.id)
+    if (memo !== null && memo >= 0 && memo < blocs.length) return memo
+    const i = blocs.findIndex(b => toursValides(b, exerciseSets) < b.tours)
+    return i === -1 ? Math.max(0, blocs.length - 1) : i
+  })
+  const [tempo, setTempo] = useState(null)
+  const [video, setVideo] = useState(null)
+  const [fin, setFin] = useState(null) // horodatage de fin de séance, null tant qu'elle continue
+  const [terminaison, setTerminaison] = useState(false)
+
+  useEffect(() => {
+    try { localStorage.setItem(sessionProgressKey(athleteId, session.id), JSON.stringify({ blockIndex: index, updatedAt: Date.now() })) } catch { /* reprise sur les séries en base */ }
+  }, [athleteId, session.id, index])
+
+  // Séries à créer pour le bloc affiché (autant que de tours listés, au moins les tours prévus).
+  // Provisionnement local et synchrone côté page ; le ref évite un double appel (effets rejoués en
+  // dev) qui créerait des séries en double avant que l'état n'ait été relu.
+  const provisionne = useRef({})
+  const bloc = blocs[index]
+  const nbTours = bloc ? Math.max(bloc.tours, tours[bloc.id].liste.length) : 0
+  useEffect(() => {
+    if (!bloc) return
+    bloc.exercices.forEach(e => {
+      if ((provisionne.current[e.id] || 0) >= nbTours) return
+      provisionne.current[e.id] = nbTours
+      if ((exerciseSets[e.id] || []).length < nbTours) onEnsureExerciseSets(e.id, nbTours)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bloc?.id, nbTours])
+
+  if (blocs.length === 0) {
+    return (
+      <Page titre={session.title || 'Séance'} blocs={[]} index={0} faits={{}} onNaviguer={() => {}} onFermer={onQuitter}>
+        <p style={{ textAlign: 'center', color: T.texteSec, padding: 30 }}>Aucun exercice dans cette séance.</p>
+      </Page>
+    )
+  }
+
+  function majValeur(b, exercice, champ, transformer) {
+    setTours(prev => {
+      const etat = prev[b.id]
+      const liste = etat.liste.map((t, i) => (i === etat.courant ? { ...t, [exercice.id]: transformer({ ...t[exercice.id] }) } : t))
+      return { ...prev, [b.id]: { ...etat, liste } }
+    })
+  }
+
+  // Écrit le tour courant du bloc dans les séries (une par exercice). Refuse — sans rien perdre —
+  // si une série n'existe pas encore : elle est redemandée, un second tap suffira.
+  function enregistrerTour(b) {
+    const etat = tours[b.id]
+    const t = etat.liste[etat.courant]
+    const lignes = b.exercices.map(e => (exerciseSets[e.id] || [])[etat.courant])
+    if (lignes.some(l => !l)) {
+      b.exercices.forEach(e => onEnsureExerciseSets(e.id, etat.courant + 1))
+      setToast('Un instant… réessaie dans une seconde')
+      return false
+    }
+    b.exercices.forEach((e, k) => {
+      const v = t[e.id]
+      const p = prescriptionEffective(e, etat.courant)
+      const id = lignes[k].id
+      onSaveExerciseSet(e.id, id, 'reps_done', v.reps === null ? '' : String(v.reps))
+      onSaveExerciseSet(e.id, id, 'kg_done', e.unite === 'kg' && v.kg !== null ? String(v.kg) : '')
+      onSaveExerciseSet(e.id, id, 'reps_prescribed', p.repsTexte ?? (p.reps != null ? String(p.reps) : null))
+      onSaveExerciseSet(e.id, id, 'kg_prescribed', e.unite === 'kg' ? p.kg ?? null : null)
+    })
+    setToast('✓ Tour enregistré')
+    return true
+  }
+
+  if (fin) {
+    const series = blocs.reduce((acc, b) => acc + toursValides(b, exerciseSets) * b.exercices.length, 0)
+    const dureeMin = Math.max(1, Math.round((fin - debut) / 60000))
+    return (
+      <Page titre={session.title || 'Séance'} blocs={blocs} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
+        <div style={{ background: T.vert, borderRadius: 20, padding: '20px 16px', color: T.clair, textAlign: 'center', marginBottom: 12 }}>
+          <p style={{ fontFamily: TITRE, fontSize: 24, margin: '0 0 4px' }}>Séance terminée</p>
+          <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>{session.title || 'Séance'} · {dureeMin} minute{dureeMin > 1 ? 's' : ''}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          {[[series, 'séries'], [blocs.length, 'blocs'], [dureeMin, 'minutes']].map(([v, l]) => (
+            <div key={l} style={{ flex: 1, background: T.blanc, borderRadius: 12, padding: 12, textAlign: 'center' }}>
+              <p style={{ fontFamily: TITRE, fontSize: 22, margin: 0 }}>{v}</p>
+              <p style={{ fontSize: 11, color: T.texteSec, margin: '2px 0 0' }}>{l}</p>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginBottom: 14 }}><Muscles muscles={muscles} /></div>
+        <button type="button" disabled={terminaison} onClick={async () => { setTerminaison(true); await onTerminer({ duree_min: dureeMin }) }} style={{
+          width: '100%', background: T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 52, fontSize: 15,
+          fontFamily: 'inherit', cursor: 'pointer', opacity: terminaison ? 0.6 : 1,
+        }}>
+          {terminaison ? 'Enregistrement…' : "Retour à l'accueil"}
+        </button>
+        <Toast message={toast} show={!!toast} onDone={() => setToast(null)} position="top" />
+      </Page>
+    )
+  }
+
+  const etat = tours[bloc.id]
+  const t = etat.liste[etat.courant]
+  const impair = bloc.exercices.length % 2 === 1
+  const dernierBloc = index === blocs.length - 1
+
+  return (
+    <Page titre={session.title || 'Séance'} blocs={blocs} index={index} faits={faits}
+      onNaviguer={i => { chrono.arreter(); setIndex(i) }} onFermer={onQuitter}>
+      <div style={{ display: 'flex', gap: 9, background: T.blanc, borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
+        <span style={{ width: 3, background: T.bordeaux, borderRadius: 100, flex: 'none' }} />
+        <p style={{ fontSize: 12, lineHeight: 1.5, color: T.texteCorps, margin: 0 }}>{consigneBloc(bloc)}</p>
+      </div>
+
+      {etat.liste.map((tt, i) => (i === etat.courant ? null : (
+        <button key={i} type="button" onClick={() => setTours(p => ({ ...p, [bloc.id]: { ...p[bloc.id], courant: i } }))} style={{
+          width: '100%', textAlign: 'left', background: T.blanc, border: 'none', borderRadius: 12, padding: '9px 12px', marginBottom: 8,
+          display: 'flex', alignItems: 'center', gap: 8, minHeight: 44, cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+          <span style={{ width: 18, height: 18, borderRadius: '50%', background: i < toursValides(bloc, exerciseSets) ? T.vert : T.muted, color: T.blanc, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+            {i < toursValides(bloc, exerciseSets) ? '✓' : ''}
+          </span>
+          <span style={{ fontSize: 12, color: T.texteSec, minWidth: 44 }}>Tour {i + 1}</span>
+          <span style={{ fontSize: 11, color: T.texteCorps, flex: 1 }}>
+            {bloc.exercices.map(e => `${e.code} ${e.unite === 'kg' ? `${fmt(tt[e.id].kg) || '—'}×${tt[e.id].reps ?? '—'}` : tt[e.id].reps ?? '—'}`).join(' · ')}
+          </span>
+        </button>
+      )))}
+
+      <p style={{ fontSize: 12, color: T.texteSec, textAlign: 'center', margin: '2px 0 8px' }}>
+        Tour {etat.courant + 1}
+        {etat.courant + 1 > bloc.tours ? ' · supplémentaire' : ` sur ${bloc.tours} prévu${bloc.tours > 1 ? 's' : ''}`}
+      </p>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {bloc.exercices.map((e, i) => (
+          <CarteExercice
+            key={e.id}
+            exercice={e}
+            valeur={t[e.id]}
+            pleineLargeur={impair && i === bloc.exercices.length - 1}
+            onTempo={setTempo}
+            onVideo={setVideo}
+            onPas={(champ, d) => majValeur(bloc, e, champ, v => {
+              const ref = prescriptionEffective(e, etat.courant)
+              // Case vide : la première flèche repose la valeur de référence.
+              if (champ === 'kg') v.kg = v.kg === null ? ref.kg ?? 0 : Math.max(0, v.kg + d * e.pas)
+              else v.reps = v.reps === null ? ref.reps ?? 1 : Math.max(0, v.reps + d * e.pas_reps)
+              return v
+            })}
+            onSaisie={(champ, brut) => majValeur(bloc, e, champ, v => {
+              const n = brut.trim() === '' ? null : parseFloat(brut.replace(',', '.'))
+              const valide = n === null || Number.isNaN(n) ? null : n
+              if (champ === 'kg') v.kg = valide
+              else v.reps = valide === null ? null : Math.round(valide)
+              return v
+            })}
+          />
+        ))}
+      </div>
+
+      <Repos secondes={bloc.repos_sec} chrono={chrono} />
+
+      <button type="button" onClick={() => {
+        if (!enregistrerTour(bloc)) return
+        setTours(p => {
+          const e = p[bloc.id]
+          const liste = e.courant === e.liste.length - 1 ? [...e.liste, valeursTour(bloc, e.liste.length, e.liste[e.liste.length - 1])] : e.liste
+          return { ...p, [bloc.id]: { liste, courant: e.courant + 1 } }
+        })
+        chrono.arreter()
+      }} style={{
+        width: '100%', marginTop: 8, background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12, height: 44, fontSize: 13,
+        color: T.texte, cursor: 'pointer', fontFamily: 'inherit',
+      }}>
+        + {etat.courant + 1 < etat.liste.length ? `Valider et passer au tour ${etat.courant + 2}` : `Ajouter le tour ${etat.courant + 2}`}
+      </button>
+
+      <button type="button" onClick={() => {
+        if (!enregistrerTour(bloc)) return
+        setFaits(f => ({ ...f, [bloc.id]: true }))
+        chrono.arreter()
+        if (dernierBloc) setFin(Date.now())
+        else setIndex(index + 1)
+      }} style={{
+        width: '100%', marginTop: 8, background: T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 50, fontSize: 14,
+        cursor: 'pointer', fontFamily: 'inherit',
+      }}>
+        {dernierBloc ? 'Terminer la séance' : `Terminer le bloc ${bloc.id}`}
+      </button>
+
+      {tempo ? <ExplicationTempo tempo={tempo} onFermer={() => setTempo(null)} /> : null}
+      {video ? <FenetreVideo exercice={video} onFermer={() => setVideo(null)} /> : null}
+      <Toast message={toast} show={!!toast} onDone={() => setToast(null)} position="top" />
+    </Page>
+  )
+}

@@ -101,7 +101,7 @@ const completeFieldInput = {
 
 // Saisie du résultat d'un objectif terminé — même logique que MetricResultField (app/s/[token]/page.js,
 // utilisé pendant une séance) mais dupliquée ici plutôt qu'importée : ce fichier n'est pas pensé
-// comme lib partagée, même convention que documentée dans SessionBlockEditor.js/SessionPlayer.js.
+// comme lib partagée, même convention que documentée dans SessionBlockEditor.js.
 // Différence : un bouton "Enregistrer" explicite plutôt qu'un onBlur, cette saisie ne vit que dans
 // une modale ponctuelle, pas un champ toujours visible pendant la séance.
 function ObjectiveResultInput({ metric, onSave, saving }) {

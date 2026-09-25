@@ -19,7 +19,7 @@ import TemplatesTab from '@/app/components/athlete/TemplatesTab'
 import AddActionSheet from '@/app/components/athlete/AddActionSheet'
 import AddActivityWizard from '@/app/components/athlete/AddActivityWizard'
 import ProfilTab from '@/app/components/athlete/ProfilTab'
-import SessionPlayer, { sessionProgressKey } from '@/app/components/athlete/SessionPlayer'
+import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
 import TempoBadge, { getTempoDisplay } from '@/app/components/TempoBadge'
 import { UNITS, unitOf, formatPerformance } from '@/app/components/TrackedMovementsBlock'
 import TimerModal from '@/app/components/TimerModal'
@@ -194,7 +194,7 @@ function AthleteView({ params }) {
   // dans un effet, pour ne pas déclencher un second rendu superflu.
   // Persisté en localStorage (même convention que queueKey plus bas) : un WebView mobile peut
   // recharger toute la page quand l'app repasse en arrière-plan, ce qui perdrait ce useState et
-  // renverrait l'athlète sur SessionCard au lieu du player — SessionPlayer se resynchronise déjà
+  // renverrait l'athlète sur SessionCard au lieu du player — l'écran de séance (Seance.js) se resynchronise déjà
   // sur les séries en base (voir countValidatedSets), mais encore faut-il qu'il se remonte direct.
   const playerStartedKey = `coachpro_player_started_${token}`
   const [playerStarted, setPlayerStartedRaw] = useState(() => {
@@ -949,7 +949,8 @@ function AthleteView({ params }) {
 
     if (isUpdate) return
 
-    // Popup de félicitation avec tonnage + muscles
+    // Popup de félicitation avec tonnage + muscles — sauf fin de séance depuis l'écran de séance
+    // (Seance.js), qui montre déjà son propre bilan (durée, séries, muscles).
     const allSessions = programs.flatMap(p => p.sessions)
     const sess = allSessions.find(s => s.id === sessId)
     if (sess) {
@@ -979,7 +980,7 @@ function AthleteView({ params }) {
       const manualMuscles = exos.flatMap(e => e.focus_muscles ? e.focus_muscles.split(',') : [])
       muscles = [...new Set([...muscles, ...manualMuscles])]
       const celebrationPayload = { tonnage: Math.round(tonnage), muscles, records: sessionRecords }
-      setCelebration(celebrationPayload)
+      if (!opts.skipCelebration) setCelebration(celebrationPayload)
       setSessionRecords([])
 
       // Séance validée par le coach en direct (coaching en présentiel) : l'athlète n'est pas devant
@@ -1085,7 +1086,10 @@ function AthleteView({ params }) {
   }
 
   const saveExerciseSet = async (exerciseId, setId, field, value) => {
-    const parsedValue = field === 'kg_done' ? (value === '' ? null : parseFloat(value)) : (value || null)
+    // kg_prescribed arrive déjà en nombre (Seance.js) : 0 kg prescrit reste 0, seul l'absent est null.
+    const parsedValue = field === 'kg_done' ? (value === '' ? null : parseFloat(value))
+      : field === 'kg_prescribed' ? (value === '' || value == null ? null : Number(value))
+      : (value || null)
     setExerciseSets(prev => ({
       ...prev,
       [exerciseId]: (prev[exerciseId] || []).map(s => s.id === setId ? { ...s, [field]: parsedValue } : s),
@@ -1273,7 +1277,7 @@ function AthleteView({ params }) {
     // n'importe quel client.
     const isOwnAthleteSession = !isCoachView || athlete.is_coach
 
-    // Le nouveau player exercice-par-exercice (SessionPlayer) ne gère pas encore les mouvements de
+    // L'écran de séance (Seance.js) ne gère pas encore les mouvements de
     // course (zone d'allure cible, logging distance/allure, intervalles — voir TODO.md, chantier
     // explicitement mis de côté à sa création) : il affiquerait à tort des steppers Reps/Poids sans
     // aucun sens pour un run. Tant que ce n'est pas repris, une séance contenant un run reste sur
@@ -1287,8 +1291,12 @@ function AthleteView({ params }) {
       router.push(next ? `/s/${token}?session=${next.id}&focus=1${isCoachView ? '&coach=1' : ''}` : backHref)
     }
 
+    const playerActive = !!focusSession && playerStarted && isOwnAthleteSession && !focusSessionHasRun
+
     const workoutContent = (
       <>
+        {/* L'écran de séance (Seance.js) a son propre en-tête (retour + titre) : pas de doublon. */}
+        {!playerActive && (
         <div style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10, position: 'sticky', top: 0, zIndex: 10 }}>
           <button onClick={() => router.push(backHref)} style={{ background: 'none', border: 'none', fontSize: 22, color: 'var(--text2)', cursor: 'pointer', padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>←</button>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1296,15 +1304,23 @@ function AthleteView({ params }) {
             <div style={{ fontSize: 11, color: 'var(--text3)' }}>{athlete.name}</div>
           </div>
         </div>
+        )}
 
-        {focusSession && playerStarted && isOwnAthleteSession && !focusSessionHasRun ? (
-          <SessionPlayer
+        {playerActive ? (
+          <Seance
             session={focusSession}
             athleteId={athlete.id}
             exerciseSets={exerciseSets}
             onEnsureExerciseSets={ensureExerciseSets}
             onSaveExerciseSet={saveExerciseSet}
-            onExit={() => setPlayerStarted(false)}
+            onQuitter={() => setPlayerStarted(false)}
+            // Pas de notation côté client : la séance est validée avec sa durée, puis retour à
+            // l'accueil. Une séance déjà faite (refaite depuis l'historique) met simplement à jour son bilan.
+            onTerminer={async ({ duree_min }) => {
+              await validate(focusSession.id, focusProgSessions, { duration_minutes: duree_min }, { isUpdate: isDone, skipCelebration: true })
+              setPlayerStarted(false)
+              router.push(`/s/${token}${isCoachView ? '?coach=1' : ''}`)
+            }}
           />
         ) : (
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1822,8 +1838,8 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
   }
   const exos = session.exercises.filter(e => e.name)
   // La liste condensée du mode player (juste nom + nb de séries, voir plus bas) n'affiche jamais la
-  // note du coach — sans conséquence tant qu'elle mène à SessionPlayer, qui la montre à son tour,
-  // mais pour une séance de course (redirigée vers cette vue complète, SessionPlayer ne gérant pas
+  // note du coach — sans conséquence tant qu'elle mène à l'écran de séance (Seance.js), qui la montre à son tour,
+  // mais pour une séance de course (redirigée vers cette vue complète, Seance.js ne gérant pas
   // encore le cardio) ce serait la seule vue jamais montrée à l'athlète. On bascule alors sur le
   // détail complet ci-dessous (note, zone d'allure, logging) plutôt que la liste condensée.
   const sessionHasRun = exos.some(e => isRunMovement(e.name))
@@ -2062,10 +2078,10 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
             <>
               {(session.circuits || []).filter(c => circuitSlot(c) === 0).map(c => renderCircuit(c))}
               {/* Aperçu complet avant "Démarrer" (vidéo, cibles séries/reps/poids, consigne du
-                  coach) — une fois lancé, SessionPlayer ne montre plus qu'un exercice à la fois,
+                  coach) — une fois lancé, l'écran de séance (Seance.js) prend le relais,
                   donc c'est ici et uniquement ici que l'athlète peut voir toute la séance à
                   l'avance. Volontairement en lecture seule (pas de timer récup cliquable, pas de
-                  saisie) : la logique interactive reste dans SessionPlayer. */}
+                  saisie) : la logique interactive reste dans Seance.js. */}
               {exos.map((exo, ei) => (
                 <Fragment key={exo.id}>
                   <div style={{

@@ -8,7 +8,7 @@ const stepBtn = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', cursor: 'pointer', padding: 0, flexShrink: 0,
 }
 
-// Version compacte du Stepper (voir SessionPlayer.js côté athlète) pour la saisie coach en direct
+// Version compacte du Stepper (repris de l'ancien SessionPlayer.js côté athlète) pour la saisie coach en direct
 // pendant une séance de groupe : icônes 12px + valeur Cinzel 13px au lieu de la version "adulte"
 // 34px/20px, pour tenir plusieurs athlètes × plusieurs séries sur un même écran. Le tap sur la
 // valeur (soulignée en pointillé pour signaler qu'elle est tapable) ouvre le même pavé numérique
