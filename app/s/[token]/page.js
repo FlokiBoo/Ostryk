@@ -20,6 +20,8 @@ import AddActionSheet from '@/app/components/athlete/AddActionSheet'
 import AddActivityWizard from '@/app/components/athlete/AddActivityWizard'
 import ProfilTab from '@/app/components/athlete/ProfilTab'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
+import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
+import { sectionDeSeance } from '@/lib/sectionsTexte'
 import TempoBadge, { getTempoDisplay } from '@/app/components/TempoBadge'
 import { UNITS, unitOf, formatPerformance } from '@/app/components/TrackedMovementsBlock'
 import TimerModal from '@/app/components/TimerModal'
@@ -287,6 +289,9 @@ function AthleteView({ params }) {
   const [isOffline, setIsOffline] = useState(false)
   const [objectives, setObjectives] = useState([])
   const [noteBlocks, setNoteBlocks] = useState([])
+  // Mouvements cités par les échauffements / retours au calme ({ [id]: { id, nom, video_url } }),
+  // envoyés par l'API avec session.sections (voir app/api/athlete-view/[token]/route.js).
+  const [mouvementsSections, setMouvementsSections] = useState({})
   const [selectedType, setSelectedType] = useState(null)
   const [toast, setToast] = useState(null)
   const [exerciseToast, setExerciseToast] = useState(null)
@@ -545,7 +550,7 @@ function AthleteView({ params }) {
         return
       }
       if (!res.ok) return
-      const { athlete: ath, programs: progs, completions: comps, exerciseLogs: logs, movieMap, musclesMap, focusGroupsMap, objectives: objs, noteBlocks: blocks, exerciseSets: exoSets, raceKnown: rk, trackedMovements: tms, isCoach: coachFlag, isGroupLeader: leaderFlag, circuitLogs: cLogs } = await res.json()
+      const { athlete: ath, programs: progs, completions: comps, exerciseLogs: logs, movieMap, musclesMap, focusGroupsMap, objectives: objs, noteBlocks: blocks, mouvementsSections: mvtSections, exerciseSets: exoSets, raceKnown: rk, trackedMovements: tms, isCoach: coachFlag, isGroupLeader: leaderFlag, circuitLogs: cLogs } = await res.json()
       setAthlete(ath)
       // Ancre "séance en cours" : la valeur du compte fait foi au chargement, c'est elle qui suit
       // le sportif d'un appareil à l'autre. Exception, l'URL gagne s'il est justement en train
@@ -563,6 +568,7 @@ function AthleteView({ params }) {
       }
       setObjectives(objs || [])
       setNoteBlocks(blocks || [])
+      setMouvementsSections(mvtSections || {})
       setRaceKnown(rk || {})
       setTrackedMovements(tms || [])
       setIsCoach(!!coachFlag)
@@ -1310,6 +1316,7 @@ function AthleteView({ params }) {
           <Seance
             session={focusSession}
             athleteId={athlete.id}
+            mouvementsSections={mouvementsSections}
             exerciseSets={exerciseSets}
             onEnsureExerciseSets={ensureExerciseSets}
             onSaveExerciseSet={saveExerciseSet}
@@ -1326,6 +1333,7 @@ function AthleteView({ params }) {
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {focusSession ? (
             <SessionCard
+              mouvementsSections={mouvementsSections}
               session={focusSession}
               idx={0}
               isOpen={true}
@@ -1795,7 +1803,7 @@ function RunResultLogger({ exo, exerciseLogs, onSaveLog, onSyncRaceMetric, targe
   )
 }
 
-function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onToggle, onValidate, onUnvalidate, onSkip, onPostpone, validating, exerciseLogs = {}, onSaveLog, athleteId, trackedMovements = [], onSaveMetricResult, exerciseSets = {}, onAddExerciseSet, onEnsureExerciseSets, onSaveExerciseSet, onDeleteExerciseSet, isCoachView, isCoach, raceKnown = {}, onSyncRaceMetric, targetPaces, onSaveTargetPace, isFreeSession = false, onAddExercise, onToggleSuperset, onDuplicateFreeSession, onUpdateFreeSessionDate, circuitLogs = {}, onSaveCircuitLog, isGroupLeader = false, onLaunchTimer, onSaveCoachNote, onExerciseSaved, isRecurring = false, token, playerMode = false, onStartPlayer }) {
+function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onToggle, onValidate, onUnvalidate, onSkip, onPostpone, validating, exerciseLogs = {}, onSaveLog, athleteId, trackedMovements = [], onSaveMetricResult, exerciseSets = {}, onAddExerciseSet, onEnsureExerciseSets, onSaveExerciseSet, onDeleteExerciseSet, isCoachView, isCoach, raceKnown = {}, onSyncRaceMetric, targetPaces, onSaveTargetPace, isFreeSession = false, onAddExercise, onToggleSuperset, onDuplicateFreeSession, onUpdateFreeSessionDate, circuitLogs = {}, onSaveCircuitLog, isGroupLeader = false, onLaunchTimer, onSaveCoachNote, onExerciseSaved, isRecurring = false, token, playerMode = false, onStartPlayer, mouvementsSections = {} }) {
   const [showGroupPaces, setShowGroupPaces] = useState(false)
   const [showPostpone, setShowPostpone] = useState(false)
   const paceRefs = annotatePaceReferences(session.coach_notes, raceKnown)
@@ -1836,7 +1844,15 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
     setFocusOverrides(prev => ({ ...prev, [exerciseId]: null }))
     setFocusPicker(null)
   }
-  const exos = session.exercises.filter(e => e.name)
+  // Exercices d'un ancien bloc échauffement / retour au calme : affichés dans leur section
+  // (session.sections, voir lib/sectionsTexte.js), plus dans la liste des exercices.
+  const exos = session.exercises.filter(e => e.name && !['warmup', 'cooldown'].includes(e.block_type))
+  // Envoyées toutes prêtes par l'API ; calculées ici pour une séance créée côté client (séance libre).
+  const sections = session.sections || {
+    echauffement: sectionDeSeance(session, 'echauffement'),
+    retourAuCalme: sectionDeSeance(session, 'retourAuCalme'),
+  }
+  const [videoSection, setVideoSection] = useState(null)
   // La liste condensée du mode player (juste nom + nb de séries, voir plus bas) n'affiche jamais la
   // note du coach — sans conséquence tant qu'elle mène à l'écran de séance (Seance.js), qui la montre à son tour,
   // mais pour une séance de course (redirigée vers cette vue complète, Seance.js ne gérant pas
@@ -2024,27 +2040,13 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
               )}
             </div>
           )}
-          {(session.activation || (session.activation_videos?.length > 0)) && (
-            <div style={{ background: 'var(--green-light)', border: '1px solid #B8EAD8', borderRadius: 'var(--r)', padding: '10px 12px' }}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}><Lightning size={11} /> Activation</div>
-              {session.activation && (
-                <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: session.activation_videos?.length > 0 ? 8 : 0 }}>{session.activation}</div>
-              )}
-              {session.activation_videos?.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {session.activation_videos.map((v, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, flex: 1, color: 'var(--text)' }}>{v.name}</span>
-                      {v.video_url && (
-                        <VideoButton url={v.video_url} label="▶ Voir"
-                          style={{ background: 'var(--green)', color: '#fff', borderRadius: 'var(--r)', padding: '4px 12px', fontSize: 12, fontWeight: 700, flexShrink: 0 }} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+          {sections.echauffement && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}><Lightning size={11} /> {sections.echauffement.titre}</div>
+              <SectionTexteVideo section={sections.echauffement} mouvements={mouvementsSections} onLireVideo={setVideoSection} />
             </div>
           )}
+          {videoSection && <FenetreVideo video={videoSection} onFermer={() => setVideoSection(null)} />}
           {isCoachView && onSaveCoachNote ? (
             <textarea
               key={session.id}
@@ -2374,6 +2376,13 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
             )
           })}
           </>
+          )}
+
+          {sections.retourAuCalme && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>{sections.retourAuCalme.titre}</div>
+              <SectionTexteVideo section={sections.retourAuCalme} mouvements={mouvementsSections} onLireVideo={setVideoSection} />
+            </div>
           )}
 
           {isFreeSession && onUpdateFreeSessionDate && (

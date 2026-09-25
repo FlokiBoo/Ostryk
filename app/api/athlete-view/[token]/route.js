@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { buildKnownRaces } from '@/lib/raceEstimates'
+import { sectionDeSeance } from '@/lib/sectionsTexte'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -86,7 +87,7 @@ export async function GET(request, { params }) {
           ...p,
           program_sessions: (p.program_sessions || []).map(s =>
             lockedIds.has(s.id)
-              ? { ...s, locked: true, program_exercises: [], activation: null, coach_notes: null, circuits: [], activation_videos: [], warmup_content: null, cooldown_content: null }
+              ? { ...s, locked: true, program_exercises: [], activation: null, coach_notes: null, circuits: [], activation_videos: [], warmup_content: null, cooldown_content: null, warmup_block: null, cooldown_block: null }
               : s
           ),
         }
@@ -111,17 +112,19 @@ export async function GET(request, { params }) {
       ...p,
       program_sessions: (p.program_sessions || []).map(s => {
         if (!s.hidden_until_run || revealedKeys.has(`${p.group_id}::${s.source_session_id}`)) return s
-        return { ...s, hidden: true, program_exercises: [], activation: null, coach_notes: null, circuits: [], activation_videos: [], warmup_content: null, cooldown_content: null }
+        return { ...s, hidden: true, program_exercises: [], activation: null, coach_notes: null, circuits: [], activation_videos: [], warmup_content: null, cooldown_content: null, warmup_block: null, cooldown_block: null }
       }),
     }
   })
 
   const hasExercises = (finalProgs || []).some(p => (p.program_sessions || []).some(s => (s.program_exercises || []).some(e => e.name)))
+  const hasSections = (finalProgs || []).some(p => (p.program_sessions || []).some(s => s.warmup_content || s.cooldown_content))
   let movieMap = {}, musclesMap = {}, focusGroupsMap = {}
-  if (hasExercises) {
+  let movs = []
+  if (hasExercises || hasSections) {
     // Bibliothèque récupérée en entier (petit volume) plutôt que filtrée par .in('name', …), qui
     // est sensible à la casse côté Postgres et raterait silencieusement un nom mal accordé.
-    const { data: movs } = await supabaseAdmin.from('movements').select('name, youtube_url, muscles, focus_groups')
+    ;({ data: movs } = await supabaseAdmin.from('movements').select('id, name, youtube_url, video_url, muscles, focus_groups'))
     ;(movs || []).forEach(m => {
       movieMap[m.name.trim().toLowerCase()] = m.youtube_url
       if (m.muscles) musclesMap[m.name.trim().toLowerCase()] = m.muscles
@@ -134,9 +137,31 @@ export async function GET(request, { params }) {
   // Stripe. Purement côté réponse — la ligne `athletes` en base n'est pas modifiée.
   const responseAthlete = athlete.is_coach ? { ...athlete, subscription_status: 'active', subscription_tier: 'B' } : athlete
 
+  // Échauffement / retour au calme de chaque séance, déjà convertis depuis l'ancien format s'il le
+  // faut (lib/sectionsTexte.js) : le client reçoit { echauffement, retourAuCalme } prêts à
+  // afficher, et seulement les mouvements qu'ils citent — pas toute la bibliothèque.
+  const mouvementsSections = {}
+  const parId = new Map((movs || []).map(m => [m.id, m]))
+  const programsWithSections = (finalProgs || []).map(p => ({
+    ...p,
+    program_sessions: (p.program_sessions || []).map(s => {
+      const sections = {
+        echauffement: sectionDeSeance(s, 'echauffement', movs || []),
+        retourAuCalme: sectionDeSeance(s, 'retourAuCalme', movs || []),
+      }
+      for (const sec of Object.values(sections)) {
+        for (const l of sec?.contenu || []) {
+          const m = l.mouvementId && parId.get(l.mouvementId)
+          if (m) mouvementsSections[m.id] = { id: m.id, nom: m.name, video_url: m.video_url || m.youtube_url || null }
+        }
+      }
+      return { ...s, sections }
+    }),
+  }))
+
   return NextResponse.json(
     {
-      athlete: responseAthlete, programs: finalProgs, completions: comps || [], exerciseLogs: logs || [], movieMap, musclesMap, focusGroupsMap,
+      athlete: responseAthlete, programs: programsWithSections, mouvementsSections, completions: comps || [], exerciseLogs: logs || [], movieMap, musclesMap, focusGroupsMap,
       objectives: objectives || [], noteBlocks: noteBlocks || [], exerciseSets: exoSets || [],
       raceKnown, trackedMovements, isCoach, isGroupLeader, circuitLogs: circuitLogsData || [],
     },

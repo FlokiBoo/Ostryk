@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Toast from '@/app/components/Toast'
 import { parseMusclesFromText } from '@/app/components/CelebrationModal'
 import { programmerFinRepos, annulerFinRepos } from '@/lib/reposNotification'
+import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
+import { sectionDeSeance } from '@/lib/sectionsTexte'
 
 /*
   Écran de séance (maquette Seance.jsx) — étape 1 : mode client, blocs uniquement (échauffement,
@@ -114,7 +116,8 @@ function grouperEnBlocs(exos) {
 }
 
 function construireBlocs(session) {
-  const exos = (session.exercises || []).filter(e => e.name)
+  // Les exercices d'un ancien bloc échauffement / retour au calme vivent dans leur section.
+  const exos = (session.exercises || []).filter(e => e.name && !['warmup', 'cooldown'].includes(e.block_type))
   return grouperEnBlocs(exos).map((groupe, gi) => {
     const lettre = String.fromCharCode(65 + gi)
     return {
@@ -376,28 +379,6 @@ function ExplicationTempo({ tempo, onFermer }) {
   )
 }
 
-// Vidéo chargée uniquement à l'ouverture (pas d'autoplay d'une vignette dans la grille).
-function FenetreVideo({ exercice, onFermer }) {
-  const id = extractYouTubeId(exercice.video_url)
-  return (
-    <div onClick={onFermer} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      {id ? (
-        <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, background: '#000', borderRadius: 14, overflow: 'hidden', position: 'relative' }}>
-          <button type="button" aria-label="Fermer la vidéo" onClick={onFermer} style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, background: 'rgba(0,0,0,.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer' }}>✕</button>
-          <div style={{ position: 'relative', paddingTop: '56.25%' }}>
-            <iframe title={exercice.nom} src={`https://www.youtube.com/embed/${id}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-              allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
-          </div>
-        </div>
-      ) : (
-        <a href={exercice.video_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: '12px 20px', fontWeight: 600, color: T.texte }}>
-          Ouvrir la vidéo ↗
-        </a>
-      )}
-    </div>
-  )
-}
-
 function Champ({ exercice, champ, valeur, suffixe, onPas, onSaisie }) {
   const vide = valeur === null
   // Texte en cours de frappe ("67," avant la décimale) gardé localement ; la valeur numérique ne
@@ -543,7 +524,7 @@ function Muscles({ muscles }) {
   )
 }
 
-function Page({ titre, blocs, index, faits, fin, onNaviguer, onFermer, children }) {
+function Page({ titre, etapes, index, faits, fin, onNaviguer, onFermer, children }) {
   return (
     <div style={{ background: T.beige, minHeight: '100svh', color: T.texte, paddingBottom: 'calc(18px + env(safe-area-inset-bottom, 0px))' }}>
       <div style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}>
@@ -557,25 +538,25 @@ function Page({ titre, blocs, index, faits, fin, onNaviguer, onFermer, children 
           <span style={{ width: 44, flex: 'none' }} />
         </div>
 
-        <nav aria-label="Blocs de la séance" style={{ display: 'flex', gap: 7, justifyContent: 'center', marginBottom: 5, flexWrap: 'wrap', padding: '0 14px' }}>
-          {blocs.map((b, i) => {
+        <nav aria-label="Étapes de la séance" style={{ display: 'flex', gap: 7, justifyContent: 'center', marginBottom: 5, flexWrap: 'wrap', padding: '0 14px' }}>
+          {etapes.map((et, i) => {
             const actif = i === index && !fin
-            const termine = Boolean(faits[b.id])
+            const termine = Boolean(faits[et.id])
             return (
-              <button key={b.id} type="button" aria-current={actif ? 'step' : undefined}
-                aria-label={`Bloc ${b.id}${termine ? ', terminé' : ''}`} onClick={() => onNaviguer(i)} style={{
+              <button key={et.id} type="button" aria-current={actif ? 'step' : undefined}
+                aria-label={`${et.libelle}${termine ? ', terminé' : ''}`} onClick={() => onNaviguer(i)} style={{
                   width: 44, height: 44, border: 'none', borderRadius: '50%', cursor: 'pointer',
                   background: actif ? T.bordeaux : termine ? T.vert : T.blanc,
                   color: actif || termine ? T.clair : T.texte, fontFamily: TITRE, fontSize: 14,
                 }}>
-                {b.id}
+                {et.rond}
               </button>
             )
           })}
         </nav>
 
         <p style={{ textAlign: 'center', fontSize: 11, color: T.texteSec, margin: '0 0 14px' }}>
-          {fin ? 'Séance terminée' : `Bloc ${blocs[index]?.id}`}
+          {fin ? 'Séance terminée' : etapes[index]?.libelle}
         </p>
 
         <div style={{ padding: '0 14px' }}>{children}</div>
@@ -619,24 +600,39 @@ function fusionnerBloc(bloc, depuisBase, memo) {
   return { liste, courant }
 }
 
-export default function Seance({ session, athleteId, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onQuitter }) {
+export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onQuitter }) {
   useKeepAwake()
   const [memo] = useState(() => lireEtat(athleteId, session.id))
+  const [video, setVideo] = useState(null)
   const chrono = useChrono(memo?.repos)
   const [debut] = useState(() => (typeof memo?.debut === 'number' ? memo.debut : Date.now()))
   const blocs = useMemo(() => construireBlocs(session), [session])
+  // Étapes de navigation : échauffement (△), blocs A, B, C…, retour au calme (▽). Sections envoyées
+  // prêtes par l'API ; recalculées ici pour une séance créée côté client (séance libre).
+  const sections = useMemo(() => session.sections || {
+    echauffement: sectionDeSeance(session, 'echauffement'),
+    retourAuCalme: sectionDeSeance(session, 'retourAuCalme'),
+  }, [session])
+  const etapes = useMemo(() => [
+    ...(sections.echauffement ? [{ id: 'echauffement', type: 'texte', rond: '△', libelle: sections.echauffement.titre, section: sections.echauffement }] : []),
+    ...blocs.map(b => ({ id: b.id, type: 'bloc', rond: b.id, libelle: `Bloc ${b.id}`, bloc: b })),
+    ...(sections.retourAuCalme ? [{ id: 'retourAuCalme', type: 'texte', rond: '▽', libelle: sections.retourAuCalme.titre, section: sections.retourAuCalme }] : []),
+  ], [blocs, sections])
   const muscles = useMemo(() => musclesDeLaSeance(session), [session])
   const [toast, setToast] = useState(null)
 
   const [tours, setTours] = useState(() => Object.fromEntries(blocs.map(b => [b.id, fusionnerBloc(b, etatInitialBloc(b, exerciseSets), memo?.blocs?.[b.id])])))
   const [faits, setFaits] = useState(() => Object.fromEntries(blocs.map(b => [b.id, !!memo?.faits?.[b.id] || toursValides(b, exerciseSets) >= b.tours])))
+  // Reprise : l'étape mémorisée ; sinon, séance déjà entamée → premier bloc pas fini ; sinon le début
+  // (échauffement s'il y en a un).
   const [index, setIndex] = useState(() => {
-    if (memo && memo.blockIndex >= 0 && memo.blockIndex < blocs.length) return memo.blockIndex
-    const i = blocs.findIndex(b => toursValides(b, exerciseSets) < b.tours)
-    return i === -1 ? Math.max(0, blocs.length - 1) : i
+    const memoIndex = memo?.section ? etapes.findIndex(et => et.id === memo.section) : -1
+    if (memoIndex !== -1) return memoIndex
+    if (!blocs.some(b => toursValides(b, exerciseSets) > 0)) return 0
+    const i = etapes.findIndex(et => et.type === 'bloc' && toursValides(et.bloc, exerciseSets) < et.bloc.tours)
+    return i === -1 ? Math.max(0, etapes.length - 1) : i
   })
   const [tempo, setTempo] = useState(null)
-  const [video, setVideo] = useState(null)
   const [fin, setFin] = useState(null) // horodatage de fin de séance, null tant qu'elle continue
   const [terminaison, setTerminaison] = useState(false)
 
@@ -644,16 +640,17 @@ export default function Seance({ session, athleteId, exerciseSets, onEnsureExerc
   useEffect(() => {
     try {
       localStorage.setItem(sessionProgressKey(athleteId, session.id), JSON.stringify({
-        blockIndex: index, blocs: tours, faits, repos: chrono.etat, debut, updatedAt: Date.now(),
+        blockIndex: index, section: etapes[index]?.id, blocs: tours, faits, repos: chrono.etat, debut, updatedAt: Date.now(),
       }))
     } catch { /* stockage indisponible — reprise sur les séries en base */ }
-  }, [athleteId, session.id, index, tours, faits, chrono.etat, debut])
+  }, [athleteId, session.id, index, etapes, tours, faits, chrono.etat, debut])
 
   // Séries à créer pour le bloc affiché (autant que de tours listés, au moins les tours prévus).
   // Provisionnement local et synchrone côté page ; le ref évite un double appel (effets rejoués en
   // dev) qui créerait des séries en double avant que l'état n'ait été relu.
   const provisionne = useRef({})
-  const bloc = blocs[index]
+  const etape = etapes[index]
+  const bloc = etape?.type === 'bloc' ? etape.bloc : null
   const nbTours = bloc ? Math.max(bloc.tours, tours[bloc.id].liste.length) : 0
   useEffect(() => {
     if (!bloc) return
@@ -665,9 +662,9 @@ export default function Seance({ session, athleteId, exerciseSets, onEnsureExerc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bloc?.id, nbTours])
 
-  if (blocs.length === 0) {
+  if (etapes.length === 0) {
     return (
-      <Page titre={session.title || 'Séance'} blocs={[]} index={0} faits={{}} onNaviguer={() => {}} onFermer={onQuitter}>
+      <Page titre={session.title || 'Séance'} etapes={[]} index={0} faits={{}} onNaviguer={() => {}} onFermer={onQuitter}>
         <p style={{ textAlign: 'center', color: T.texteSec, padding: 30 }}>Aucun exercice dans cette séance.</p>
       </Page>
     )
@@ -709,7 +706,7 @@ export default function Seance({ session, athleteId, exerciseSets, onEnsureExerc
     const series = blocs.reduce((acc, b) => acc + toursValides(b, exerciseSets) * b.exercices.length, 0)
     const dureeMin = Math.max(1, Math.round((fin - debut) / 60000))
     return (
-      <Page titre={session.title || 'Séance'} blocs={blocs} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
+      <Page titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
         <div style={{ background: T.vert, borderRadius: 20, padding: '20px 16px', color: T.clair, textAlign: 'center', marginBottom: 12 }}>
           <p style={{ fontFamily: TITRE, fontSize: 24, margin: '0 0 4px' }}>Séance terminée</p>
           <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>{session.title || 'Séance'} · {dureeMin} minute{dureeMin > 1 ? 's' : ''}</p>
@@ -734,14 +731,40 @@ export default function Seance({ session, athleteId, exerciseSets, onEnsureExerc
     )
   }
 
+  const derniereEtape = index === etapes.length - 1
+  const pageEtape = (contenu) => (
+    <Page titre={session.title || 'Séance'} etapes={etapes} index={index} faits={faits}
+      onNaviguer={i => { chrono.arreter(); setIndex(i) }} onFermer={onQuitter}>
+      {contenu}
+      {tempo ? <ExplicationTempo tempo={tempo} onFermer={() => setTempo(null)} /> : null}
+      {video ? <FenetreVideo video={video} onFermer={() => setVideo(null)} /> : null}
+      <Toast message={toast} show={!!toast} onDone={() => setToast(null)} position="top" />
+    </Page>
+  )
+
+  if (etape.type === 'texte') {
+    return pageEtape(
+      <SectionTexteVideo
+        section={etape.section}
+        mouvements={mouvementsSections}
+        fait={Boolean(faits[etape.id])}
+        onLireVideo={setVideo}
+        onValider={valeur => {
+          setFaits(f => ({ ...f, [etape.id]: valeur }))
+          if (!valeur) return
+          if (derniereEtape) setFin(Date.now())
+          else setIndex(index + 1)
+        }}
+      />
+    )
+  }
+
   const etat = tours[bloc.id]
   const t = etat.liste[etat.courant]
   const impair = bloc.exercices.length % 2 === 1
-  const dernierBloc = index === blocs.length - 1
 
-  return (
-    <Page titre={session.title || 'Séance'} blocs={blocs} index={index} faits={faits}
-      onNaviguer={i => { chrono.arreter(); setIndex(i) }} onFermer={onQuitter}>
+  return pageEtape(
+    <>
       <div style={{ display: 'flex', gap: 9, background: T.blanc, borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
         <span style={{ width: 3, background: T.bordeaux, borderRadius: 100, flex: 'none' }} />
         <p style={{ fontSize: 12, lineHeight: 1.5, color: T.texteCorps, margin: 0 }}>{consigneBloc(bloc)}</p>
@@ -775,7 +798,7 @@ export default function Seance({ session, athleteId, exerciseSets, onEnsureExerc
             valeur={t[e.id]}
             pleineLargeur={impair && i === bloc.exercices.length - 1}
             onTempo={setTempo}
-            onVideo={setVideo}
+            onVideo={e => setVideo({ nom: e.nom, video_url: e.video_url })}
             onPas={(champ, d) => majValeur(bloc, e, champ, v => {
               const ref = prescriptionEffective(e, etat.courant)
               // Case vide : la première flèche repose la valeur de référence.
@@ -815,18 +838,14 @@ export default function Seance({ session, athleteId, exerciseSets, onEnsureExerc
         if (!enregistrerTour(bloc)) return
         setFaits(f => ({ ...f, [bloc.id]: true }))
         chrono.arreter()
-        if (dernierBloc) setFin(Date.now())
+        if (derniereEtape) setFin(Date.now())
         else setIndex(index + 1)
       }} style={{
         width: '100%', marginTop: 8, background: T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 50, fontSize: 14,
         cursor: 'pointer', fontFamily: 'inherit',
       }}>
-        {dernierBloc ? 'Terminer la séance' : `Terminer le bloc ${bloc.id}`}
+        {derniereEtape ? 'Terminer la séance' : `Terminer le bloc ${bloc.id}`}
       </button>
-
-      {tempo ? <ExplicationTempo tempo={tempo} onFermer={() => setTempo(null)} /> : null}
-      {video ? <FenetreVideo exercice={video} onFermer={() => setVideo(null)} /> : null}
-      <Toast message={toast} show={!!toast} onDone={() => setToast(null)} position="top" />
-    </Page>
+    </>
   )
 }

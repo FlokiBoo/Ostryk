@@ -29,6 +29,7 @@ import {
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
 import EditeurSectionTexte from '@/app/components/EditeurSectionTexte'
+import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
 import { sectionDeSeance, lignesDeTexte } from '@/lib/sectionsTexte'
 
 // Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
@@ -474,6 +475,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   // de l'éditeur (non contrôlé) quand on remplace son contenu de l'extérieur (protocole inséré).
   const [sections, setSections] = useState({ warmup: null, cooldown: null })
   const [bibliothequeSections, setBibliothequeSections] = useState([]) // [{ id, nom, video_url }]
+  const [videoApercu, setVideoApercu] = useState(null)
 
   // Timer de séance (program_sessions.timer_config) — distinct des timers par bloc, qui vivent
   // sur `block.timerConfig` (voir groupExercisesIntoBlocks/flattenBlocksToExerciseRows, stockés
@@ -1873,7 +1875,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                 library" au rechargement, et le texte du circuit devenait invisible et
                 immodifiable — comme ses vidéos et son mode de résultat. */}
             {['warmup', 'cooldown'].includes(activeBlock.type) ? (
-              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ padding: 16, display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 380px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <EditeurSectionTexte
                   key={`${activeBlock.type}-${sections[activeBlock.type]?.version || 0}`}
                   titre={activeBlock.type === 'warmup' ? 'Échauffement' : 'Retour au calme'}
@@ -1901,6 +1904,25 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                     <Plus size={13} weight="bold" /> Insérer un protocole d’activation
                   </button>
                 )}
+              </div>
+              {/* Aperçu client : le MÊME composant que l'écran du sportif (SectionTexteVideo), mis à
+                  jour à la frappe — ce que le coach voit ici est exactement ce que verra le client. */}
+              <div style={{ flex: '0 0 320px', maxWidth: '100%', background: '#E8E0D5', borderRadius: 22, padding: '14px 14px 16px', overflow: 'hidden', boxSizing: 'border-box' }}>
+                <p style={{ fontFamily: 'var(--font-title)', fontSize: 13, color: '#6D1A22', textAlign: 'center', margin: '0 0 12px' }}>
+                  {activeBlock.type === 'warmup' ? 'Échauffement' : 'Retour au calme'} · vue client
+                </p>
+                <SectionTexteVideo
+                  apercu
+                  section={{
+                    titre: activeBlock.type === 'warmup' ? 'Échauffement' : 'Retour au calme',
+                    contenu: sections[activeBlock.type]?.contenu || [],
+                    videosLibres: sections[activeBlock.type]?.modifiee ? [] : (sections[activeBlock.type]?.videosLibres || []),
+                  }}
+                  mouvements={Object.fromEntries(bibliothequeSections.map(m => [m.id, m]))}
+                  onLireVideo={setVideoApercu}
+                />
+              </div>
+              {videoApercu && <FenetreVideo video={videoApercu} onFermer={() => setVideoApercu(null)} />}
               </div>
             ) : activeBlock.exercises?.length > 0 || isCircuitBlock ? (
               <div style={{ padding: 16 }}>
