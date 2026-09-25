@@ -317,6 +317,43 @@ export default function AthletesSidebar({ athleteId, date = today() }) {
           color: 'var(--text2)', background: 'transparent',
         }}><Robot size={16} /> Assistant IA</Link>
 
+        <button onClick={() => toggleSection('coaching')} style={{
+          display: 'flex', alignItems: 'center', gap: 4, width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '10px 10px 2px', fontFamily: 'inherit',
+        }}>
+          <span style={{ transform: sectionsCollapsed.coaching ? 'rotate(-90deg)' : 'none', transition: 'transform .15s', display: 'inline-block', fontSize: 9 }}>▾</span>
+          Coaching
+        </button>
+        {!sectionsCollapsed.coaching && (
+          <>
+            <Link href="/programs" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
+              color: 'var(--text2)', background: 'transparent',
+            }}><ClipboardText size={16} /> Programmes</Link>
+            <Link href="/workouts" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
+              color: 'var(--text2)', background: 'transparent',
+            }}><Barbell size={16} /> Workouts</Link>
+            <Link href="/movements" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
+              color: 'var(--text2)', background: 'transparent',
+            }}><BookOpen size={16} /> Bibliothèque d&apos;exercices</Link>
+            <Link href="/metrics" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
+              color: 'var(--text2)', background: 'transparent',
+            }}><ChartLineUp size={16} /> Metrics</Link>
+            <Link href="/tips" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
+              color: 'var(--text2)', background: 'transparent',
+            }}><Lightbulb size={16} /> Tips</Link>
+          </>
+        )}
+
         <button onClick={() => toggleSection('outils')} style={{
           display: 'flex', alignItems: 'center', gap: 4, width: '100%', background: 'none', border: 'none', cursor: 'pointer',
           fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '10px 10px 2px', fontFamily: 'inherit',
@@ -368,43 +405,6 @@ export default function AthletesSidebar({ athleteId, date = today() }) {
               borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
               color: 'var(--text2)', background: 'transparent',
             }}><ForkKnife size={16} /> Générateur de plan</Link>
-          </>
-        )}
-
-        <button onClick={() => toggleSection('coaching')} style={{
-          display: 'flex', alignItems: 'center', gap: 4, width: '100%', background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '10px 10px 2px', fontFamily: 'inherit',
-        }}>
-          <span style={{ transform: sectionsCollapsed.coaching ? 'rotate(-90deg)' : 'none', transition: 'transform .15s', display: 'inline-block', fontSize: 9 }}>▾</span>
-          Coaching
-        </button>
-        {!sectionsCollapsed.coaching && (
-          <>
-            <Link href="/programs" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
-              color: 'var(--text2)', background: 'transparent',
-            }}><ClipboardText size={16} /> Programmes</Link>
-            <Link href="/workouts" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
-              color: 'var(--text2)', background: 'transparent',
-            }}><Barbell size={16} /> Workouts</Link>
-            <Link href="/movements" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
-              color: 'var(--text2)', background: 'transparent',
-            }}><BookOpen size={16} /> Bibliothèque d&apos;exercices</Link>
-            <Link href="/metrics" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
-              color: 'var(--text2)', background: 'transparent',
-            }}><ChartLineUp size={16} /> Metrics</Link>
-            <Link href="/tips" onClick={e => { if (guardNavigation(e)) setOpen(false) }} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-              borderRadius: 'var(--r)', textDecoration: 'none', fontSize: 13, fontWeight: 600,
-              color: 'var(--text2)', background: 'transparent',
-            }}><Lightbulb size={16} /> Tips</Link>
           </>
         )}
 
