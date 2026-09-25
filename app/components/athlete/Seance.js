@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Toast from '@/app/components/Toast'
 import { parseMusclesFromText } from '@/app/components/CelebrationModal'
+import { programmerFinRepos, annulerFinRepos } from '@/lib/reposNotification'
 
 /*
   Écran de séance (maquette Seance.jsx) — étape 1 : mode client, blocs uniquement (échauffement,
@@ -266,7 +267,9 @@ function useKeepAwake() {
 }
 
 // Chrono basé sur un horodatage de fin : juste même après un passage en arrière-plan (le JS d'une
-// WebView est suspendu écran verrouillé), recalculé au retour au premier plan.
+// WebView est suspendu écran verrouillé), recalculé au retour au premier plan. Doublé d'une
+// notification locale programmée à la même heure (lib/reposNotification.js), la seule chose qui
+// puisse prévenir le sportif téléphone en poche ; reprogrammée au +15 s, annulée si on passe.
 // `initial` : repos en cours relu après un rechargement (ignoré s'il est déjà fini).
 function useChrono(initial = null) {
   const [etat, setEtat] = useState(() => (initial && initial.fin > Date.now() ? initial : null)) // { fin: timestamp, duree: secondes }
@@ -299,9 +302,22 @@ function useChrono(initial = null) {
     actif: Boolean(etat),
     restant,
     duree: etat?.duree ?? 0,
-    lancer: (secondes) => setEtat({ fin: Date.now() + secondes * 1000, duree: secondes }),
-    ajouter: (secondes) => setEtat(e => (e ? { ...e, fin: e.fin + secondes * 1000, duree: e.duree + secondes } : e)),
-    arreter: () => setEtat(null),
+    lancer: (secondes) => {
+      const fin = Date.now() + secondes * 1000
+      setEtat({ fin, duree: secondes })
+      programmerFinRepos(fin)
+    },
+    ajouter: (secondes) => {
+      if (!etat) return
+      const fin = etat.fin + secondes * 1000
+      setEtat({ fin, duree: etat.duree + secondes })
+      programmerFinRepos(fin)
+    },
+    arreter: () => {
+      if (!etat) return
+      setEtat(null)
+      annulerFinRepos()
+    },
   }
 }
 
