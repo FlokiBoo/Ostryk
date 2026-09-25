@@ -281,7 +281,9 @@ export default function WodTab({
       titre: s.title || 'Séance',
       type: typeSeance(s, prog),
       faite,
-      programme: libre ? null : prog.title,
+      // "Programme Objectif traction stricte" → "Objectif traction stricte" : le mot est redondant
+      // sur la carte, qui dit déjà de quel programme vient la séance.
+      programme: libre ? null : (prog.title || '').replace(/^programme\s*[:\-–—]?\s*/i, '') || prog.title,
       meta: faite ? exosLabel : `≈ ${estimateDurationMin(s.exercises)} minutes · ${exosLabel}`,
       blocs: faite ? [] : blocsSeance(s.exercises),
       decalable: !libre && !isCoachView && !!onPostponeSession,
