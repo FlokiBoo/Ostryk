@@ -442,6 +442,8 @@ export default function AccueilClient({
   );
 
   const nbCartes = objectifsTries.length + (onAjouterObjectif ? 1 : 0);
+  // Flèche vers la liste complète (y compris objectifs passés ou atteints, masqués du carrousel).
+  const voirTousObjectifs = !!onOuvrirObjectifs && objectifs.length > 0;
   const afficherProgrammes = !athlete?.is_1to1_client && programmes.length > 0;
 
   // En fin de défilement, le dernier point s'allume même si la dernière carte ne peut pas
@@ -517,23 +519,50 @@ export default function AccueilClient({
             ) : null}
           </div>
 
-          {nbCartes > 1 && railDefilable ? (
-            <div style={{ display: "flex", gap: 5, padding: "12px 18px 0" }} aria-hidden="true">
-              {Array.from({ length: nbCartes }, (_, i) => (
-                <span
-                  key={i}
+          {(nbCartes > 1 && railDefilable) || voirTousObjectifs ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "2px 18px 0", minHeight: 44 }}>
+              {nbCartes > 1 && railDefilable ? (
+                <div style={{ display: "flex", gap: 5 }} aria-hidden="true">
+                  {Array.from({ length: nbCartes }, (_, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        width: i === pageObjectif ? 18 : 6,
+                        height: 4,
+                        borderRadius: 100,
+                        background: i === pageObjectif ? T.bordeaux : T.filet,
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {voirTousObjectifs ? (
+                <button
+                  type="button"
+                  onClick={onOuvrirObjectifs}
                   style={{
-                    width: i === pageObjectif ? 18 : 6,
-                    height: 4,
-                    borderRadius: 100,
-                    background: i === pageObjectif ? T.bordeaux : T.filet,
+                    marginLeft: "auto",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    height: 44,
+                    padding: "0 2px",
+                    background: "none",
+                    border: "none",
+                    color: T.bordeaux,
+                    fontSize: 12,
+                    fontFamily: "inherit",
+                    cursor: "pointer",
                   }}
-                />
-              ))}
+                >
+                  Tous mes objectifs
+                  <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1 }}>→</span>
+                </button>
+              ) : null}
             </div>
           ) : null}
 
-          <div style={{ height: 30 }} />
+          <div style={{ height: 20 }} />
         </>
       ) : null}
 
