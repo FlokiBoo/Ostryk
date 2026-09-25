@@ -267,8 +267,9 @@ function useKeepAwake() {
 
 // Chrono basé sur un horodatage de fin : juste même après un passage en arrière-plan (le JS d'une
 // WebView est suspendu écran verrouillé), recalculé au retour au premier plan.
-function useChrono() {
-  const [etat, setEtat] = useState(null) // { fin: timestamp, duree: secondes }
+// `initial` : repos en cours relu après un rechargement (ignoré s'il est déjà fini).
+function useChrono(initial = null) {
+  const [etat, setEtat] = useState(() => (initial && initial.fin > Date.now() ? initial : null)) // { fin: timestamp, duree: secondes }
   const [restant, setRestant] = useState(0)
   const timer = useRef(null)
 
@@ -294,6 +295,7 @@ function useChrono() {
   }, [etat])
 
   return {
+    etat,
     actif: Boolean(etat),
     restant,
     duree: etat?.duree ?? 0,
@@ -570,32 +572,50 @@ function Page({ titre, blocs, index, faits, fin, onNaviguer, onFermer, children 
 /* Écran principal                                                      */
 /* ------------------------------------------------------------------ */
 
-// Position (bloc affiché) mémorisée par sportif + séance — même clé que l'ancien player, que la
-// page efface à la validation (clearSessionProgress). Les valeurs, elles, vivent dans les séries.
+// État de la séance en cours, mémorisé par sportif + séance (même clé que l'ancien player, que la
+// page efface à la validation via clearSessionProgress) : section affichée, tour courant et
+// valeurs de CHAQUE tour de chaque bloc (y compris un tour pas encore validé), blocs marqués
+// terminés, fin du repos en cours, début de séance. Un WebView mobile peut recharger toute la page
+// en repassant au premier plan : sans ça, le client qui revient sur le bloc A ne retrouverait pas
+// son tour 2 tel qu'il l'a laissé. Les séries validées restent, elles, la référence en base.
 export const sessionProgressKey = (athleteId, sessionId) => `ostryk_session_progress_${athleteId}_${sessionId}`
+// Au-delà, c'est une autre séance : on repart des séries en base.
 const PROGRESS_MAX_AGE_MS = 12 * 60 * 60 * 1000
 
-function lirePosition(athleteId, sessionId) {
+function lireEtat(athleteId, sessionId) {
   try {
     const parsed = JSON.parse(localStorage.getItem(sessionProgressKey(athleteId, sessionId)) || 'null')
     if (typeof parsed?.blockIndex !== 'number' || !parsed.updatedAt || Date.now() - parsed.updatedAt > PROGRESS_MAX_AGE_MS) return null
-    return parsed.blockIndex
+    return parsed
   } catch { return null }
+}
+
+// Tours mémorisés sur ce téléphone, complétés par la base si elle en sait plus (tours validés
+// depuis un autre appareil). Mémoire ignorée si elle ne correspond plus aux exercices du bloc
+// (séance modifiée par le coach entre-temps).
+function fusionnerBloc(bloc, depuisBase, memo) {
+  const ids = bloc.exercices.map(e => e.id)
+  const lisible = memo && Array.isArray(memo.liste) && memo.liste.length > 0
+    && memo.liste.every(t => t && ids.every(id => t[id] && 'kg' in t[id] && 'reps' in t[id]))
+  if (!lisible) return depuisBase
+  const liste = memo.liste.length >= depuisBase.liste.length ? memo.liste : [...memo.liste, ...depuisBase.liste.slice(memo.liste.length)]
+  const courant = Number.isInteger(memo.courant) ? Math.min(Math.max(0, memo.courant), liste.length - 1) : depuisBase.courant
+  return { liste, courant }
 }
 
 export default function Seance({ session, athleteId, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onQuitter }) {
   useKeepAwake()
-  const chrono = useChrono()
-  const [debut] = useState(() => Date.now())
+  const [memo] = useState(() => lireEtat(athleteId, session.id))
+  const chrono = useChrono(memo?.repos)
+  const [debut] = useState(() => (typeof memo?.debut === 'number' ? memo.debut : Date.now()))
   const blocs = useMemo(() => construireBlocs(session), [session])
   const muscles = useMemo(() => musclesDeLaSeance(session), [session])
   const [toast, setToast] = useState(null)
 
-  const [tours, setTours] = useState(() => Object.fromEntries(blocs.map(b => [b.id, etatInitialBloc(b, exerciseSets)])))
-  const [faits, setFaits] = useState(() => Object.fromEntries(blocs.map(b => [b.id, toursValides(b, exerciseSets) >= b.tours])))
+  const [tours, setTours] = useState(() => Object.fromEntries(blocs.map(b => [b.id, fusionnerBloc(b, etatInitialBloc(b, exerciseSets), memo?.blocs?.[b.id])])))
+  const [faits, setFaits] = useState(() => Object.fromEntries(blocs.map(b => [b.id, !!memo?.faits?.[b.id] || toursValides(b, exerciseSets) >= b.tours])))
   const [index, setIndex] = useState(() => {
-    const memo = lirePosition(athleteId, session.id)
-    if (memo !== null && memo >= 0 && memo < blocs.length) return memo
+    if (memo && memo.blockIndex >= 0 && memo.blockIndex < blocs.length) return memo.blockIndex
     const i = blocs.findIndex(b => toursValides(b, exerciseSets) < b.tours)
     return i === -1 ? Math.max(0, blocs.length - 1) : i
   })
@@ -604,9 +624,14 @@ export default function Seance({ session, athleteId, exerciseSets, onEnsureExerc
   const [fin, setFin] = useState(null) // horodatage de fin de séance, null tant qu'elle continue
   const [terminaison, setTerminaison] = useState(false)
 
+  // Réécrit à chaque changement (frappe comprise) : au prochain montage, on rouvre exactement ici.
   useEffect(() => {
-    try { localStorage.setItem(sessionProgressKey(athleteId, session.id), JSON.stringify({ blockIndex: index, updatedAt: Date.now() })) } catch { /* reprise sur les séries en base */ }
-  }, [athleteId, session.id, index])
+    try {
+      localStorage.setItem(sessionProgressKey(athleteId, session.id), JSON.stringify({
+        blockIndex: index, blocs: tours, faits, repos: chrono.etat, debut, updatedAt: Date.now(),
+      }))
+    } catch { /* stockage indisponible — reprise sur les séries en base */ }
+  }, [athleteId, session.id, index, tours, faits, chrono.etat, debut])
 
   // Séries à créer pour le bloc affiché (autant que de tours listés, au moins les tours prévus).
   // Provisionnement local et synchrone côté page ; le ref évite un double appel (effets rejoués en
