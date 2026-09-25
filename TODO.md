@@ -8,6 +8,7 @@ Tâches identifiées mais pas encore traitées, à reprendre en session.
 ## Backlog
 - [ ] Réduire la liste des PR dans l'onglet Records (`app/components/TrackedMovementsBlock.js`) — quoi exactement à préciser avec l'utilisateur (moins de mouvements par défaut ? suppression de mouvements précis ? moins de catégories ?).
 - [ ] Avant de connecter l'assistant IA (`app/api/ai/chat`) ou le générateur de repas (`lib/mealPlanner.js`) à un vrai backend IA : ajouter un rate limiting (remonté en revue sécurité pré-lancement, endpoint à coût si non protégé).
+- [ ] **Reconstruire les apps Android + iOS à la fin de la phase de test** (poussé le 2026-09-25) : le plugin `@capacitor/local-notifications` (notification de fin de repos, `lib/reposNotification.js`) est installé et synchronisé (`cap:sync`), mais n'existe côté natif qu'après une nouvelle version des apps. D'ici là, pas de notification, sans erreur.
 - [ ] Mettre l'app native en ligne sur le Google Play Store — bêta fermée en cours de lancement (2026-09-15) avant la mise en ligne publique.
 - [ ] Ajouter un mode "Cardio" sous "Add exercise" et "Circuit" (éditeur de séance, blocs).
 - [ ] Faire la DA (direction artistique) du site.
