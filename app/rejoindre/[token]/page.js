@@ -11,6 +11,8 @@ import { isPasswordValid } from '@/lib/passwordPolicy'
 // son mot de passe, le compte est rattaché à la fiche que le coach a déjà créée, puis il entre
 // directement dans son espace.
 
+const etiquette = { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px' }
+
 const champ = {
   width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: '1px solid var(--border2)', borderRadius: 'var(--r)',
   fontSize: 16, outline: 'none', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'inherit',
@@ -20,6 +22,12 @@ export default function RejoindrePage() {
   const { token } = useParams()
   const router = useRouter()
   const [infos, setInfos] = useState(null) // { prenom, email, active } | { invalide: true }
+  const [prenom, setPrenom] = useState('')
+  const [nom, setNom] = useState('')
+  const [naissance, setNaissance] = useState('')
+  const [taille, setTaille] = useState('')
+  const [poids, setPoids] = useState('')
+  const [poidsCible, setPoidsCible] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [voir, setVoir] = useState(false)
@@ -35,6 +43,8 @@ export default function RejoindrePage() {
       if (!r.ok) { setInfos({ invalide: true }); return }
       setInfos(json)
       if (json.email) setEmail(json.email)
+      if (json.prenom) setPrenom(json.prenom)
+      if (json.nom) setNom(json.nom)
     }).catch(() => { if (actif) setInfos({ invalide: true }) })
     return () => { actif = false }
   }, [token])
@@ -42,11 +52,15 @@ export default function RejoindrePage() {
   const valider = async (e) => {
     e.preventDefault()
     setErreur('')
+    if (!prenom.trim()) { setErreur('Ton prénom est requis.'); return }
     if (!cgu) { setErreur('Merci d’accepter les CGU et la politique de confidentialité.'); return }
     if (!isPasswordValid(password)) { setErreur('Le mot de passe ne respecte pas encore toutes les règles.'); return }
     setEnvoi(true)
     const res = await fetch(`/api/rejoindre/${token}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        email, password, prenom, nom,
+        birth_date: naissance || null, height: taille || null, weight: poids || null, target_weight: poidsCible || null,
+      }),
     })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) {
@@ -92,13 +106,47 @@ export default function RejoindrePage() {
               <div style={{ fontFamily: 'var(--font-title)', fontSize: 20, color: 'var(--bordeaux)' }}>
                 {infos.prenom ? `Bienvenue ${infos.prenom}` : 'Bienvenue'}
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>Ton coach t’a préparé ton espace. Choisis ton mot de passe pour y accéder.</div>
+              <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>Ton coach t’a préparé ton espace. Vérifie tes informations et choisis ton mot de passe pour y accéder.</div>
             </div>
 
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }} htmlFor="rejoindre-email">Email</label>
-            <input id="rejoindre-email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} style={champ} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <label style={etiquette} htmlFor="rejoindre-prenom">Prénom</label>
+                <input id="rejoindre-prenom" autoComplete="given-name" required value={prenom} onChange={e => setPrenom(e.target.value)} style={{ ...champ, marginTop: 5 }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <label style={etiquette} htmlFor="rejoindre-nom">Nom</label>
+                <input id="rejoindre-nom" autoComplete="family-name" value={nom} onChange={e => setNom(e.target.value)} style={{ ...champ, marginTop: 5 }} />
+              </div>
+            </div>
 
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }} htmlFor="rejoindre-mdp">Mot de passe</label>
+            <div>
+              <label style={etiquette} htmlFor="rejoindre-naissance">Date de naissance</label>
+              <input id="rejoindre-naissance" type="date" value={naissance} onChange={e => setNaissance(e.target.value)} style={{ ...champ, marginTop: 5 }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <label style={etiquette} htmlFor="rejoindre-taille">Taille (cm)</label>
+                <input id="rejoindre-taille" type="number" inputMode="numeric" placeholder="175" value={taille} onChange={e => setTaille(e.target.value)} style={{ ...champ, marginTop: 5 }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <label style={etiquette} htmlFor="rejoindre-poids">Poids (kg)</label>
+                <input id="rejoindre-poids" type="number" inputMode="decimal" step="0.1" placeholder="70.5" value={poids} onChange={e => setPoids(e.target.value)} style={{ ...champ, marginTop: 5 }} />
+              </div>
+            </div>
+
+            <div>
+              <label style={etiquette} htmlFor="rejoindre-cible">Poids cible (kg) · optionnel, mais conseillé</label>
+              <input id="rejoindre-cible" type="number" inputMode="decimal" step="0.1" placeholder="65.0" value={poidsCible} onChange={e => setPoidsCible(e.target.value)} style={{ ...champ, marginTop: 5 }} />
+            </div>
+
+            <div>
+              <label style={etiquette} htmlFor="rejoindre-email">Email</label>
+              <input id="rejoindre-email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} style={{ ...champ, marginTop: 5 }} />
+            </div>
+
+            <label style={{ ...etiquette, marginBottom: -7 }} htmlFor="rejoindre-mdp">Mot de passe</label>
             <div style={{ position: 'relative' }}>
               <input id="rejoindre-mdp" type={voir ? 'text' : 'password'} autoComplete="new-password" required value={password} onChange={e => setPassword(e.target.value)} style={{ ...champ, paddingRight: 46 }} />
               <button type="button" aria-label={voir ? 'Masquer le mot de passe' : 'Afficher le mot de passe'} onClick={() => setVoir(v => !v)} style={{

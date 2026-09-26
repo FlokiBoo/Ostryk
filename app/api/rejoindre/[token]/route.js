@@ -9,8 +9,13 @@ import { isPasswordValid, passwordPolicyMessage } from '@/lib/passwordPolicy'
 // compte créé à la fiche existante. Utilisable une seule fois : dès que la fiche a un compte
 // (auth_user_id), il ne fait plus que renvoyer vers la connexion.
 //
-// Pas de session requise (le client n'a pas encore de compte) : la route n'expose que le prénom et
-// l'email déjà connu de la fiche, jamais le reste.
+// Comme l'inscription normale, le client renseigne (ou corrige) ses informations : prénom, nom,
+// date de naissance, taille, poids, poids cible. Elles sont écrites sur SA fiche, qui garde tout le
+// reste (programmes en cours, historique…). Un champ laissé vide n'efface pas ce que le coach avait
+// déjà saisi.
+//
+// Pas de session requise (le client n'a pas encore de compte) : la route n'expose que le nom et
+// l'email déjà connus de la fiche, jamais le reste.
 
 async function ficheDuLien(token) {
   if (!token || token.length < 12) return null
@@ -23,8 +28,10 @@ export async function GET(request, { params }) {
   const { token } = await params
   const fiche = await ficheDuLien(token)
   if (!fiche) return NextResponse.json({ error: 'Lien invalide.' }, { status: 404 })
+  const [prenom, ...nom] = (fiche.name || '').trim().split(/\s+/)
   return NextResponse.json({
-    prenom: (fiche.name || '').trim().split(/\s+/)[0] || null,
+    prenom: prenom || null,
+    nom: nom.join(' ') || null,
     email: fiche.email || null,
     active: !!fiche.auth_user_id,
   })
@@ -32,7 +39,7 @@ export async function GET(request, { params }) {
 
 export async function POST(request, { params }) {
   const { token } = await params
-  const { email, password } = await request.json().catch(() => ({}))
+  const { email, password, prenom, nom, birth_date, height, weight, target_weight } = await request.json().catch(() => ({}))
   const fiche = await ficheDuLien(token)
   if (!fiche) return NextResponse.json({ error: 'Lien invalide.' }, { status: 404 })
   if (fiche.auth_user_id) return NextResponse.json({ error: 'Ce compte est déjà activé : connecte-toi.', active: true }, { status: 409 })
@@ -40,6 +47,16 @@ export async function POST(request, { params }) {
   const adresse = (email || '').trim().toLowerCase()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adresse)) return NextResponse.json({ error: 'Adresse email invalide.' }, { status: 400 })
   if (!isPasswordValid(password)) return NextResponse.json({ error: passwordPolicyMessage() }, { status: 400 })
+  const nomComplet = `${(prenom || '').trim()} ${(nom || '').trim()}`.trim()
+  if (!(prenom || '').trim()) return NextResponse.json({ error: 'Ton prénom est requis.' }, { status: 400 })
+  const nombre = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n > 0 ? n : null }
+  const infos = {
+    name: nomComplet,
+    ...(/^\d{4}-\d{2}-\d{2}$/.test(birth_date || '') ? { birth_date } : {}),
+    ...(nombre(height) ? { height: Math.round(nombre(height)) } : {}),
+    ...(nombre(weight) ? { weight: nombre(weight) } : {}),
+    ...(nombre(target_weight) ? { target_weight: nombre(target_weight) } : {}),
+  }
 
   // Email déjà porté par une AUTRE fiche : on ne crée pas un second compte pour la même personne.
   const { data: autre } = await supabaseAdmin.from('athletes').select('id').ilike('email', adresse).neq('id', fiche.id).maybeSingle()
@@ -51,7 +68,7 @@ export async function POST(request, { params }) {
     email: adresse,
     password,
     email_confirm: true,
-    user_metadata: { name: fiche.name },
+    user_metadata: { name: nomComplet },
     app_metadata: { athlete_token: token },
   })
   if (erreurCreation) {
@@ -65,7 +82,7 @@ export async function POST(request, { params }) {
 
   // Rattachement conditionnel : si deux activations arrivent en même temps, une seule gagne.
   const { data: liee, error: erreurLien } = await supabaseAdmin.from('athletes')
-    .update({ auth_user_id: cree.user.id, email: adresse })
+    .update({ auth_user_id: cree.user.id, email: adresse, ...infos })
     .eq('id', fiche.id).is('auth_user_id', null)
     .select('id').maybeSingle()
   if (erreurLien || !liee) {
@@ -77,8 +94,8 @@ export async function POST(request, { params }) {
   if (coach?.email) {
     await sendEmail({
       to: coach.email,
-      subject: `${fiche.name} a activé son compte`,
-      html: `<p><strong>${fiche.name}</strong> vient d’activer son compte Ostryk (${adresse}) avec son lien personnel.</p>`,
+      subject: `${nomComplet} a activé son compte`,
+      html: `<p><strong>${nomComplet}</strong> vient d’activer son compte Ostryk (${adresse}) avec son lien personnel.</p>`,
     }).catch(() => {})
   }
 
