@@ -651,8 +651,10 @@ export default function AccueilClient({
       {afficherProgrammes ? (
         <>
           <h2 style={{ ...libelleSection, margin: "0 18px 12px", fontWeight: 400 }}>Programmes</h2>
-          <div style={{ display: "flex", gap: 10, overflowX: "auto", padding: "0 18px 4px", scrollbarWidth: "none" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, overflowX: "auto", padding: "0 18px 4px", scrollbarWidth: "none" }}>
             {programmes.map((p, i) => (
+              // Carte = le rectangle de couleur, texte dedans : hauteur fixe, donc toutes les cartes
+              // restent alignées quelle que soit la longueur du titre (coupé à deux lignes).
               <button
                 key={p.id}
                 type="button"
@@ -660,44 +662,48 @@ export default function AccueilClient({
                 style={{
                   flex: "none",
                   width: 180,
+                  height: 120,
+                  boxSizing: "border-box",
                   textAlign: "left",
                   border: "none",
-                  background: "none",
-                  padding: 0,
+                  borderRadius: 14,
+                  background: DEGRADES[i % DEGRADES.length],
+                  padding: 12,
                   marginRight: i === programmes.length - 1 ? 18 : 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
                   fontFamily: "inherit",
-                  color: T.texte,
+                  color: T.clair,
                   cursor: "pointer",
                 }}
               >
-                <div
-                  style={{
-                    height: 104,
-                    borderRadius: 14,
-                    background: DEGRADES[i % DEGRADES.length],
-                    display: "flex",
-                    alignItems: "flex-end",
-                    padding: 10,
-                  }}
-                >
+                <span style={{ minHeight: 18 }}>
                   {estNouveau(p.listed_at) ? (
-                    <span
-                      style={{
-                        background: T.bordeaux,
-                        color: T.clair,
-                        borderRadius: 100,
-                        fontSize: 10,
-                        padding: "2px 8px",
-                      }}
-                    >
+                    <span style={{ background: T.clair, color: T.bordeaux, borderRadius: 100, fontSize: 10, padding: "2px 8px" }}>
                       Nouveau
                     </span>
                   ) : null}
-                </div>
-                <p style={{ fontFamily: TITRE, fontSize: 14, margin: "9px 2px 2px" }}>{p.titre}</p>
-                {p.sousTitre ? (
-                  <p style={{ fontSize: 11, color: T.texteSec, margin: "0 2px" }}>{p.sousTitre}</p>
-                ) : null}
+                </span>
+                <span style={{ display: "block" }}>
+                  <span
+                    style={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      fontFamily: TITRE,
+                      fontSize: 15,
+                      lineHeight: 1.2,
+                      color: T.clair,
+                    }}
+                  >
+                    {p.titre}
+                  </span>
+                  {p.sousTitre ? (
+                    <span style={{ display: "block", fontSize: 11, color: "rgba(245,239,230,0.8)", marginTop: 4 }}>{p.sousTitre}</span>
+                  ) : null}
+                </span>
               </button>
             ))}
           </div>
