@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Toast from '@/app/components/Toast'
-import { parseMusclesFromText, randomCitation } from '@/app/components/CelebrationModal'
+import { parseMusclesFromText, randomCitation, BodySVG } from '@/app/components/CelebrationModal'
+import { COLOR_BY_GROUP } from '@/app/components/MuscleAnatomyDiagram'
+import { shareCardImage } from '@/lib/shareCard'
 import { programmerFinRepos, annulerFinRepos } from '@/lib/reposNotification'
 import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
@@ -512,24 +514,67 @@ function Repos({ secondes, chrono }) {
   )
 }
 
-function Muscles({ muscles }) {
+// Silhouette avant / arrière colorée groupe par groupe (même code couleur que l'écran « Bravo ! »
+// du sportif), les secondaires en teinte atténuée, puis la légende.
+function Muscles({ muscles, largeur = 120, fond = T.blanc }) {
   if (!muscles.principaux.length) return null
-  const pastille = (fond, couleur) => ({ background: fond, color: couleur, borderRadius: 100, fontSize: 11, padding: '3px 10px' })
+  const pastille = (m, principal) => (
+    <span key={m} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: principal ? T.sable : 'transparent', border: `1px solid ${T.bordure}`, borderRadius: 100, fontSize: 11, padding: '2px 9px 2px 4px', color: T.texte }}>
+      <span style={{ width: 11, height: 11, borderRadius: '50%', background: COLOR_BY_GROUP[m] || T.muted, opacity: principal ? 1 : 0.45, flex: 'none' }} />
+      {libelleMuscle(m)}
+    </span>
+  )
   return (
-    <div style={{ background: T.blanc, borderRadius: 12, padding: 12 }}>
+    <div style={{ background: fond, borderRadius: 12, padding: 12 }}>
       <p style={{ fontFamily: TITRE, fontSize: 12, color: T.bordeaux, margin: '0 0 8px' }}>Muscles travaillés</p>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginBottom: 10 }}>
+        <BodySVG active={muscles.principaux} secondary={muscles.secondaires} view="front" width={largeur} />
+        <BodySVG active={muscles.principaux} secondary={muscles.secondaires} view="back" width={largeur} />
+      </div>
       <p style={{ fontSize: 10, color: T.texteSec, margin: '0 0 5px' }}>Principaux</p>
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: muscles.secondaires.length ? 9 : 0 }}>
-        {muscles.principaux.map(m => <span key={m} style={pastille(T.bordeaux, T.clair)}>{libelleMuscle(m)}</span>)}
+        {muscles.principaux.map(m => pastille(m, true))}
       </div>
       {muscles.secondaires.length ? (
         <>
           <p style={{ fontSize: 10, color: T.texteSec, margin: '0 0 5px' }}>Secondaires</p>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {muscles.secondaires.map(m => <span key={m} style={pastille(T.vertClair, T.vert)}>{libelleMuscle(m)}</span>)}
+            {muscles.secondaires.map(m => pastille(m, false))}
           </div>
         </>
       ) : null}
+    </div>
+  )
+}
+
+// Visuel au format story (9:16) partagé sur Instagram, WhatsApp… via la feuille de partage native.
+// Rendu hors écran puis capturé en image (1080 × 1920). Sans les notes plaisir / difficulté, qui
+// restent privées au coach.
+function CarteStory({ refCarte, session, prenom, dureeMin, nbBlocs, volume, citation, muscles }) {
+  return (
+    <div aria-hidden style={{ position: 'fixed', left: -10000, top: 0, pointerEvents: 'none' }}>
+      <div ref={refCarte} data-scale="3" style={{
+        width: 360, height: 640, boxSizing: 'border-box', background: T.beige, color: T.texte, padding: '28px 22px 20px',
+        display: 'flex', flexDirection: 'column', fontFamily: 'inherit',
+      }}>
+        <p style={{ fontSize: 11, letterSpacing: 2, color: T.texteSec, margin: 0, textTransform: 'uppercase' }}>Séance terminée{prenom ? ` · ${prenom}` : ''}</p>
+        <p style={{ fontFamily: TITRE, fontSize: 24, lineHeight: 1.15, color: T.bordeaux, margin: '6px 0 2px' }}>{session.title || 'Séance'}</p>
+        <p style={{ fontSize: 11, color: T.texteSec, margin: '0 0 14px' }}>{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          {[[dureeMin, 'minutes'], [nbBlocs, 'blocs'], [volume, 'séries']].map(([v, l]) => (
+            <div key={l} style={{ flex: 1, background: T.blanc, borderRadius: 10, padding: '8px 6px', textAlign: 'center' }}>
+              <p style={{ fontFamily: TITRE, fontSize: 20, margin: 0 }}>{v}</p>
+              <p style={{ fontSize: 10, color: T.texteSec, margin: 0 }}>{l}</p>
+            </div>
+          ))}
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}><Muscles muscles={muscles} largeur={128} /></div>
+        <div style={{ background: T.vert, borderRadius: 12, padding: '12px 14px', margin: '12px 0 10px' }}>
+          <p style={{ fontFamily: TITRE, fontSize: 13, lineHeight: 1.45, color: T.clair, margin: 0, textAlign: 'center' }}>«&nbsp;{citation.texte}&nbsp;»</p>
+          {citation.auteur ? <p style={{ fontSize: 10, color: T.muted, margin: '4px 0 0', textAlign: 'center' }}>{citation.auteur}</p> : null}
+        </div>
+        <p style={{ fontFamily: TITRE, fontSize: 13, letterSpacing: 3, color: T.bordeaux, margin: 0, textAlign: 'center' }}>OSTRYK</p>
+      </div>
     </div>
   )
 }
@@ -569,7 +614,15 @@ function FinCoach({ session, athleteNom, dureeMin, nbBlocs, volume, muscles, onT
   const [citation] = useState(() => randomCitation())
   const [partage, setPartage] = useState(false)
   const [envoi, setEnvoi] = useState(false)
+  const [partageSocial, setPartageSocial] = useState(false)
+  const carteRef = useRef(null)
   const prenom = (athleteNom || '').split(' ')[0] || 'ton sportif'
+  const partagerStory = async () => {
+    setPartageSocial(true)
+    try {
+      await shareCardImage(carteRef.current, { filename: 'seance.png', title: session.title || 'Séance terminée', backgroundColor: T.beige })
+    } finally { setPartageSocial(false) }
+  }
   const note = { plaisir: plaisir || null, difficulte: difficulte || null, duree_min: dureeMin }
   return (
     <>
@@ -618,9 +671,17 @@ function FinCoach({ session, athleteNom, dureeMin, nbBlocs, volume, muscles, onT
               flex: 2, background: partage ? T.vert : T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 50, fontSize: 14,
               cursor: partage ? 'default' : 'pointer', fontFamily: 'inherit',
             }}>
-              {partage ? 'Envoyé ✓' : 'Partager'}
+              {partage ? 'Envoyé ✓' : `Envoyer à ${prenom}`}
             </button>
           </div>
+          <button type="button" disabled={partageSocial} onClick={partagerStory} style={{
+            width: '100%', marginTop: 8, background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12, height: 46, fontSize: 14,
+            color: T.texte, cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            {partageSocial ? 'Préparation de l’image…' : '↗ Partager en story, WhatsApp…'}
+          </button>
+          <CarteStory refCarte={carteRef} session={session} prenom={(athleteNom || '').split(' ')[0]} dureeMin={dureeMin} nbBlocs={nbBlocs}
+            volume={volume} citation={citation} muscles={muscles} />
           <p style={{ fontSize: 11, color: T.texteSec, textAlign: 'center', margin: '8px 0 0' }}>
             {partage ? `Envoyé à ${prenom}` : `Tes notes restent privées · ${prenom} reçoit la citation et les muscles`}
           </p>
@@ -918,6 +979,21 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   const etat = tours[bloc.id]
   const t = etat.liste[etat.courant]
   const impair = bloc.exercices.length % 2 === 1
+  const valides = toursValides(bloc, exerciseSets)
+  const ligneTour = (tt, i) => (
+    <button key={i} type="button" onClick={() => setTours(p => ({ ...p, [bloc.id]: { ...p[bloc.id], courant: i } }))} style={{
+      width: '100%', textAlign: 'left', background: T.blanc, border: 'none', borderRadius: 12, padding: '9px 12px', marginBottom: 8,
+      display: 'flex', alignItems: 'center', gap: 8, minHeight: 44, cursor: 'pointer', fontFamily: 'inherit',
+    }}>
+      <span style={{ width: 18, height: 18, borderRadius: '50%', background: i < valides ? T.vert : T.muted, color: T.blanc, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+        {i < valides ? '✓' : ''}
+      </span>
+      <span style={{ fontSize: 12, color: T.texteSec, minWidth: 44 }}>Tour {i + 1}</span>
+      <span style={{ fontSize: 11, color: T.texteCorps, flex: 1 }}>
+        {bloc.exercices.map(e => `${e.code} ${e.unite === 'kg' ? `${fmt(tt[e.id].kg) || '—'}×${tt[e.id].reps ?? '—'}` : tt[e.id].reps ?? '—'}`).join(' · ')}
+      </span>
+    </button>
+  )
 
   return pageEtape(
     <>
@@ -926,54 +1002,47 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
         <p style={{ fontSize: 12, lineHeight: 1.5, color: T.texteCorps, margin: 0 }}>{consigneBloc(bloc)}</p>
       </div>
 
-      {etat.liste.map((tt, i) => (i === etat.courant ? null : (
-        <button key={i} type="button" onClick={() => setTours(p => ({ ...p, [bloc.id]: { ...p[bloc.id], courant: i } }))} style={{
-          width: '100%', textAlign: 'left', background: T.blanc, border: 'none', borderRadius: 12, padding: '9px 12px', marginBottom: 8,
-          display: 'flex', alignItems: 'center', gap: 8, minHeight: 44, cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          <span style={{ width: 18, height: 18, borderRadius: '50%', background: i < toursValides(bloc, exerciseSets) ? T.vert : T.muted, color: T.blanc, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-            {i < toursValides(bloc, exerciseSets) ? '✓' : ''}
-          </span>
-          <span style={{ fontSize: 12, color: T.texteSec, minWidth: 44 }}>Tour {i + 1}</span>
-          <span style={{ fontSize: 11, color: T.texteCorps, flex: 1 }}>
-            {bloc.exercices.map(e => `${e.code} ${e.unite === 'kg' ? `${fmt(tt[e.id].kg) || '—'}×${tt[e.id].reps ?? '—'}` : tt[e.id].reps ?? '—'}`).join(' · ')}
-          </span>
-        </button>
-      )))}
+      {etat.liste.slice(0, etat.courant).map((tt, i) => ligneTour(tt, i))}
 
-      <p style={{ fontSize: 12, color: T.texteSec, textAlign: 'center', margin: '2px 0 8px' }}>
-        Tour {etat.courant + 1}
-        {etat.courant + 1 > bloc.tours ? ' · supplémentaire' : ` sur ${bloc.tours} prévu${bloc.tours > 1 ? 's' : ''}`}
-      </p>
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {bloc.exercices.map((e, i) => (
-          <CarteExercice
-            key={e.id}
-            exercice={e}
-            valeur={t[e.id]}
-            pleineLargeur={impair && i === bloc.exercices.length - 1}
-            onTempo={setTempo}
-            onVideo={e => setVideo({ nom: e.nom, video_url: e.video_url })}
-            notePrivee={notesPrivees[e.id]}
-            onNotePrivee={coach && onEnregistrerNotePrivee ? ex => setNotePriveeOuverte({ exercice: ex, texte: notesPrivees[ex.id] || '', envoi: false }) : null}
-            onPas={(champ, d) => majValeur(bloc, e, champ, v => {
-              const ref = prescriptionEffective(e, etat.courant)
-              // Case vide : la première flèche repose la valeur de référence.
-              if (champ === 'kg') v.kg = v.kg === null ? ref.kg ?? 0 : Math.max(0, v.kg + d * e.pas)
-              else v.reps = v.reps === null ? ref.reps ?? 1 : Math.max(0, v.reps + d * e.pas_reps)
-              return v
-            })}
-            onSaisie={(champ, brut) => majValeur(bloc, e, champ, v => {
-              const n = brut.trim() === '' ? null : parseFloat(brut.replace(',', '.'))
-              const valide = n === null || Number.isNaN(n) ? null : n
-              if (champ === 'kg') v.kg = valide
-              else v.reps = valide === null ? null : Math.round(valide)
-              return v
-            })}
-          />
-        ))}
+      <div style={{ border: `2px solid ${T.bordeaux}`, borderRadius: 16, padding: 8, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '2px 0 8px' }}>
+          <span style={{ background: T.bordeaux, color: T.clair, borderRadius: 100, padding: '3px 10px', fontSize: 12 }}>Tour {etat.courant + 1}</span>
+          <span style={{ fontSize: 12, color: T.texteSec }}>
+            {etat.courant + 1 > bloc.tours ? 'supplémentaire' : `sur ${bloc.tours} prévu${bloc.tours > 1 ? 's' : ''}`}
+            {etat.courant < valides ? ' · en modification' : ''}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {bloc.exercices.map((e, i) => (
+            <CarteExercice
+              key={e.id}
+              exercice={e}
+              valeur={t[e.id]}
+              pleineLargeur={impair && i === bloc.exercices.length - 1}
+              onTempo={setTempo}
+              onVideo={e => setVideo({ nom: e.nom, video_url: e.video_url })}
+              notePrivee={notesPrivees[e.id]}
+              onNotePrivee={coach && onEnregistrerNotePrivee ? ex => setNotePriveeOuverte({ exercice: ex, texte: notesPrivees[ex.id] || '', envoi: false }) : null}
+              onPas={(champ, d) => majValeur(bloc, e, champ, v => {
+                const ref = prescriptionEffective(e, etat.courant)
+                // Case vide : la première flèche repose la valeur de référence.
+                if (champ === 'kg') v.kg = v.kg === null ? ref.kg ?? 0 : Math.max(0, v.kg + d * e.pas)
+                else v.reps = v.reps === null ? ref.reps ?? 1 : Math.max(0, v.reps + d * e.pas_reps)
+                return v
+              })}
+              onSaisie={(champ, brut) => majValeur(bloc, e, champ, v => {
+                const n = brut.trim() === '' ? null : parseFloat(brut.replace(',', '.'))
+                const valide = n === null || Number.isNaN(n) ? null : n
+                if (champ === 'kg') v.kg = valide
+                else v.reps = valide === null ? null : Math.round(valide)
+                return v
+              })}
+            />
+          ))}
+        </div>
       </div>
+
+      {etat.liste.slice(etat.courant + 1).map((tt, j) => ligneTour(tt, etat.courant + 1 + j))}
 
       <Repos secondes={bloc.repos_sec} chrono={chrono} />
 
@@ -989,7 +1058,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
         width: '100%', marginTop: 8, background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12, height: 44, fontSize: 13,
         color: T.texte, cursor: 'pointer', fontFamily: 'inherit',
       }}>
-        + {etat.courant + 1 < etat.liste.length ? `Valider et passer au tour ${etat.courant + 2}` : `Ajouter le tour ${etat.courant + 2}`}
+        + {etat.courant + 1 < etat.liste.length ? `${etat.courant < valides ? 'Enregistrer' : 'Valider'} et passer au tour ${etat.courant + 2}` : `Ajouter le tour ${etat.courant + 2}`}
       </button>
 
       <button type="button" onClick={() => {

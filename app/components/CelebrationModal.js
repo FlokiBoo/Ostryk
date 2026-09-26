@@ -79,18 +79,20 @@ const STROKE  = '#C9A47E'
 // https://github.com/vulovix/body-muscles
 // Même code couleur/numérotation que MuscleAnatomyDiagram (Tips) : chaque groupe travaillé
 // garde sa couleur dédiée au lieu d'un simple surlignage binaire.
-function BodySVG({ active, view }) {
+// secondary : groupes sollicités en second, même couleur atténuée. Exporté pour Seance.js.
+export function BodySVG({ active, secondary = [], view, width = 130 }) {
   const isFront = view === 'front'
   const list = isFront ? FRONT_MUSCLES : BACK_MUSCLES
   const viewBox = isFront ? FRONT_VIEWBOX : BACK_VIEWBOX
 
   return (
-    <svg viewBox={viewBox} style={{ width: 130, height: 'auto' }}>
+    <svg viewBox={viewBox} style={{ width, height: 'auto' }}>
       {list.map(m => (
         <path
           key={m.id}
           d={m.path}
-          fill={m.group && active.includes(m.group) ? (COLOR_BY_GROUP[m.group] || NEUTRAL) : NEUTRAL}
+          fill={m.group && (active.includes(m.group) || secondary.includes(m.group)) ? (COLOR_BY_GROUP[m.group] || NEUTRAL) : NEUTRAL}
+          fillOpacity={m.group && !active.includes(m.group) && secondary.includes(m.group) ? 0.4 : 1}
           stroke={STROKE}
           strokeWidth="0.15"
           strokeLinejoin="round"
