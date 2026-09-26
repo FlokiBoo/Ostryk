@@ -10,6 +10,7 @@ import ChatHeaderButton from '@/app/components/ChatHeaderButton'
 import NotificationBell from '@/app/components/NotificationBell'
 import { getCoachId } from '@/lib/coach'
 import LancerCoachingModal from '@/app/components/coach/LancerCoachingModal'
+import MouvementsAFilmer from '@/app/components/coach/MouvementsAFilmer'
 
 function today() {
   const n = new Date()
@@ -429,6 +430,9 @@ export default function Home() {
               <span style={{ fontSize: 12, fontWeight: 700, color: '#92400E', flexShrink: 0 }}>Voir →</span>
             </button>
           )}
+
+          {/* Mouvements sans vidéo, ou avec la vidéo d'une autre chaîne que celle du coach */}
+          <MouvementsAFilmer />
 
           {showMissingMusclesModal && (
             <div onClick={() => setShowMissingMusclesModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
