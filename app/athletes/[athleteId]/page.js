@@ -264,7 +264,6 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
   })
   // Miroir synchrone de l'état : Seance enregistre plusieurs champs d'affilée, avant tout re-rendu.
   const setsRef = useRef(exerciseSets)
-  const alerteRef = useRef(0)
 
   // Bibliothèque : vidéos des exercices et mouvements cités par l'échauffement / retour au calme.
   useEffect(() => {
@@ -309,20 +308,102 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
     return { ...prev, [exerciseId]: [...cur, ...ajout] }
   })
 
-  const saveExerciseSet = async (exerciseId, setId, champ, valeur) => {
+  // File d'envoi des séries : les champs saisis d'affilée (4 par série à la validation d'un tour)
+  // sont regroupés par série puis envoyés en un seul upsert. En cas d'échec réseau (salle, 4G), ils
+  // restent en attente — et en localStorage, pour survivre à une fermeture — et sont renvoyés
+  // automatiquement, sans alerte bloquante : un bandeau indique seulement qu'il en reste.
+  const cleFile = `coach-sets-pending-${athleteId}`
+  const fileRef = useRef(new Map())
+  const envoiRef = useRef({ enCours: false, relance: false, timer: null, delai: 2000 })
+  const [enAttente, setEnAttente] = useState(0)
+  const [horsLigne, setHorsLigne] = useState(false)
+
+  const persisterFile = () => {
+    try {
+      if (fileRef.current.size) localStorage.setItem(cleFile, JSON.stringify([...fileRef.current]))
+      else localStorage.removeItem(cleFile)
+    } catch { /* stockage indisponible : la file reste en mémoire */ }
+    setEnAttente(fileRef.current.size)
+  }
+
+  const envoyerFile = async () => {
+    const etat = envoiRef.current
+    clearTimeout(etat.timer)
+    if (etat.enCours) { etat.relance = true; return }
+    if (!fileRef.current.size) return
+    etat.enCours = true
+    const lot = [...fileRef.current]
+    fileRef.current = new Map()
+    // Un upsert groupé exige les mêmes colonnes sur chaque ligne : un envoi par jeu de champs.
+    const groupes = new Map()
+    for (const [cle, ligne] of lot) {
+      const sig = Object.keys(ligne.champs).sort().join(',')
+      if (!groupes.has(sig)) groupes.set(sig, [])
+      groupes.get(sig).push([cle, ligne])
+    }
+    let echec = false
+    for (const lignes of groupes.values()) {
+      let error
+      try {
+        ({ error } = await supabase.from('program_exercise_sets').upsert(lignes.map(([, l]) => ({
+          program_exercise_id: l.program_exercise_id, athlete_id: athleteId, set_index: l.set_index, ...l.champs, entered_by_role: 'coach',
+        })), { onConflict: 'program_exercise_id,athlete_id,set_index' }))
+      } catch (err) { error = err }
+      if (!error) continue
+      echec = true
+      // Remise en file sans écraser une valeur ressaisie entre-temps.
+      for (const [cle, l] of lignes) {
+        const plusRecent = fileRef.current.get(cle)
+        fileRef.current.set(cle, plusRecent ? { ...plusRecent, champs: { ...l.champs, ...plusRecent.champs } } : l)
+      }
+    }
+    etat.enCours = false
+    setHorsLigne(echec)
+    persisterFile()
+    if (echec) {
+      etat.timer = setTimeout(envoyerFile, etat.delai)
+      etat.delai = Math.min(etat.delai * 2, 30000)
+    } else {
+      etat.delai = 2000
+      if (etat.relance || fileRef.current.size) { etat.relance = false; envoyerFile() }
+    }
+  }
+
+  useEffect(() => {
+    const relancer = () => { envoiRef.current.delai = 2000; envoyerFile() }
+    const auRetour = () => { if (document.visibilityState === 'visible') relancer() }
+    window.addEventListener('online', relancer)
+    document.addEventListener('visibilitychange', auRetour)
+    // Séries restées en attente d'une ouverture précédente (ce qui a été saisi depuis prime).
+    try {
+      for (const [cle, l] of JSON.parse(localStorage.getItem(cleFile) || '[]')) {
+        const plusRecent = fileRef.current.get(cle)
+        fileRef.current.set(cle, plusRecent ? { ...plusRecent, champs: { ...l.champs, ...plusRecent.champs } } : l)
+      }
+    } catch { /* rien à reprendre */ }
+    relancer()
+    const etat = envoiRef.current
+    return () => {
+      window.removeEventListener('online', relancer)
+      document.removeEventListener('visibilitychange', auRetour)
+      clearTimeout(etat.timer)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const saveExerciseSet = (exerciseId, setId, champ, valeur) => {
     const ligne = (setsRef.current[exerciseId] || []).find(s => s.id === setId)
     if (!ligne) return
     const v = champ === 'kg_done' ? (valeur === '' || valeur == null ? null : parseFloat(valeur))
       : champ === 'kg_prescribed' ? (valeur === '' || valeur == null ? null : Number(valeur))
       : (valeur || null)
     majSets(prev => ({ ...prev, [exerciseId]: prev[exerciseId].map(s => (s.id === setId ? { ...s, [champ]: v } : s)) }))
-    const { error } = await supabase.from('program_exercise_sets').upsert({
-      program_exercise_id: exerciseId, athlete_id: athleteId, set_index: ligne.set_index, [champ]: v, entered_by_role: 'coach',
-    }, { onConflict: 'program_exercise_id,athlete_id,set_index' })
-    if (error && Date.now() - alerteRef.current > 5000) {
-      alerteRef.current = Date.now()
-      alert('Série non enregistrée : ' + error.message)
-    }
+    const cle = `${exerciseId}|${ligne.set_index}`
+    const actuelle = fileRef.current.get(cle)
+    fileRef.current.set(cle, { program_exercise_id: exerciseId, set_index: ligne.set_index, champs: { ...actuelle?.champs, [champ]: v } })
+    persisterFile()
+    clearTimeout(envoiRef.current.timer)
+    envoiRef.current.timer = setTimeout(envoyerFile, 150)
   }
 
   const enregistrerNotePrivee = async ({ program_exercise_id, texte }) => {
@@ -357,6 +438,10 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
   }
 
   const terminer = async ({ plaisir, difficulte, duree_min }) => {
+    // Laisse finir un envoi en cours (10 s max) avant de vérifier ce qui reste.
+    for (let i = 0; envoiRef.current.enCours && i < 50; i++) await new Promise(r => setTimeout(r, 200))
+    await envoyerFile()
+    if (fileRef.current.size && !confirm(`${fileRef.current.size} série(s) pas encore envoyée(s) (connexion). Elles seront renvoyées à la prochaine ouverture du coaching de ce sportif. Terminer quand même ?`)) return
     try {
       await enregistrerSeance({ pleasure: plaisir, difficulty: difficulte, duration_minutes: duree_min })
     } catch (err) { alert(err.message); return }
@@ -367,6 +452,15 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
   if (!session) return <div style={{ padding: 24, color: 'var(--text3)' }}>Chargement…</div>
 
   return (
+    <>
+    {horsLigne && enAttente > 0 ? (
+      <div role="status" style={{
+        position: 'fixed', top: 'calc(env(safe-area-inset-top) + 8px)', left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
+        background: '#2f3a33', color: '#f5efe6', borderRadius: 100, padding: '6px 14px', fontSize: 12, pointerEvents: 'none', whiteSpace: 'nowrap',
+      }}>
+        Connexion instable · {enAttente} série{enAttente > 1 ? 's' : ''} en attente, renvoi automatique
+      </div>
+    ) : null}
     <Seance
       mode="coach"
       athleteNom={athleteNom}
@@ -381,5 +475,6 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
       onTerminer={terminer}
       onQuitter={onFermer}
     />
+    </>
   )
 }
