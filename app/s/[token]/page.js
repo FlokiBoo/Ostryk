@@ -1425,7 +1425,9 @@ function AthleteView({ params }) {
               <NotificationBell athleteId={athlete.id} />
             </div>
           )}
-          {isCoachView && (
+          {/* Aussi sur son propre profil sportif (athlete.is_coach) ouvert sans ?coach=1 : le coach
+              doit toujours pouvoir revenir à son espace. */}
+          {(isCoachView || athlete.is_coach) && (
             <button
               onClick={() => router.push('/')}
               style={{
