@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Warning, ClipboardText, Barbell, Bell, CalendarBlank, Backpack, Plus, X, UsersThree } from '@phosphor-icons/react'
+import { User, Warning, ClipboardText, Barbell, Bell, CalendarBlank, Backpack, Plus, X, UsersThree, Play } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import AthletesSidebar from '@/app/components/AthletesSidebar'
 import ChatHeaderButton from '@/app/components/ChatHeaderButton'
 import NotificationBell from '@/app/components/NotificationBell'
 import { getCoachId } from '@/lib/coach'
+import LancerCoachingModal from '@/app/components/coach/LancerCoachingModal'
 
 function today() {
   const n = new Date()
@@ -69,6 +70,7 @@ export default function Home() {
   const [completedSessions, setCompletedSessions] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [lancerCoachingOuvert, setLancerCoachingOuvert] = useState(false)
   const [showMissingMusclesModal, setShowMissingMusclesModal] = useState(false)
   const [copiedMissingMuscles, setCopiedMissingMuscles] = useState(false)
   const [newName, setNewName] = useState('')
@@ -334,11 +336,24 @@ export default function Home() {
               <User size={14} /> Switch to athlete
             </button>
           )}
+          <button onClick={() => setLancerCoachingOuvert(true)} style={{
+            background: 'var(--bordeaux)', color: '#fff', border: 'none', borderRadius: 20, padding: '8px 16px', fontSize: 13,
+            fontWeight: 600, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit',
+          }}><Play size={13} weight="fill" /> Lancer un coaching</button>
           <button onClick={() => setShowForm(v => !v)} style={{
             background: 'var(--green)', color: '#fff', border: 'none',
             borderRadius: 20, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer'
           }}>+ Sportif</button>
         </div>
+
+        {lancerCoachingOuvert && (
+          <LancerCoachingModal
+            athletes={athletes}
+            onFermer={() => setLancerCoachingOuvert(false)}
+            // L'écran de séance en mode coach vit sur la fiche du client : elle l'ouvre directement.
+            onChoisir={(athleteId, sessionId) => router.push(`/athletes/${athleteId}?coaching=${sessionId}`)}
+          />
+        )}
 
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import FicheSportifCoach from '@/app/components/coach/FicheSportifCoach'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
@@ -136,7 +136,12 @@ async function chargerFiche(athleteId) {
 
     return { data: {
       // Pour l'écran de coaching (CoachingSeance) : séances telles qu'en base et séries du sportif.
-      brut: { sessionsParId: Object.fromEntries(sessions.map(s => [s.id, s])), setsParExercice, completions: parSession },
+      // Toutes les séances des programmes non archivés (pas seulement le programme affiché) : le
+      // tableau de bord peut lancer le coaching de n'importe laquelle (?coaching=<id>).
+      brut: {
+        sessionsParId: Object.fromEntries((programs || []).flatMap(p => p.program_sessions || []).map(s => [s.id, s])),
+        setsParExercice, completions: parSession,
+      },
       athlete: {
         id: athlete.id,
         nom: athlete.name || 'Sportif',
@@ -173,6 +178,8 @@ async function chargerFiche(athleteId) {
 export default function FicheSportifPage() {
   const { athleteId } = useParams()
   const router = useRouter()
+  // ?coaching=<sessionId> : ouvert depuis "Lancer un coaching" du tableau de bord.
+  const coachingDirect = useSearchParams().get('coaching')
   const [data, setData] = useState(null)
   const [erreur, setErreur] = useState(null)
 
@@ -193,8 +200,32 @@ export default function FicheSportifPage() {
     return () => { actif = false }
   }, [athleteId])
 
-  if (erreur) return <div style={{ padding: 24, color: 'var(--text2)' }}>{erreur}</div>
-  if (!data) return <div style={{ padding: 24, color: 'var(--text3)' }}>Chargement…</div>
+  if (erreur && !coachingDirect) return <div style={{ padding: 24, color: 'var(--text2)' }}>{erreur}</div>
+  if (!data) return <div style={{ padding: 24, color: 'var(--text3)' }}>{erreur || 'Chargement…'}</div>
+
+  if (coachingDirect) {
+    const brute = data.brut.sessionsParId[coachingDirect]
+    const retourFiche = () => router.replace(`/athletes/${athleteId}`)
+    if (!brute) {
+      return (
+        <div style={{ padding: 24, color: 'var(--text2)' }}>
+          Séance introuvable pour ce sportif. <button onClick={retourFiche} style={{ background: 'none', border: 'none', color: 'var(--green)', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Voir sa fiche</button>
+        </div>
+      )
+    }
+    const completion = data.brut.completions.get(coachingDirect)
+    return (
+      <CoachingSeance
+        athleteId={athleteId}
+        athleteNom={data.athlete.nom}
+        brute={brute}
+        setsInitiaux={data.brut.setsParExercice}
+        dejaFaite={!!completion && !completion.skipped}
+        onFermer={retourFiche}
+        onTerminee={async () => { await rafraichir(); retourFiche() }}
+      />
+    )
+  }
 
   return (
     <FicheSportifCoach
