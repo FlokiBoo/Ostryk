@@ -144,7 +144,9 @@ export async function GET(request, { params }) {
   const parId = new Map((movs || []).map(m => [m.id, m]))
   const programsWithSections = (finalProgs || []).map(p => ({
     ...p,
-    program_sessions: (p.program_sessions || []).map(s => {
+    program_sessions: (p.program_sessions || []).map(({ private_coach_note: _noteSeance, ...s }) => {
+      // Notes privées du coach (lot A9) : jamais envoyées à l'espace sportif.
+      s.program_exercises = (s.program_exercises || []).map(({ private_coach_note: _note, ...e }) => e)
       const sections = {
         echauffement: sectionDeSeance(s, 'echauffement', movs || []),
         retourAuCalme: sectionDeSeance(s, 'retourAuCalme', movs || []),

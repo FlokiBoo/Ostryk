@@ -1384,7 +1384,7 @@ function AthleteView({ params }) {
         )}
 
         {celebration && (
-          <CelebrationModal tonnage={celebration.tonnage} muscles={celebration.muscles} records={celebration.records} onClose={() => { setCelebration(null); router.push(backHref) }} />
+          <CelebrationModal tonnage={celebration.tonnage} muscles={celebration.muscles} records={celebration.records} citation={celebration.citation} onClose={() => { setCelebration(null); router.push(backHref) }} />
         )}
         {!celebration && freeGateUpsell && (
           <FreeGateUpsellModal upsell={freeGateUpsell} onSeeOffers={() => { setFreeGateUpsell(null); setShowSubscription(true) }} onClose={() => setFreeGateUpsell(null)} />
@@ -1524,6 +1524,7 @@ function AthleteView({ params }) {
           tonnage={celebration.tonnage}
           muscles={celebration.muscles}
           records={celebration.records}
+          citation={celebration.citation}
           onClose={() => setCelebration(null)}
         />
       )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Toast from '@/app/components/Toast'
-import { parseMusclesFromText } from '@/app/components/CelebrationModal'
+import { parseMusclesFromText, randomCitation } from '@/app/components/CelebrationModal'
 import { programmerFinRepos, annulerFinRepos } from '@/lib/reposNotification'
 import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
@@ -153,6 +153,8 @@ function construireBlocs(session) {
           pas_reps: unite_reps === 'secondes' ? 5 : 1,
           tempo: details.map(d => d?.tempo).find(Boolean) || null,
           note: e.note || null,
+          // Coach uniquement (lot A9) : l'API sportif ne l'envoie jamais.
+          note_privee: e.private_coach_note || '',
           video_url: e.video_url || null,
           prescriptions,
         }
@@ -418,7 +420,7 @@ function Champ({ exercice, champ, valeur, suffixe, onPas, onSaisie }) {
   )
 }
 
-function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo }) {
+function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null }) {
   const [noteOuverte, setNoteOuverte] = useState(false)
   return (
     <div style={{ flex: pleineLargeur ? '1 1 100%' : '1 1 calc(50% - 4px)', minWidth: 0, boxSizing: 'border-box', background: T.blanc, borderRadius: 14, padding: 10 }}>
@@ -426,6 +428,14 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
         <span style={{ background: T.texteSec, color: T.blanc, borderRadius: 100, fontSize: 10, padding: '2px 7px', flex: 'none' }}>{exercice.code}</span>
         {/* minWidth: 0 : sans lui, un nom long impose sa largeur à la carte et casse la grille à deux colonnes. */}
         <span title={exercice.nom} style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exercice.nom}</span>
+        {onNotePrivee ? (
+          <button type="button" aria-label={`Note privée sur ${exercice.nom}${notePrivee ? ' (renseignée)' : ''}`} onClick={() => onNotePrivee(exercice)} style={{
+            border: 'none', background: notePrivee ? T.vert : 'none', color: notePrivee ? T.beige : T.texteSec, borderRadius: 6,
+            width: 26, height: 24, fontSize: 12, padding: 0, cursor: 'pointer', flex: 'none',
+          }}>
+            ✎
+          </button>
+        ) : null}
         {exercice.video_url ? (
           <button type="button" aria-label={`Vidéo de ${exercice.nom}`} onClick={() => onVideo(exercice)} style={{ border: 'none', background: 'none', color: T.texteSec, fontSize: 12, padding: '4px 2px', cursor: 'pointer' }}>
             ▶
@@ -524,10 +534,115 @@ function Muscles({ muscles }) {
   )
 }
 
-function Page({ titre, etapes, index, faits, fin, onNaviguer, onFermer, children }) {
+function Echelle({ titre, valeur, couleur, libelles, onChoisir }) {
+  return (
+    <div style={{ background: T.blanc, borderRadius: 14, padding: 12, marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
+        <span style={{ fontSize: 13 }}>{titre}</span>
+        <span style={{ fontSize: 11, color: valeur ? couleur : T.texteSec }}>
+          {valeur ? `${valeur}/10${libelles[valeur] ? ` · ${libelles[valeur]}` : ''}` : 'à noter'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 3 }}>
+        {Array.from({ length: 10 }, (_, k) => k + 1).map(i => {
+          const on = valeur >= i
+          return (
+            <button key={i} type="button" aria-label={`${titre} ${i} sur 10`} aria-pressed={valeur === i} onClick={() => onChoisir(valeur === i ? 0 : i)} style={{
+              flex: 1, minWidth: 0, height: 44, borderRadius: 9, border: `1px solid ${on ? couleur : '#E3DACB'}`, background: on ? couleur : T.blanc,
+              color: on ? T.clair : T.texteSec, fontFamily: TITRE, fontSize: 13, padding: 0, cursor: 'pointer',
+            }}>
+              {i}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Fin de séance en mode coach : notation plaisir / difficulté sur 10 (même échelle que les stats du
+// sportif, program_completions.pleasure / difficulty), puis récapitulatif partageable.
+function FinCoach({ session, athleteNom, dureeMin, nbBlocs, volume, muscles, onTerminer, onPartager }) {
+  const [plaisir, setPlaisir] = useState(0)
+  const [difficulte, setDifficulte] = useState(0)
+  const [recap, setRecap] = useState(false)
+  const [citation] = useState(() => randomCitation())
+  const [partage, setPartage] = useState(false)
+  const [envoi, setEnvoi] = useState(false)
+  const prenom = (athleteNom || '').split(' ')[0] || 'ton sportif'
+  const note = { plaisir: plaisir || null, difficulte: difficulte || null, duree_min: dureeMin }
+  return (
+    <>
+      <p style={{ fontFamily: TITRE, fontSize: 18, color: T.bordeaux, margin: '0 0 2px' }}>Séance terminée</p>
+      <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 14px' }}>{session.title || 'Séance'} · {dureeMin} minute{dureeMin > 1 ? 's' : ''} · {nbBlocs} bloc{nbBlocs > 1 ? 's' : ''}</p>
+      <Echelle titre="Plaisir" valeur={plaisir} couleur={T.bordeaux} libelles={{ 1: 'Pénible', 4: 'Moyen', 7: 'Bon', 10: 'Excellent' }} onChoisir={setPlaisir} />
+      <Echelle titre="Difficulté" valeur={difficulte} couleur={T.vert} libelles={{ 1: 'Très facile', 4: 'Modérée', 7: 'Dure', 10: 'Maximale' }} onChoisir={setDifficulte} />
+      <button type="button" onClick={() => setRecap(true)} style={{
+        width: '100%', marginTop: 6, background: plaisir && difficulte ? T.bordeaux : '#C9BFB0', color: T.clair, border: 'none', borderRadius: 12,
+        height: 50, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
+      }}>
+        Valider la séance
+      </button>
+
+      {recap ? (
+        <FeuilleModale onFermer={() => setRecap(false)}>
+          <p style={{ fontFamily: TITRE, fontSize: 18, color: T.bordeaux, margin: '0 0 2px' }}>{session.title || 'Séance'}</p>
+          <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 12px' }}>
+            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} · {dureeMin} minute{dureeMin > 1 ? 's' : ''}
+          </p>
+          <div style={{ background: T.vert, borderRadius: 14, padding: '16px 14px', marginBottom: 12 }}>
+            <p style={{ fontFamily: TITRE, fontSize: 16, lineHeight: 1.5, color: T.clair, margin: 0, textAlign: 'center' }}>«&nbsp;{citation.texte}&nbsp;»</p>
+            {citation.auteur ? <p style={{ fontSize: 11, color: T.muted, margin: '6px 0 0', textAlign: 'center' }}>{citation.auteur}</p> : null}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {[['Plaisir', plaisir || '—', T.bordeaux, true], ['Difficulté', difficulte || '—', T.vert, true], ['Volume', volume, T.texte, false]].map(([l, v, c, surDix]) => (
+              <div key={l} style={{ flex: 1, background: T.blanc, borderRadius: 12, padding: 10 }}>
+                <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>{l}</p>
+                <p style={{ fontFamily: TITRE, fontSize: 20, color: c, margin: '2px 0 0' }}>
+                  {v}{surDix ? <span style={{ fontSize: 12, color: T.texteSec }}>/10</span> : null}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginBottom: 14 }}><Muscles muscles={muscles} /></div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" disabled={envoi} onClick={async () => { setEnvoi(true); await onTerminer({ ...note, partage }) }} style={{
+              flex: 1, background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12, height: 50, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+              {envoi ? '…' : 'Quitter'}
+            </button>
+            <button type="button" disabled={partage || envoi} onClick={async () => {
+              setEnvoi(true)
+              try { await onPartager({ ...note, citation, muscles: [...muscles.principaux, ...muscles.secondaires], volume }); setPartage(true) } finally { setEnvoi(false) }
+            }} style={{
+              flex: 2, background: partage ? T.vert : T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 50, fontSize: 14,
+              cursor: partage ? 'default' : 'pointer', fontFamily: 'inherit',
+            }}>
+              {partage ? 'Envoyé ✓' : 'Partager'}
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: T.texteSec, textAlign: 'center', margin: '8px 0 0' }}>
+            {partage ? `Envoyé à ${prenom}` : `Tes notes restent privées · ${prenom} reçoit la citation et les muscles`}
+          </p>
+        </FeuilleModale>
+      ) : null}
+    </>
+  )
+}
+
+function Page({ titre, etapes, index, faits, fin, onNaviguer, onFermer, bandeauCoach = null, children }) {
   return (
     <div style={{ background: T.beige, minHeight: '100svh', color: T.texte, paddingBottom: 'calc(18px + env(safe-area-inset-bottom, 0px))' }}>
-      <div style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}>
+      {bandeauCoach ? (
+        <div style={{ background: T.vert, color: T.beige, padding: 'calc(10px + env(safe-area-inset-top, 0px)) 14px 10px', display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: '50%', background: T.bordeaux, color: T.clair, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+            {bandeauCoach.split(' ').map(m => m[0]).join('').slice(0, 2).toUpperCase()}
+          </span>
+          <span style={{ fontSize: 12, flex: 1 }}>Coaching · {bandeauCoach}</span>
+          <span style={{ background: T.beige, color: T.vert, borderRadius: 100, fontSize: 10, padding: '3px 9px' }}>Mode coach</span>
+        </div>
+      ) : null}
+      <div style={{ paddingTop: bandeauCoach ? 14 : 'calc(16px + env(safe-area-inset-top, 0px))' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', marginBottom: 14 }}>
           <button type="button" aria-label="Retour" onClick={onFermer} style={{ background: 'none', border: 'none', fontSize: 20, color: T.vert, width: 44, height: 44, cursor: 'pointer', flex: 'none' }}>
             ←
@@ -600,7 +715,14 @@ function fusionnerBloc(bloc, depuisBase, memo) {
   return { liste, courant }
 }
 
-export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onQuitter }) {
+/*
+  mode 'coach' (fiche sportif, coaching en présentiel) : bandeau vert, crayon de note privée sur
+  chaque exercice (onEnregistrerNotePrivee), fin de séance avec notation plaisir / difficulté puis
+  récapitulatif partageable (onPartagerRecap). Les séries, elles, passent par les mêmes
+  onEnsureExerciseSets / onSaveExerciseSet : c'est l'appelant qui les marque entered_by_role = 'coach'.
+*/
+export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null }) {
+  const coach = mode === 'coach'
   useKeepAwake()
   const [memo] = useState(() => lireEtat(athleteId, session.id))
   const [video, setVideo] = useState(null)
@@ -633,6 +755,8 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
     return i === -1 ? Math.max(0, etapes.length - 1) : i
   })
   const [tempo, setTempo] = useState(null)
+  const [notesPrivees, setNotesPrivees] = useState(() => Object.fromEntries(blocs.flatMap(b => b.exercices.map(e => [e.id, e.note_privee]))))
+  const [notePriveeOuverte, setNotePriveeOuverte] = useState(null) // { exercice, texte, envoi }
   const [fin, setFin] = useState(null) // horodatage de fin de séance, null tant qu'elle continue
   const [terminaison, setTerminaison] = useState(false)
 
@@ -664,7 +788,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
 
   if (etapes.length === 0) {
     return (
-      <Page titre={session.title || 'Séance'} etapes={[]} index={0} faits={{}} onNaviguer={() => {}} onFermer={onQuitter}>
+      <Page bandeauCoach={coach ? athleteNom : null} titre={session.title || 'Séance'} etapes={[]} index={0} faits={{}} onNaviguer={() => {}} onFermer={onQuitter}>
         <p style={{ textAlign: 'center', color: T.texteSec, padding: 30 }}>Aucun exercice dans cette séance.</p>
       </Page>
     )
@@ -705,8 +829,16 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   if (fin) {
     const series = blocs.reduce((acc, b) => acc + toursValides(b, exerciseSets) * b.exercices.length, 0)
     const dureeMin = Math.max(1, Math.round((fin - debut) / 60000))
+    if (coach) {
+      return (
+        <Page bandeauCoach={athleteNom} titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
+          <FinCoach session={session} athleteNom={athleteNom} dureeMin={dureeMin} nbBlocs={blocs.length} volume={series} muscles={muscles}
+            onTerminer={onTerminer} onPartager={onPartagerRecap} />
+        </Page>
+      )
+    }
     return (
-      <Page titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
+      <Page bandeauCoach={coach ? athleteNom : null} titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
         <div style={{ background: T.vert, borderRadius: 20, padding: '20px 16px', color: T.clair, textAlign: 'center', marginBottom: 12 }}>
           <p style={{ fontFamily: TITRE, fontSize: 24, margin: '0 0 4px' }}>Séance terminée</p>
           <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>{session.title || 'Séance'} · {dureeMin} minute{dureeMin > 1 ? 's' : ''}</p>
@@ -733,11 +865,35 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
 
   const derniereEtape = index === etapes.length - 1
   const pageEtape = (contenu) => (
-    <Page titre={session.title || 'Séance'} etapes={etapes} index={index} faits={faits}
+    <Page bandeauCoach={coach ? athleteNom : null} titre={session.title || 'Séance'} etapes={etapes} index={index} faits={faits}
       onNaviguer={i => { chrono.arreter(); setIndex(i) }} onFermer={onQuitter}>
       {contenu}
       {tempo ? <ExplicationTempo tempo={tempo} onFermer={() => setTempo(null)} /> : null}
       {video ? <FenetreVideo video={video} onFermer={() => setVideo(null)} /> : null}
+      {notePriveeOuverte ? (
+        <FeuilleModale onFermer={() => setNotePriveeOuverte(null)}>
+          <p style={{ fontFamily: TITRE, fontSize: 16, margin: '0 0 2px' }}>Note privée</p>
+          <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 12px' }}>{notePriveeOuverte.exercice.nom} · visible par toi seul</p>
+          <textarea autoFocus rows={4} value={notePriveeOuverte.texte} aria-label="Note privée"
+            onChange={e => { const texte = e.target.value; setNotePriveeOuverte(n => ({ ...n, texte })) }}
+            style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.bordure}`, borderRadius: 10, padding: 10, fontFamily: 'inherit', fontSize: 14, background: T.blanc, resize: 'vertical' }} />
+          <button type="button" disabled={notePriveeOuverte.envoi} onClick={async () => {
+            const { exercice, texte } = notePriveeOuverte
+            setNotePriveeOuverte(n => ({ ...n, envoi: true }))
+            try {
+              await onEnregistrerNotePrivee({ program_session_id: session.id, program_exercise_id: exercice.id, texte: texte.trim() })
+              setNotesPrivees(n => ({ ...n, [exercice.id]: texte.trim() }))
+              setNotePriveeOuverte(null)
+              setToast('✓ Note enregistrée')
+            } catch (err) {
+              setNotePriveeOuverte(n => ({ ...n, envoi: false }))
+              setToast(err?.message || 'Note non enregistrée')
+            }
+          }} style={{ width: '100%', marginTop: 12, background: T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 46, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {notePriveeOuverte.envoi ? 'Enregistrement…' : 'Enregistrer'}
+          </button>
+        </FeuilleModale>
+      ) : null}
       <Toast message={toast} show={!!toast} onDone={() => setToast(null)} position="top" />
     </Page>
   )
@@ -799,6 +955,8 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
             pleineLargeur={impair && i === bloc.exercices.length - 1}
             onTempo={setTempo}
             onVideo={e => setVideo({ nom: e.nom, video_url: e.video_url })}
+            notePrivee={notesPrivees[e.id]}
+            onNotePrivee={coach && onEnregistrerNotePrivee ? ex => setNotePriveeOuverte({ exercice: ex, texte: notesPrivees[ex.id] || '', envoi: false }) : null}
             onPas={(champ, d) => majValeur(bloc, e, champ, v => {
               const ref = prescriptionEffective(e, etat.courant)
               // Case vide : la première flèche repose la valeur de référence.

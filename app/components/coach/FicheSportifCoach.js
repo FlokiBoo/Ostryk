@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CalendarBlank, CaretDown, CaretUp, ChatCircle, CheckCircle, Clock, NotePencil, Play, Target, TrendUp } from "@phosphor-icons/react";
+import { useMemo, useState } from "react";
+import { CalendarBlank, CaretDown, CaretUp, ChatCircle, CheckCircle, Clock, NotePencil, Play, Target, TrendUp } from "@phosphor-icons/react";
 
 /*
   Fiche sportif côté coach + mode coaching.
@@ -280,43 +280,6 @@ function dateLocale(d) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-// Un bloc peut compter plus de tours que l'exercice n'a de séries prescrites : on retombe alors
-// sur la dernière prescription connue au lieu de lire hors du tableau.
-function prescriptionDe(ex, i) {
-  const p = ex.prescrit;
-  if (!p?.length) return null;
-  return p[Math.min(i, p.length - 1)];
-}
-
-// Reprise de séance : si le coach quitte l'écran en plein milieu (un appel, un client qui
-// l'interpelle), il doit retrouver son bloc et son tour. Propre à l'appareil, donc localStorage —
-// et jamais bloquant : navigation privée ou stockage refusé, on repart du début.
-const cleReprise = (seanceId) => `ostryk:coaching:${seanceId}`;
-
-function lireReprise(seanceId) {
-  try {
-    return JSON.parse(localStorage.getItem(cleReprise(seanceId)) || "null");
-  } catch {
-    return null;
-  }
-}
-
-function ecrireReprise(seanceId, etat) {
-  try {
-    localStorage.setItem(cleReprise(seanceId), JSON.stringify(etat));
-  } catch {
-    /* stockage indisponible : la reprise est un confort, pas une donnée */
-  }
-}
-
-function effacerReprise(seanceId) {
-  try {
-    localStorage.removeItem(cleReprise(seanceId));
-  } catch {
-    /* idem */
-  }
-}
-
 function volume(v, avecCharge) {
   if (!v) return 0;
   return avecCharge ? (v.kg || 0) * (v.reps || 0) : v.reps || 0;
@@ -458,7 +421,7 @@ function ApercuSeance({ seance, onLancer, onPersonnaliser, onRevenirVersionProgr
           <Bouton onClick={() => onRevenirVersionProgramme(seance)}>Revenir à la version du programme</Bouton>
         ) : null}
         {!faite && onPersonnaliser ? <Bouton onClick={() => onPersonnaliser(seance)}>Modifier pour ce client</Bouton> : null}
-        {aDesExercices ? (
+        {aDesExercices && onLancer ? (
           <Bouton principal={!faite} onClick={() => onLancer(seance)}>
             {faite ? <><NotePencil size={16} />Modifier la saisie</> : <><Play size={16} weight="fill" />Lancer le coaching</>}
           </Bouton>
@@ -587,406 +550,6 @@ function LigneSeance({ seance, ouverte, onBasculer, ...actions }) {
   );
 }
 
-/* ---------- Mode coaching ---------- */
-
-export function SeanceCoaching({ athlete, seance, onEnregistrerSerie, onEnregistrerNote, onTerminer, onRetour }) {
-  const blocs = seance.blocs.filter((b) => b.exercices);
-  const faite = seance.statut === "faite";
-  const [debut] = useState(() => Date.now());
-  const [reprise] = useState(() => lireReprise(seance.id));
-  const [blocIdx, setBlocIdx] = useState(() =>
-    Math.min(Math.max(0, reprise?.blocIdx ?? 0), Math.max(0, blocs.length - 1))
-  );
-  const [tours, setTours] = useState(() =>
-    Object.fromEntries(
-      blocs.map((b) => [b.id, Math.min(Math.max(1, reprise?.tours?.[b.id] ?? 1), b.tours || 1)])
-    )
-  );
-  const [edition, setEdition] = useState(null);
-  const [notes, setNotes] = useState(() =>
-    Object.fromEntries(blocs.flatMap((b) => b.exercices.map((e) => [e.id, e.note_privee || ""])))
-  );
-  const [notesOuvertes, setNotesOuvertes] = useState({});
-  const [valeurs, setValeurs] = useState(() => {
-    const out = {};
-    blocs.forEach((b) =>
-      b.exercices.forEach((e) => {
-        for (let i = 0; i < (b.tours || 1); i++) {
-          const p = prescriptionDe(e, i);
-          if (!p) continue;
-          const src = (faite && e.realise?.[i]) || p;
-          out[`${e.id}|${i}`] = { kg: src.kg ?? null, reps: src.reps, touche: faite, modifie: false };
-        }
-      })
-    );
-    return out;
-  });
-
-  const bloc = blocs[blocIdx];
-  const tour = tours[bloc.id];
-  const nbTours = bloc.tours || 1;
-
-  // Chaque série part en base dès que le chiffre change, pas au passage au tour suivant : sortir
-  // de l'écran au milieu du tour 3 ne doit rien faire perdre. Court délai pour ne pas écrire à
-  // chaque appui sur le plus.
-  const valeursRef = useRef(valeurs);
-  const envoiRef = useRef(onEnregistrerSerie);
-  const enAttente = useRef({});
-  const purgerRef = useRef(() => {});
-
-  function envoyer(cle) {
-    const cible = enAttente.current[cle];
-    if (!cible) return;
-    clearTimeout(cible.minuteur);
-    delete enAttente.current[cle];
-    const { ex, i } = cible;
-    const v = valeursRef.current[cle];
-    const p = prescriptionDe(ex, i);
-    if (!v || !p) return;
-    envoiRef.current({
-      program_exercise_id: ex.id,
-      athlete_id: athlete.id,
-      set_index: i,
-      kg_done: ex.unite === "kg" ? v.kg : null,
-      reps_done: String(v.reps),
-      kg_prescribed: ex.unite === "kg" ? p.kg : null,
-      reps_prescribed: String(p.reps),
-      entered_by_role: "coach",
-    });
-  }
-
-  function planifier(ex, i) {
-    const cle = `${ex.id}|${i}`;
-    clearTimeout(enAttente.current[cle]?.minuteur);
-    enAttente.current[cle] = { ex, i, minuteur: setTimeout(() => envoyer(cle), 600) };
-  }
-
-  // Les refs se mettent à jour après le rendu, jamais pendant : les minuteurs se déclenchent au
-  // plus tôt 600 ms plus tard, ils lisent donc toujours la dernière valeur.
-  useEffect(() => {
-    valeursRef.current = valeurs;
-    envoiRef.current = onEnregistrerSerie;
-    purgerRef.current = () => Object.keys(enAttente.current).forEach(envoyer);
-  });
-
-  // Démontage : on vide la file tout de suite plutôt que d'annuler les minuteurs en cours.
-  useEffect(() => () => purgerRef.current(), []);
-
-  // Passer en arrière-plan ne démonte pas l'écran : dans la coque Android, répondre à un appel
-  // laisserait la file en attente, et le système peut tuer la webview avant qu'elle ne parte.
-  useEffect(() => {
-    const vider = () => purgerRef.current();
-    const surVisibilite = () => {
-      if (document.visibilityState === "hidden") vider();
-    };
-    document.addEventListener("visibilitychange", surVisibilite);
-    window.addEventListener("pagehide", vider);
-    return () => {
-      document.removeEventListener("visibilitychange", surVisibilite);
-      window.removeEventListener("pagehide", vider);
-    };
-  }, []);
-
-  useEffect(() => {
-    ecrireReprise(seance.id, { blocIdx, tours });
-  }, [seance.id, blocIdx, tours]);
-
-  function appliquer(ex, champ, nombre) {
-    const i = tour - 1;
-    const cle = `${ex.id}|${i}`;
-    setValeurs((prev) => {
-      const v = prev[cle];
-      if (!v) return prev;
-      return {
-        ...prev,
-        [cle]: {
-          ...v,
-          kg: champ === "kg" ? Math.max(0, nombre) : v.kg,
-          reps: champ === "reps" ? Math.max(1, Math.round(nombre)) : v.reps,
-          touche: true,
-          modifie: true,
-        },
-      };
-    });
-    planifier(ex, i);
-  }
-
-  function maj(ex, champ, delta) {
-    const v = valeurs[`${ex.id}|${tour - 1}`];
-    if (!v) return;
-    const pas = champ === "kg" ? ex.pas || 1 : ex.uniteReps === "s" ? 5 : 1;
-    const base = champ === "kg" ? v.kg || 0 : v.reps;
-    appliquer(ex, champ, base + delta * pas);
-  }
-
-  function validerEdition() {
-    if (!edition) return;
-    const nombre = parseFloat(String(edition.texte).replace(",", "."));
-    if (!Number.isNaN(nombre)) appliquer(edition.ex, edition.champ, nombre);
-    setEdition(null);
-  }
-
-  function enregistrerTour() {
-    const i = tour - 1;
-    bloc.exercices.forEach((ex) => {
-      const v = valeurs[`${ex.id}|${i}`];
-      const p = prescriptionDe(ex, i);
-      if (!v || !p) return;
-      // En reprise de saisie, ne pas réécrire les séries que le coach n'a pas touchées : elles
-      // restent créditées au sportif (entered_by_role côté program_exercise_sets).
-      if (faite && !v.modifie) return;
-      onEnregistrerSerie({
-        program_exercise_id: ex.id,
-        athlete_id: athlete.id,
-        set_index: i,
-        kg_done: ex.unite === "kg" ? v.kg : null,
-        reps_done: String(v.reps),
-        kg_prescribed: ex.unite === "kg" ? p.kg : null,
-        reps_prescribed: String(p.reps),
-        entered_by_role: "coach",
-      });
-    });
-  }
-
-  const dernierBloc = blocIdx === blocs.length - 1;
-  const dernierTour = tour === nbTours;
-  const libelle = !dernierTour
-    ? `Passer au tour ${tour + 1}`
-    : dernierBloc
-      ? "Terminer la séance"
-      : `Passer au bloc ${blocs[blocIdx + 1].id}`;
-
-  function suivant() {
-    enregistrerTour();
-    if (!dernierTour) {
-      setTours((t) => ({ ...t, [bloc.id]: tour + 1 }));
-      return;
-    }
-    if (!dernierBloc) {
-      setBlocIdx(blocIdx + 1);
-      return;
-    }
-    purgerRef.current();
-    effacerReprise(seance.id);
-    // program_completions n'a pas de colonne de rôle : la durée s'écrit dans duration_minutes,
-    // et « saisie coach » se déduit des séries.
-    onTerminer({
-      program_session_id: seance.id,
-      duration_minutes: Math.max(1, Math.round((Date.now() - debut) / 60000)),
-    });
-  }
-
-  const stepper = (ex, champ, valeur, suffixe, touche) => (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 4,
-        background: T.fond,
-        borderRadius: 100,
-        padding: 4,
-      }}
-    >
-      <button
-        type="button"
-        aria-label={`Diminuer ${champ === "kg" ? "la charge" : "les répétitions"} sur ${ex.nom}`}
-        onClick={() => maj(ex, champ, -1)}
-        style={{ width: 44, height: 44, border: `1px solid ${T.bordureLegere}`, borderRadius: "50%", background: T.blanc, color: T.vert, fontSize: 18, cursor: "pointer" }}
-      >
-        −
-      </button>
-      {edition && edition.cle === `${ex.id}|${tour - 1}` && edition.champ === champ ? (
-        <input
-          autoFocus
-          type="text"
-          inputMode="decimal"
-          aria-label={`${champ === "kg" ? "Charge" : "Répétitions"} sur ${ex.nom}`}
-          value={edition.texte}
-          onChange={(e) => setEdition({ ...edition, texte: e.target.value })}
-          onBlur={validerEdition}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
-            if (e.key === "Escape") setEdition(null);
-          }}
-          style={{
-            fontFamily: "Cinzel, serif",
-            fontSize: 17,
-            width: 60,
-            height: 38,
-            textAlign: "center",
-            color: T.texte,
-            background: T.blanc,
-            border: `1px solid ${T.bordeaux}`,
-            borderRadius: 10,
-            padding: 0,
-          }}
-        />
-      ) : (
-        <button
-          type="button"
-          // Saisie directe : passer de 62,5 à 80 au stepper, c'est sept appuis.
-          aria-label={`Saisir ${champ === "kg" ? "la charge" : "les répétitions"} sur ${ex.nom}`}
-          onClick={() =>
-            setEdition({
-              cle: `${ex.id}|${tour - 1}`,
-              champ,
-              ex,
-              texte: champ === "kg" ? String(valeur ?? "") : String(valeur),
-            })
-          }
-          style={{
-            fontFamily: "Cinzel, serif",
-            fontSize: 17,
-            minWidth: 52,
-            height: 38,
-            textAlign: "center",
-            color: touche ? T.texte : T.muted,
-            background: "none",
-            border: "none",
-            padding: 0,
-            cursor: "pointer",
-          }}
-        >
-          {champ === "kg" ? fmt(valeur) : valeur}
-        </button>
-      )}
-      <button
-        type="button"
-        aria-label={`Augmenter ${champ === "kg" ? "la charge" : "les répétitions"} sur ${ex.nom}`}
-        onClick={() => maj(ex, champ, 1)}
-        style={{ width: 44, height: 44, border: `1px solid ${T.bordureLegere}`, borderRadius: "50%", background: T.blanc, color: T.vert, fontSize: 18, cursor: "pointer" }}
-      >
-        +
-      </button>
-      <span style={{ fontSize: 10, color: T.muted, paddingRight: 6 }}>{suffixe}</span>
-    </div>
-  );
-
-  return (
-    <div style={{ maxWidth: 460, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <button
-          type="button"
-          aria-label="Retour à la fiche"
-          onClick={onRetour}
-          style={{ background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12, width: 44, height: 44, color: T.vert, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
-        >
-          <ArrowLeft size={20} weight="bold" />
-        </button>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>Coaching · {athlete.nom}</p>
-          <p style={{ fontFamily: "Cinzel, serif", fontSize: 16, color: T.bordeaux, margin: "2px 0 0" }}>
-            {seance.titre}
-          </p>
-        </div>
-        <span style={{ background: T.vert, color: T.clair, borderRadius: 100, fontSize: 10, padding: "4px 10px" }}>
-          Mode coach
-        </span>
-      </div>
-
-      <nav style={{ display: "flex", gap: 6, marginBottom: 12 }} aria-label="Blocs de la séance">
-        {blocs.map((b, i) => (
-          <button
-            key={b.id}
-            type="button"
-            aria-current={i === blocIdx}
-            onClick={() => setBlocIdx(i)}
-            style={{
-              flex: 1,
-              border: "none",
-              borderRadius: 100,
-              height: 44,
-              fontSize: 12,
-              background: i === blocIdx ? T.bordeaux : T.blanc,
-              color: i === blocIdx ? T.clair : T.texte,
-            }}
-          >
-            Bloc {b.id}
-          </button>
-        ))}
-      </nav>
-
-      <p style={{ fontFamily: "Cinzel, serif", fontSize: 13, textAlign: "center", margin: "0 0 8px" }}>
-        Bloc {bloc.id} · tour {tour}/{nbTours}
-      </p>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {bloc.exercices.map((ex) => {
-          const v = valeurs[`${ex.id}|${tour - 1}`];
-          if (!v) return null;
-          const noteVisible = onEnregistrerNote && (notesOuvertes[ex.id] || notes[ex.id]);
-          return (
-            <section key={ex.id} style={{ ...carte, padding: 16, boxShadow: "none" }}>
-              <p style={{ fontSize: 14, margin: "0 0 8px" }}>{ex.nom}</p>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {ex.unite === "kg" ? stepper(ex, "kg", v.kg, "kg", v.touche) : null}
-                {stepper(ex, "reps", v.reps, ex.uniteReps || "reps", v.touche)}
-              </div>
-              {noteVisible ? (
-                <textarea
-                  rows={2}
-                  value={notes[ex.id]}
-                  placeholder={`Note privée sur ${ex.nom.toLowerCase()}…`}
-                  aria-label={`Note privée sur ${ex.nom}`}
-                  onChange={(e) => setNotes((n) => ({ ...n, [ex.id]: e.target.value }))}
-                  onBlur={() =>
-                    onEnregistrerNote({
-                      program_session_id: seance.id,
-                      program_exercise_id: ex.id,
-                      texte: notes[ex.id],
-                    })
-                  }
-                  style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    marginTop: 8,
-                    border: `1px solid ${T.bordure}`,
-                    borderRadius: 8,
-                    padding: 8,
-                    fontFamily: "inherit",
-                    fontSize: 12,
-                    color: T.texte,
-                    background: T.fond,
-                    resize: "vertical",
-                  }}
-                />
-              ) : onEnregistrerNote ? (
-                <button
-                  type="button"
-                  onClick={() => setNotesOuvertes((o) => ({ ...o, [ex.id]: true }))}
-                  style={{ marginTop: 8, background: "none", border: "none", color: T.texteSec, fontSize: 12, padding: 0 }}
-                >
-                  + Ajouter une note
-                </button>
-              ) : null}
-            </section>
-          );
-        })}
-      </div>
-
-      <button
-        type="button"
-        onClick={suivant}
-        style={{
-          width: "100%",
-          marginTop: 12,
-          border: "none",
-          borderRadius: 12,
-          height: 52,
-          fontSize: 15,
-          background: T.bordeaux,
-          color: T.clair,
-        }}
-      >
-        {libelle}
-      </button>
-      <p style={{ fontSize: 10, color: T.muted, textAlign: "center", margin: "8px 0 0" }}>
-        Valeurs grises = prescription non modifiée · notes privées, non visibles par le sportif
-      </p>
-    </div>
-  );
-}
-
 /* ---------- Fiche sportif ---------- */
 
 export default function FicheSportifCoach({
@@ -994,9 +557,10 @@ export default function FicheSportifCoach({
   programme = demo.programme,
   stats = demo.stats,
   seances = demo.seances,
-  onEnregistrerSerie = () => {},
-  onEnregistrerNote = null,
-  onTerminerCoaching = () => {},
+  // Écran de coaching en présentiel : l'écran de séance commun au sportif et au coach
+  // (app/components/athlete/Seance.js, mode coach), fourni par la page qui a les données.
+  // renderCoaching({ seance, fermer, terminee(seanceId) }).
+  renderCoaching = null,
   onPlanifierCoaching = null,
   onPersonnaliser = null,
   onRevenirVersionProgramme = null,
@@ -1025,32 +589,16 @@ export default function FicheSportifCoach({
     .slice(0, 2)
     .toUpperCase();
 
-  if (coaching) {
-    return (
-      <div
-        style={{
-          background: T.page,
-          minHeight: "100vh",
-          padding: "16px 16px calc(24px + env(safe-area-inset-bottom))",
-          fontFamily: "'Work Sans', system-ui, sans-serif",
-          color: T.texte,
-        }}
-      >
-        <SeanceCoaching
-          athlete={athlete}
-          seance={coaching}
-          onEnregistrerSerie={onEnregistrerSerie}
-          onEnregistrerNote={onEnregistrerNote}
-          onRetour={() => setCoaching(null)}
-          onTerminer={async (payload) => {
-            await onTerminerCoaching(payload);
-            setCoaching(null);
-            setOnglet("recentes");
-            setOuverteId(payload.program_session_id);
-          }}
-        />
-      </div>
-    );
+  if (coaching && renderCoaching) {
+    return renderCoaching({
+      seance: coaching,
+      fermer: () => setCoaching(null),
+      terminee: (seanceId) => {
+        setCoaching(null);
+        setOnglet("recentes");
+        setOuverteId(seanceId);
+      },
+    });
   }
 
   const liste = onglet === "recentes" ? recentes : aVenir;
@@ -1062,7 +610,7 @@ export default function FicheSportifCoach({
   const avancement = Math.round(((programme.semaine_courante - 1) / programme.duration_weeks) * 100);
 
   const actions = {
-    onLancer: (s) => setCoaching(s),
+    onLancer: renderCoaching ? (s) => setCoaching(s) : null,
     onPersonnaliser,
     onRevenirVersionProgramme,
     // coach_id n'est pas envoyé : la policy d'insert de coaching_schedule impose coach_id = auth.uid().

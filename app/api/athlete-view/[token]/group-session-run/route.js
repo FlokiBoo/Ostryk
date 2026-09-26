@@ -63,7 +63,10 @@ export async function GET(request, { params }) {
     presentIds = (att || []).map(a => a.athlete_id)
   }
 
-  return NextResponse.json({ group, members, session, exercises: exos || [], existingRun, presentIds })
+  // Notes privées du coach (lot A9) : jamais envoyées à un sportif, même chef de groupe.
+  const { private_coach_note: _noteSeance, ...sessionPublique } = session || {}
+  const exercicesPublics = (exos || []).map(({ private_coach_note: _note, ...e }) => e)
+  return NextResponse.json({ group, members, session: sessionPublique, exercises: exercicesPublics, existingRun, presentIds })
 }
 
 export async function POST(request, { params }) {

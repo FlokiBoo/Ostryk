@@ -1,21 +1,22 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import FicheSportifCoach from '@/app/components/coach/FicheSportifCoach'
+import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
+import { sectionDeSeance } from '@/lib/sectionsTexte'
 
 // Fiche sportif côté coach. Branche FicheSportifCoach sur les données réelles.
 //
-// Trois fonctionnalités du composant restent inertes tant que les lots A4/A7/A8 de
+// Deux fonctionnalités du composant restent inertes tant que les lots A4/A7 de
 // docs/audit-schema-2026-09.md ne sont pas passés en base : le badge "Coachée" et la planification
-// d'un rendez-vous (is_coached, coaching_schedule.starts_at), le badge "Personnalisée"
-// (customized_at), et la note privée par exercice (private_coach_note). Elles ne s'affichent
-// simplement pas — le reste fonctionne.
+// d'un rendez-vous (is_coached, coaching_schedule.starts_at), et le badge "Personnalisée"
+// (customized_at). Elles ne s'affichent simplement pas — le reste fonctionne.
 //
-// La saisie des séries écrit dans program_exercise_sets avec ses colonnes actuelles seulement :
-// kg_prescribed/reps_prescribed/entered_by_role attendent le lot A8, la prescription reste donc
-// lisible côté programme mais n'est pas figée au moment de la saisie.
+// "Lancer le coaching" ouvre l'écran de séance commun au sportif et au coach (Seance.js, mode
+// coach) : séries écrites avec entered_by_role = 'coach' et prescription figée (lot A8), note
+// privée par exercice (lot A9, private_coach_note), notation et récapitulatif en fin de séance.
 
 // difficulty est saisi sur une échelle 1-5 en feedback post-séance (voir WeeklyStatsBlock).
 function labelEffort(difficulty) {
@@ -134,6 +135,8 @@ async function chargerFiche(athleteId) {
     const moyenne = difficultes.length ? Math.round(difficultes.reduce((a, b) => a + b, 0) / difficultes.length) : null
 
     return { data: {
+      // Pour l'écran de coaching (CoachingSeance) : séances telles qu'en base et séries du sportif.
+      brut: { sessionsParId: Object.fromEntries(sessions.map(s => [s.id, s])), setsParExercice, completions: parSession },
       athlete: {
         id: athlete.id,
         nom: athlete.name || 'Sportif',
@@ -190,30 +193,6 @@ export default function FicheSportifPage() {
     return () => { actif = false }
   }, [athleteId])
 
-  const enregistrerSerie = async (serie) => {
-    // Colonnes du lot A8 volontairement absentes de l'insert : elles n'existent pas encore.
-    const { error } = await supabase.from('program_exercise_sets').upsert({
-      program_exercise_id: serie.program_exercise_id,
-      athlete_id: serie.athlete_id,
-      set_index: serie.set_index,
-      kg_done: serie.kg_done,
-      reps_done: serie.reps_done,
-    }, { onConflict: 'program_exercise_id,athlete_id,set_index' })
-    if (error) console.error('Série non enregistrée :', error.message)
-  }
-
-  const terminerCoaching = async (payload) => {
-    const { error } = await supabase.from('program_completions').upsert({
-      athlete_id: athleteId,
-      program_session_id: payload.program_session_id,
-      skipped: false,
-      completed_at: new Date().toISOString(),
-      duration_minutes: payload.duration_minutes,
-    }, { onConflict: 'athlete_id,program_session_id' })
-    if (error) { alert('Séance non enregistrée : ' + error.message); return }
-    await rafraichir()
-  }
-
   if (erreur) return <div style={{ padding: 24, color: 'var(--text2)' }}>{erreur}</div>
   if (!data) return <div style={{ padding: 24, color: 'var(--text3)' }}>Chargement…</div>
 
@@ -223,11 +202,153 @@ export default function FicheSportifPage() {
       programme={data.programme}
       stats={data.stats}
       seances={data.seances}
-      onEnregistrerSerie={enregistrerSerie}
-      onTerminerCoaching={terminerCoaching}
+      renderCoaching={({ seance, fermer, terminee }) => (
+        <CoachingSeance
+          athleteId={athleteId}
+          athleteNom={data.athlete.nom}
+          brute={data.brut.sessionsParId[seance.id]}
+          setsInitiaux={data.brut.setsParExercice}
+          dejaFaite={!!data.brut.completions.get(seance.id) && !data.brut.completions.get(seance.id).skipped}
+          onFermer={fermer}
+          onTerminee={async () => { await rafraichir(); terminee(seance.id) }}
+        />
+      )}
       onVoirHistorique={() => router.push(`/programs/${athleteId}`)}
       // Le panneau de messagerie est global (ChatWidget dans app/layout.js), ouvert par événement.
       onMessage={() => window.dispatchEvent(new Event('open-chat-widget'))}
+    />
+  )
+}
+
+// Écran de coaching en présentiel : l'écran de séance du sportif (Seance.js) en mode coach, branché
+// directement sur Supabase (le coach est en ligne, face à son sportif — pas de file hors ligne).
+function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite, onFermer, onTerminee }) {
+  const [mouvements, setMouvements] = useState(null)
+  const [exerciseSets, setExerciseSets] = useState(() => {
+    const out = {}
+    for (const e of brute.program_exercises || []) {
+      out[e.id] = [...(setsInitiaux[e.id] || [])].sort((a, b) => a.set_index - b.set_index)
+    }
+    return out
+  })
+  // Miroir synchrone de l'état : Seance enregistre plusieurs champs d'affilée, avant tout re-rendu.
+  const setsRef = useRef(exerciseSets)
+  const alerteRef = useRef(0)
+
+  // Bibliothèque : vidéos des exercices et mouvements cités par l'échauffement / retour au calme.
+  useEffect(() => {
+    let actif = true
+    supabase.from('movements').select('id, name, video_url, youtube_url').then(({ data }) => { if (actif) setMouvements(data || []) })
+    return () => { actif = false }
+  }, [])
+
+  const session = useMemo(() => {
+    if (!mouvements) return null
+    const parNom = new Map(mouvements.map(m => [m.name.trim().toLowerCase(), m]))
+    const exercises = [...(brute.program_exercises || [])]
+      .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+      .map(e => {
+        const m = parNom.get((e.name || '').trim().toLowerCase())
+        return { ...e, video_url: m?.youtube_url || m?.video_url || e.video_url || null }
+      })
+    const base = { ...brute, exercises }
+    return {
+      ...base,
+      sections: {
+        echauffement: sectionDeSeance(base, 'echauffement', mouvements),
+        retourAuCalme: sectionDeSeance(base, 'retourAuCalme', mouvements),
+      },
+    }
+  }, [brute, mouvements])
+
+  const mouvementsSections = useMemo(() => Object.fromEntries((mouvements || []).map(m => [m.id, { id: m.id, nom: m.name, video_url: m.youtube_url || m.video_url || null }])), [mouvements])
+
+  const majSets = (fn) => {
+    setsRef.current = fn(setsRef.current)
+    setExerciseSets(setsRef.current)
+  }
+
+  // Séries manquantes créées localement (id provisoire) ; elles n'existent en base qu'à la première
+  // écriture, par upsert sur (exercice, sportif, set_index).
+  const ensureExerciseSets = (exerciseId, count) => majSets(prev => {
+    const cur = prev[exerciseId] || []
+    if (cur.length >= count) return prev
+    const debut = cur.length ? Math.max(...cur.map(s => s.set_index)) + 1 : 1
+    const ajout = Array.from({ length: count - cur.length }, (_, i) => ({ id: `coach-${exerciseId}-${debut + i}`, set_index: debut + i }))
+    return { ...prev, [exerciseId]: [...cur, ...ajout] }
+  })
+
+  const saveExerciseSet = async (exerciseId, setId, champ, valeur) => {
+    const ligne = (setsRef.current[exerciseId] || []).find(s => s.id === setId)
+    if (!ligne) return
+    const v = champ === 'kg_done' ? (valeur === '' || valeur == null ? null : parseFloat(valeur))
+      : champ === 'kg_prescribed' ? (valeur === '' || valeur == null ? null : Number(valeur))
+      : (valeur || null)
+    majSets(prev => ({ ...prev, [exerciseId]: prev[exerciseId].map(s => (s.id === setId ? { ...s, [champ]: v } : s)) }))
+    const { error } = await supabase.from('program_exercise_sets').upsert({
+      program_exercise_id: exerciseId, athlete_id: athleteId, set_index: ligne.set_index, [champ]: v, entered_by_role: 'coach',
+    }, { onConflict: 'program_exercise_id,athlete_id,set_index' })
+    if (error && Date.now() - alerteRef.current > 5000) {
+      alerteRef.current = Date.now()
+      alert('Série non enregistrée : ' + error.message)
+    }
+  }
+
+  const enregistrerNotePrivee = async ({ program_exercise_id, texte }) => {
+    const { error } = await supabase.from('program_exercises').update({ private_coach_note: texte || null }).eq('id', program_exercise_id)
+    if (error) throw new Error('Note non enregistrée : ' + error.message)
+  }
+
+  const enregistrerSeance = async (champs) => {
+    const { error } = await supabase.from('program_completions').upsert({
+      athlete_id: athleteId, program_session_id: brute.id, skipped: false,
+      ...(dejaFaite ? {} : { completed_at: new Date().toISOString() }),
+      ...champs,
+    }, { onConflict: 'athlete_id,program_session_id' })
+    if (error) throw new Error('Séance non enregistrée : ' + error.message)
+  }
+
+  // Partager : le sportif retrouve le bilan (citation + muscles) à sa prochaine ouverture de l'app,
+  // comme pour toute séance validée par le coach (pending_celebration), et reçoit une notification.
+  const partagerRecap = async ({ plaisir, difficulte, duree_min, citation, muscles }) => {
+    const tonnage = Object.values(setsRef.current).flat()
+      .reduce((t, s) => t + (parseFloat(s.kg_done) || 0) * (parseInt(s.reps_done, 10) || 0), 0)
+    try {
+      await enregistrerSeance({
+        pleasure: plaisir, difficulty: difficulte, duration_minutes: duree_min,
+        pending_celebration: { tonnage: Math.round(tonnage), muscles, records: [], citation },
+      })
+      await supabase.from('notifications').insert({
+        athlete_id: athleteId, type: 'session_validated_by_coach',
+        title: 'Ton coach a validé une séance pour toi', body: brute.title || null,
+      })
+    } catch (err) { alert(err.message); throw err }
+  }
+
+  const terminer = async ({ plaisir, difficulte, duree_min }) => {
+    try {
+      await enregistrerSeance({ pleasure: plaisir, difficulty: difficulte, duration_minutes: duree_min })
+    } catch (err) { alert(err.message); return }
+    try { localStorage.removeItem(sessionProgressKey(athleteId, brute.id)) } catch { /* pas bloquant */ }
+    await onTerminee()
+  }
+
+  if (!session) return <div style={{ padding: 24, color: 'var(--text3)' }}>Chargement…</div>
+
+  return (
+    <Seance
+      mode="coach"
+      athleteNom={athleteNom}
+      session={session}
+      athleteId={athleteId}
+      mouvementsSections={mouvementsSections}
+      exerciseSets={exerciseSets}
+      onEnsureExerciseSets={ensureExerciseSets}
+      onSaveExerciseSet={saveExerciseSet}
+      onEnregistrerNotePrivee={enregistrerNotePrivee}
+      onPartagerRecap={partagerRecap}
+      onTerminer={terminer}
+      onQuitter={onFermer}
     />
   )
 }

@@ -58,7 +58,7 @@ const CITATIONS = [
   { texte: "Don't be average, chase excellence.", auteur: "Anonyme" },
 ]
 
-function randomCitation() {
+export function randomCitation() {
   return CITATIONS[Math.floor(Math.random() * CITATIONS.length)]
 }
 
@@ -103,9 +103,11 @@ function BodySVG({ active, view }) {
   )
 }
 
-export default function CelebrationModal({ tonnage, muscles, records = [], onClose }) {
+// citation : imposée par le coach quand il partage le récapitulatif d'une séance coachée (Seance.js,
+// mode coach) ; sinon tirée au hasard.
+export default function CelebrationModal({ tonnage, muscles, records = [], citation: citationImposee = null, onClose }) {
   const hasBody = muscles.length > 0
-  const [citation] = useState(() => randomCitation())
+  const [citation] = useState(() => citationImposee || randomCitation())
   const [sharing, setSharing] = useState(false)
   const cardRef = useRef(null)
 
