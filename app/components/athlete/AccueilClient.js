@@ -650,7 +650,7 @@ export default function AccueilClient({
 
       {afficherProgrammes ? (
         <>
-          <h2 style={{ ...libelleSection, margin: "0 18px 12px", fontWeight: 400 }}>Programmes</h2>
+          <h2 style={{ ...libelleSection, margin: "0 18px 12px", fontWeight: 400 }}>Programmes disponibles</h2>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10, overflowX: "auto", padding: "0 18px 4px", scrollbarWidth: "none" }}>
             {programmes.map((p, i) => (
               // Carte = le rectangle de couleur, texte dedans : hauteur fixe, donc toutes les cartes
