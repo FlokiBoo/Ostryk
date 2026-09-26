@@ -15,6 +15,8 @@ export async function proxy(request) {
     pathname.startsWith('/api/manifest') ||
     pathname.startsWith('/api/stripe/webhook') ||
     pathname.startsWith('/api/signup') ||
+    pathname.startsWith('/rejoindre/') ||
+    pathname.startsWith('/api/rejoindre/') ||
     pathname.startsWith('/confidentialite') ||
     pathname.startsWith('/cgu') ||
     pathname.startsWith('/suppression-compte') ||

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, ChartLineUp, Ruler, Bone, Key, EnvelopeSimple, PencilSimple, Warning, CheckCircle } from '@phosphor-icons/react'
+import { User, ChartLineUp, Ruler, Bone, Key, EnvelopeSimple, PencilSimple, Warning, CheckCircle, LinkSimple, Copy } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import TrackedMovementsBlock from './TrackedMovementsBlock'
 import GoniometerView from './GoniometerView'
@@ -59,6 +59,7 @@ function InfosSection({ athlete, onUpdate }) {
   })
   const [saving, setSaving] = useState(false)
   const [inviting, setInviting] = useState(false)
+  const [lienCopie, setLienCopie] = useState(false)
   const [inviteMsg, setInviteMsg] = useState('')
 
   const inputStyle = {
@@ -118,6 +119,43 @@ function InfosSection({ athlete, onUpdate }) {
           </button>
           {inviteMsg && <div style={{ fontSize: 12, color: inviteMsg.startsWith('Erreur') ? '#DC2626' : '#166534', fontWeight: 600 }}>{inviteMsg}</div>}
         </div>
+
+        {/* Lien d'invitation personnel (app/rejoindre/[token]) : n'expire pas, contrairement au lien
+            de l'email, et rattache le compte à CETTE fiche — pas de doublon comme avec le lien
+            général d'inscription. À envoyer par SMS, WhatsApp… Inutile une fois le compte activé. */}
+        {athlete.token && (
+          athlete.auth_user_id ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#166534', fontWeight: 600 }}>
+              <CheckCircle size={14} weight="fill" /> Compte activé : {athlete.name.split(' ')[0]} se connecte avec son email.
+            </div>
+          ) : (
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                <LinkSimple size={15} /> Lien d&apos;invitation personnel
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.45 }}>
+                N&apos;expire pas et relie le compte à cette fiche. {athlete.name.split(' ')[0]} choisit son mot de passe et arrive directement dans son espace.
+              </div>
+              <div style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text2)', background: 'var(--bg2)', borderRadius: 6, padding: '8px 10px', wordBreak: 'break-all' }}>
+                {`${typeof window !== 'undefined' ? window.location.origin : 'https://www.ostryk.fr'}/rejoindre/${athlete.token}`}
+              </div>
+              <button type="button" onClick={async () => {
+                const lien = `${window.location.origin}/rejoindre/${athlete.token}`
+                const texte = `Salut ${athlete.name.split(' ')[0]}, voici ton lien pour créer ton compte Ostryk : ${lien}`
+                // Sur téléphone, la feuille de partage (SMS, WhatsApp…) ; sinon copie dans le presse-papiers.
+                if (navigator.share) {
+                  try { await navigator.share({ text: texte }); return } catch { /* partage annulé : on copie */ }
+                }
+                try { await navigator.clipboard.writeText(lien); setLienCopie(true); setTimeout(() => setLienCopie(false), 2000) } catch { /* presse-papiers refusé */ }
+              }} style={{
+                background: lienCopie ? '#166534' : 'var(--bordeaux)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: 11,
+                fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}>
+                {lienCopie ? <><CheckCircle size={15} /> Lien copié</> : <><Copy size={15} /> Copier / partager le lien</>}
+              </button>
+            </div>
+          )
+        )}
 
         <button onClick={() => setEditing(true)} style={{ background: 'var(--bg2)', color: 'var(--text2)', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <PencilSimple size={15} /> Modifier
