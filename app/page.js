@@ -308,10 +308,10 @@ export default function Home() {
         <div style={{
           padding: '20px 16px 14px', background: 'var(--bg)',
           borderBottom: '1px solid var(--border)',
-          display: 'flex', alignItems: 'center', gap: 12,
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
           position: 'sticky', top: 0, zIndex: 10
         }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 120 }}>
             <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontSize: 21, fontWeight: 700 }}>OSTRYK</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>
               {athletes.length} sportif{athletes.length !== 1 ? 's' : ''}
@@ -323,6 +323,9 @@ export default function Home() {
               <NotificationBell coachId={coachId} />
             </div>
           )}
+          {/* Boutons d'action : sur la ligne du titre quand il y a la place, sinon (téléphone) sur une
+              ligne à part, alignés à droite — ils débordaient de l'écran. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>
           {/* Toggle Vue Sportif */}
           {coachToken && (
             <button
@@ -343,8 +346,9 @@ export default function Home() {
           }}><Play size={13} weight="fill" /> Lancer un coaching</button>
           <button onClick={() => setShowForm(v => !v)} style={{
             background: 'var(--green)', color: '#fff', border: 'none',
-            borderRadius: 20, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+            borderRadius: 20, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0
           }}>+ Sportif</button>
+          </div>
         </div>
 
         {lancerCoachingOuvert && (
