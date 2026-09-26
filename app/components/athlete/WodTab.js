@@ -371,6 +371,10 @@ export default function WodTab({
     ? (objectives || []).filter(o => !o.completed_at).map(o => ({ id: o.id, titre: o.text, date: o.target_date || null }))
     : []
   const prenom = (athlete?.name || '').trim().split(/\s+/)[0] || null
+  // Catalogue sans les programmes que le sportif suit déjà : sa copie garde le lien vers le modèle
+  // (source_program_id). Un programme archivé redevient proposé, pour pouvoir le refaire.
+  const dejaSuivis = new Set(programs.filter(p => !p.archived && p.source_program_id).map(p => p.source_program_id))
+  const catalogueDisponible = catalogue.filter(p => !dejaSuivis.has(p.id))
 
   return (
     <>
@@ -378,7 +382,7 @@ export default function WodTab({
         athlete={athlete ? { prenom, is_1to1_client: !!athlete.is_1to1_client } : null}
         objectifs={objectifs}
         semaine={semaine}
-        programmes={catalogue.slice(0, 6).map(p => ({
+        programmes={catalogueDisponible.slice(0, 6).map(p => ({
           id: p.id,
           titre: p.title,
           sousTitre: `${p.sessionCount} séance${p.sessionCount > 1 ? 's' : ''}`,
