@@ -160,10 +160,14 @@ export async function POST(request) {
       case 'customer.subscription.deleted': {
         const subscription = event.data.object
         const athleteId = subscription.metadata?.athlete_id
+        // Ne résilier que si c'est bien l'abonnement en cours de l'athlète : un événement
+        // renvoyé en retard (ou livré hors ordre) pour un ancien abonnement ne doit pas
+        // écraser un réabonnement souscrit entre-temps.
         if (athleteId) {
           await supabaseAdmin.from('athletes').update({
             subscription_status: 'canceled', subscription_tier: null,
           }).eq('id', athleteId)
+            .or(`stripe_subscription_id.is.null,stripe_subscription_id.eq.${subscription.id}`)
         }
         await notifySubscriptionEvent(subscription, 'ended')
         break
