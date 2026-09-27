@@ -47,15 +47,17 @@ export async function POST(request, { params }) {
       // canceled_by marque une résiliation décidée par le coach : le webhook ne lui renvoie pas
       // de notification "X a annulé son abonnement" pour sa propre action.
       await stripe.subscriptions.update(athlete.stripe_subscription_id, { cancel_at_period_end: true, metadata: { canceled_by: 'coach' } })
+      await supabaseAdmin.from('athletes').update({ subscription_cancel_at_period_end: true }).eq('id', athleteId)
     } else if (action === 'undo_cancel') {
       await stripe.subscriptions.update(athlete.stripe_subscription_id, { cancel_at_period_end: false, metadata: { canceled_by: '' } })
+      await supabaseAdmin.from('athletes').update({ subscription_cancel_at_period_end: false }).eq('id', athleteId)
     } else if (action === 'cancel_now') {
       // Arrêt immédiat, sans remboursement au prorata de la période déjà payée. La base est mise
       // à jour tout de suite (sans attendre le webhook) pour que l'accès soit coupé dès maintenant.
       await stripe.subscriptions.update(athlete.stripe_subscription_id, { metadata: { canceled_by: 'coach' } })
       await stripe.subscriptions.cancel(athlete.stripe_subscription_id)
       await supabaseAdmin.from('athletes').update({
-        subscription_status: 'canceled', subscription_tier: null,
+        subscription_status: 'canceled', subscription_tier: null, subscription_cancel_at_period_end: false,
       }).eq('id', athleteId)
     } else {
       return NextResponse.json({ error: 'action inconnue' }, { status: 400 })

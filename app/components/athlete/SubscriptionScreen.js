@@ -86,7 +86,7 @@ export default function SubscriptionScreen({ athlete, token, onClose }) {
             </div>
             {athlete.subscription_current_period_end && (
               <div style={{ fontSize: 12, color: '#0D6B4F' }}>
-                Renouvellement automatique le {new Date(athlete.subscription_current_period_end).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                {athlete.subscription_cancel_at_period_end ? 'Prend fin le' : 'Renouvellement automatique le'} {new Date(athlete.subscription_current_period_end).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
               </div>
             )}
             <button onClick={openPortal} disabled={portalLoading}

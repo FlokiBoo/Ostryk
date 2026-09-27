@@ -25,6 +25,7 @@ async function syncFromSubscription(subscription) {
     subscription_tier: tier,
     subscription_status: subscription.status,
     subscription_current_period_end: end ? new Date(end * 1000).toISOString() : null,
+    subscription_cancel_at_period_end: !!subscription.cancel_at_period_end,
   }).eq('id', athleteId)
 }
 
@@ -173,7 +174,7 @@ export async function POST(request) {
         // écraser un réabonnement souscrit entre-temps.
         if (athleteId) {
           await supabaseAdmin.from('athletes').update({
-            subscription_status: 'canceled', subscription_tier: null,
+            subscription_status: 'canceled', subscription_tier: null, subscription_cancel_at_period_end: false,
           }).eq('id', athleteId)
             .or(`stripe_subscription_id.is.null,stripe_subscription_id.eq.${subscription.id}`)
         }

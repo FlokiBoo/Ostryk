@@ -683,7 +683,8 @@ function AthleteView({ params }) {
     return () => { supabase.removeChannel(channel) }
   }, [athlete?.id, isCoachView])
 
-  // Prévient le sportif quand son abonnement se renouvelle automatiquement dans ≤3 jours. Dérivé
+  // Prévient le sportif quand son abonnement se renouvelle (ou prend fin, si une résiliation est
+  // programmée) dans ≤3 jours. Dérivé
   // au rendu plutôt que via un effet : `athlete` n'est jamais peuplé côté serveur (chargé par fetch
   // après montage), donc cette lecture localStorage ne s'exécute jamais avant l'hydratation client.
   const renewalDaysLeft = athlete?.subscription_current_period_end
@@ -1582,10 +1583,10 @@ function AthleteView({ params }) {
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg)', borderRadius: 'var(--rl)', padding: 20, maxWidth: 380, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}><Bell size={32} /></div>
             <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontSize: 17, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>
-              Renouvellement à venir
+              {athlete.subscription_cancel_at_period_end ? 'Fin d’abonnement à venir' : 'Renouvellement à venir'}
             </div>
             <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16, textAlign: 'center' }}>
-              Ton abonnement se renouvelle automatiquement le{' '}
+              {athlete.subscription_cancel_at_period_end ? 'Ton abonnement prend fin le' : 'Ton abonnement se renouvelle automatiquement le'}{' '}
               {new Date(athlete.subscription_current_period_end).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}.
             </div>
             <button onClick={dismissRenewalPopup} style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '11px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%' }}>
