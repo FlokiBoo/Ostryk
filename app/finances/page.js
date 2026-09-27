@@ -39,6 +39,7 @@ const PAYMENT_LABELS = {
 
 function Row({ a, promoCodes, onAction }) {
   const [showPromoPicker, setShowPromoPicker] = useState(false)
+  const [showEndPicker, setShowEndPicker] = useState(false)
   const [selectedPromo, setSelectedPromo] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -53,8 +54,13 @@ function Row({ a, promoCodes, onAction }) {
     await onAction(a.id, action, extra)
     setBusy(false)
     setShowPromoPicker(false)
+    setShowEndPicker(false)
     setSelectedPromo('')
   }
+
+  const endDateLabel = a.periodEnd
+    ? new Date(a.periodEnd).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
+    : null
 
   return (
     <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, opacity: busy ? 0.6 : 1 }}>
@@ -82,6 +88,10 @@ function Row({ a, promoCodes, onAction }) {
         {a.paused ? (
           <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E', background: '#FEF3C7', borderRadius: 10, padding: '3px 10px', flexShrink: 0 }}>
             Suspendu
+          </span>
+        ) : isActive && a.cancelAtPeriodEnd ? (
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E', background: '#FEF3C7', borderRadius: 10, padding: '3px 10px', flexShrink: 0 }}>
+            {endDateLabel ? `Fin le ${endDateLabel}` : 'Fin programmée'}
           </span>
         ) : status ? (
           <span style={{ fontSize: 11, fontWeight: 700, color: status.color, background: status.bg, borderRadius: 10, padding: '3px 10px', flexShrink: 0 }}>
@@ -115,6 +125,28 @@ function Row({ a, promoCodes, onAction }) {
               ⏸ Suspendre
             </button>
           )}
+          {a.cancelAtPeriodEnd ? (
+            <button onClick={() => run('undo_cancel')} disabled={busy} style={{ background: 'none', border: 'none', color: 'var(--green)', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+              ↺ Annuler la fin d&apos;abonnement
+            </button>
+          ) : (
+            <button onClick={() => setShowEndPicker(v => !v)} disabled={busy} style={{ background: 'none', border: 'none', color: '#DC2626', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+              ✕ Mettre fin à l&apos;abonnement
+            </button>
+          )}
+        </div>
+      )}
+
+      {isActive && showEndPicker && !a.cancelAtPeriodEnd && (
+        <div style={{ display: 'flex', gap: 6, paddingLeft: 42, flexWrap: 'wrap' }}>
+          <button onClick={() => { if (confirm(`Mettre fin à l'abonnement de ${a.name} ${endDateLabel ? `le ${endDateLabel}` : 'à la fin de sa période en cours'} ? Il garde son accès jusque-là et ne sera plus prélevé ensuite.`)) run('cancel_at_period_end') }}
+            disabled={busy} style={{ background: 'var(--bg2)', color: 'var(--text)', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            {endDateLabel ? `À la fin de la période (${endDateLabel})` : 'À la fin de la période'}
+          </button>
+          <button onClick={() => { if (confirm(`Arrêter immédiatement l'abonnement de ${a.name} ? Son accès est coupé tout de suite, sans remboursement de la période déjà payée.`)) run('cancel_now') }}
+            disabled={busy} style={{ background: '#DC2626', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '6px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            Immédiatement
+          </button>
         </div>
       )}
 

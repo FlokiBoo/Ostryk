@@ -72,6 +72,8 @@ async function recordOfferPurchase(session) {
 async function notifySubscriptionEvent(subscription, kind) {
   const athleteId = subscription.metadata?.athlete_id
   if (!athleteId) return
+  // Résiliation faite par le coach depuis Finances : inutile de le notifier de sa propre action.
+  if (kind !== 'started' && subscription.metadata?.canceled_by === 'coach') return
   const { data: athlete } = await supabaseAdmin.from('athletes').select('name, coach_id').eq('id', athleteId).maybeSingle()
   if (!athlete?.coach_id) return
 

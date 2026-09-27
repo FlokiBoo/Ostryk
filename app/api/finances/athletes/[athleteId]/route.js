@@ -18,7 +18,8 @@ async function requireAdmin() {
 }
 
 // Actions ponctuelles du coach sur l'abonnement Stripe d'un sportif donné : appliquer/retirer un
-// code promo existant, ou suspendre/reprendre la facturation. N'affecte que cet abonnement.
+// code promo existant, suspendre/reprendre la facturation, ou mettre fin à l'abonnement (en fin de
+// période payée ou immédiatement). N'affecte que cet abonnement.
 export async function POST(request, { params }) {
   const user = await requireAdmin()
   if (!user) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
@@ -42,6 +43,20 @@ export async function POST(request, { params }) {
       await stripe.subscriptions.update(athlete.stripe_subscription_id, { pause_collection: { behavior: 'mark_uncollectible' } })
     } else if (action === 'resume') {
       await stripe.subscriptions.update(athlete.stripe_subscription_id, { pause_collection: '' })
+    } else if (action === 'cancel_at_period_end') {
+      // canceled_by marque une résiliation décidée par le coach : le webhook ne lui renvoie pas
+      // de notification "X a annulé son abonnement" pour sa propre action.
+      await stripe.subscriptions.update(athlete.stripe_subscription_id, { cancel_at_period_end: true, metadata: { canceled_by: 'coach' } })
+    } else if (action === 'undo_cancel') {
+      await stripe.subscriptions.update(athlete.stripe_subscription_id, { cancel_at_period_end: false, metadata: { canceled_by: '' } })
+    } else if (action === 'cancel_now') {
+      // Arrêt immédiat, sans remboursement au prorata de la période déjà payée. La base est mise
+      // à jour tout de suite (sans attendre le webhook) pour que l'accès soit coupé dès maintenant.
+      await stripe.subscriptions.update(athlete.stripe_subscription_id, { metadata: { canceled_by: 'coach' } })
+      await stripe.subscriptions.cancel(athlete.stripe_subscription_id)
+      await supabaseAdmin.from('athletes').update({
+        subscription_status: 'canceled', subscription_tier: null,
+      }).eq('id', athleteId)
     } else {
       return NextResponse.json({ error: 'action inconnue' }, { status: 400 })
     }

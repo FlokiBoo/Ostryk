@@ -30,7 +30,7 @@ export async function GET() {
   if (!coach?.is_admin) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const { data: athletes } = await supabaseAdmin.from('athletes')
-    .select('id, name, subscription_status, subscription_tier, stripe_customer_id, stripe_subscription_id')
+    .select('id, name, subscription_status, subscription_tier, stripe_customer_id, stripe_subscription_id, subscription_current_period_end')
     .neq('archived', true)
     .order('name')
 
@@ -53,8 +53,8 @@ export async function GET() {
     }
   }
 
-  // État live de l'abonnement (pause, réduction en cours) pour les sportifs actifs — utilisé
-  // par les actions "Suspendre"/"Appliquer un code promo" dans Finances.
+  // État live de l'abonnement (pause, réduction en cours, fin programmée) pour les sportifs
+  // actifs — utilisé par les actions "Suspendre"/"Appliquer un code promo"/"Mettre fin" dans Finances.
   const subById = {}
   const activeSubIds = new Set((athletes || []).filter(a => a.subscription_status === 'active' && a.stripe_subscription_id).map(a => a.stripe_subscription_id))
   if (activeSubIds.size) {
@@ -77,6 +77,8 @@ export async function GET() {
         ...invoiceLabel(invoice),
       } : null,
       paused: !!sub?.pause_collection,
+      cancelAtPeriodEnd: !!sub?.cancel_at_period_end,
+      periodEnd: a.subscription_current_period_end,
       discountCode: sub?.discount?.coupon ? (sub.discount.coupon.name || sub.discount.coupon.id) : null,
     }
   })
