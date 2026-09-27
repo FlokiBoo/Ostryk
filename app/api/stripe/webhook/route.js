@@ -8,18 +8,23 @@ import { sendEmail } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
+// Depuis l'API Stripe 2025-03-31, current_period_end n'est plus sur l'abonnement mais sur ses
+// items : un webhook envoyé dans une version récente arrive sans le champ au niveau racine.
+function periodEnd(subscription) {
+  return subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end ?? null
+}
+
 async function syncFromSubscription(subscription) {
   const athleteId = subscription.metadata?.athlete_id
   const tier = subscription.metadata?.tier || null
   if (!athleteId) return
 
+  const end = periodEnd(subscription)
   await supabaseAdmin.from('athletes').update({
     stripe_subscription_id: subscription.id,
     subscription_tier: tier,
     subscription_status: subscription.status,
-    subscription_current_period_end: subscription.current_period_end
-      ? new Date(subscription.current_period_end * 1000).toISOString()
-      : null,
+    subscription_current_period_end: end ? new Date(end * 1000).toISOString() : null,
   }).eq('id', athleteId)
 }
 
@@ -71,13 +76,14 @@ async function notifySubscriptionEvent(subscription, kind) {
   if (!athlete?.coach_id) return
 
   const tierLabel = SUBSCRIPTION_TIERS[subscription.metadata?.tier]?.label || null
-  const periodEnd = subscription.current_period_end
-    ? new Date(subscription.current_period_end * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+  const end = periodEnd(subscription)
+  const periodEndLabel = end
+    ? new Date(end * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
     : null
 
   const messages = {
     started: { title: `${athlete.name} vient de s'abonner`, body: tierLabel },
-    cancel_scheduled: { title: `${athlete.name} a annulé son abonnement`, body: periodEnd ? `Actif jusqu'au ${periodEnd}` : null },
+    cancel_scheduled: { title: `${athlete.name} a annulé son abonnement`, body: periodEndLabel ? `Actif jusqu'au ${periodEndLabel}` : null },
     ended: { title: `L'abonnement de ${athlete.name} s'est terminé`, body: tierLabel },
   }
   const msg = messages[kind]
