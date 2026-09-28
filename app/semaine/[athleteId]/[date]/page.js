@@ -92,7 +92,7 @@ export default function AthletePage({ params }) {
       let completions = []
       if (sessionIds.length > 0) {
         const { data: comps } = await supabase.from('program_completions')
-          .select('*, program_sessions(id, title, programs(title), program_exercises(id, name, sets, reps, kg, note))')
+          .select('*, program_sessions(id, title, programs(title), program_exercises(id, name, sets, reps, kg, note, private_coach_note))')
           .in('program_session_id', sessionIds)
           .order('completed_at', { ascending: false })
           .limit(3)
@@ -494,6 +494,7 @@ function SessionDetailModal({ session, onClose }) {
                 {done && <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginTop: 2 }}>Réalisé : {done}</div>}
                 {e.note && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Note coach : {e.note}</div>}
                 {log.note && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2, fontStyle: 'italic' }}>« {log.note} »</div>}
+                {e.private_coach_note && <div style={{ fontSize: 12, color: 'var(--text)', marginTop: 4, whiteSpace: 'pre-wrap' }}><b>Ma note :</b> {e.private_coach_note}</div>}
               </div>
             )
           })}

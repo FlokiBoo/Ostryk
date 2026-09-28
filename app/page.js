@@ -125,7 +125,7 @@ export default function Home() {
           .limit(40),
         supabase
           .from('program_completions')
-          .select('id, completed_at, athlete_id, pleasure, difficulty, duration_minutes, athletes(id, name), program_sessions(id, title, program_id, program_exercises(id, name, sets, reps, kg, note))')
+          .select('id, completed_at, athlete_id, pleasure, difficulty, duration_minutes, athletes(id, name), program_sessions(id, title, program_id, program_exercises(id, name, sets, reps, kg, note, private_coach_note))')
           .order('completed_at', { ascending: false })
           .limit(40),
         supabase
@@ -217,7 +217,7 @@ export default function Home() {
           coachNotes: null,
           feedback: { pleasure: c.pleasure, difficulty: c.difficulty, duration_minutes: c.duration_minutes },
           exosDone: (c.program_sessions.program_exercises || []).filter(e => e.name).map(e => ({
-            id: e.id, name: e.name, sets: e.sets, reps: e.reps, kg: e.kg, note: e.note,
+            id: e.id, name: e.name, sets: e.sets, reps: e.reps, kg: e.kg, note: e.note, privateNote: e.private_coach_note,
             log: progLogsMap[e.id] || {},
           })),
         }))
@@ -719,6 +719,7 @@ function SessionDetailModal({ session, onClose }) {
                 {done && <div style={{ fontSize: 12, color: '#166534', fontWeight: 700, marginTop: 2 }}>Réalisé : {done}</div>}
                 {e.note && <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', marginTop: 4 }}>Note coach : {e.note}</div>}
                 {log.note && <div style={{ fontSize: 12, color: 'var(--text2)', fontStyle: 'italic', marginTop: 4 }}>« {log.note} »</div>}
+                {e.privateNote && <div style={{ fontSize: 12, color: 'var(--text)', marginTop: 4, whiteSpace: 'pre-wrap' }}><b>Ma note :</b> {e.privateNote}</div>}
               </div>
             )
           })}
