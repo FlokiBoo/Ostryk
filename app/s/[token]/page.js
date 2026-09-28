@@ -418,6 +418,10 @@ function AthleteView({ params }) {
             { onConflict: 'athlete_id,program_session_id' }
           )
           if (error) { failed = true; break }
+          // Validation faite hors ligne : le coach d'un client 1:1 est prévenu maintenant.
+          fetch(`/api/athlete-view/${token}/session-completed`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: op.sessId }),
+          }).catch(() => {})
         } else if (op.type === 'add_exercise_set') {
           hasExerciseSetOps = true
           // upsert et non insert : rejouer une file partiellement passée (réseau coupé en plein
@@ -1009,11 +1013,11 @@ function AthleteView({ params }) {
           body: sess.title || null,
         })
       } else if (athlete.coach_id) {
-        await supabase.from('notifications').insert({
-          coach_id: athlete.coach_id, type: 'session_validated_by_athlete',
-          title: `${athlete.name} a validé une séance`,
-          body: sess.title || null,
-        })
+        // Coach prévenu (cloche + push) côté serveur, et seulement pour un client en suivi 1:1 :
+        // la RLS refuse l'insertion depuis la session du sportif.
+        fetch(`/api/athlete-view/${token}/session-completed`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sessId }),
+        }).catch(() => {})
       }
     }
 

@@ -11,6 +11,7 @@ import NotificationBell from '@/app/components/NotificationBell'
 import { getCoachId } from '@/lib/coach'
 import LancerCoachingModal from '@/app/components/coach/LancerCoachingModal'
 import MouvementsAFilmer from '@/app/components/coach/MouvementsAFilmer'
+import { registerPushNotifications } from '@/lib/pushRegistration'
 
 function today() {
   const n = new Date()
@@ -77,6 +78,15 @@ export default function Home() {
   const [newName, setNewName] = useState('')
   const [saving, setSaving] = useState(false)
   const [coachToken, setCoachToken] = useState(null)
+  // Push sur le téléphone du coach (ex. un client 1:1 termine sa séance) : le token est rattaché à son
+  // profil perso, seule fiche à laquelle l'envoi (lib/push.js) sait adresser. No-op hors app native.
+  useEffect(() => {
+    if (!coachToken) return
+    let listeners = []
+    let cancelled = false
+    registerPushNotifications(coachToken).then(l => { if (cancelled) l.forEach(x => x.remove()); else listeners = l }).catch(() => {})
+    return () => { cancelled = true; listeners.forEach(l => l.remove()) }
+  }, [coachToken])
   const [coachId, setCoachId] = useState(null)
   const [generatingToken, setGeneratingToken] = useState(false)
   const [selected, setSelected] = useState(null)
