@@ -33,9 +33,13 @@ export default function ResumeLastView() {
       sessionStorage.setItem(INIT_FLAG_KEY, '1')
       if (alreadyRunning) return
       const lastPath = localStorage.getItem(LAST_PATH_KEY)
-      if (lastPath && lastPath !== pathname && !isSkippable(lastPath) && !isSkippable(pathname)) {
-        router.replace(lastPath)
-      }
+      if (!lastPath || lastPath === pathname || isSkippable(lastPath) || isSkippable(pathname)) return
+      // Réservé à l'app native. Dans un navigateur, un nouvel onglet est aussi un « démarrage à
+      // froid » : on y remplaçait le dashboard par le dernier écran visité, sans historique
+      // derrière — le bouton retour quittait alors le site.
+      import('@capacitor/core')
+        .then(({ Capacitor }) => { if (Capacitor.isNativePlatform()) router.replace(lastPath) })
+        .catch(() => {})
     } catch { /* stockage indisponible (navigation privée...) : pas bloquant */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
