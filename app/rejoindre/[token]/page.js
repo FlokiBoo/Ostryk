@@ -18,6 +18,15 @@ const champ = {
   fontSize: 16, outline: 'none', background: 'var(--bg2)', color: 'var(--text)', fontFamily: 'inherit',
 }
 
+// Même cookie d'appareil que l'espace sportif et /verify-device.
+function ensureDeviceCookie() {
+  const match = document.cookie.match(/(?:^|; )cp_device=([^;]+)/)
+  if (match) return decodeURIComponent(match[1])
+  const id = crypto.randomUUID()
+  document.cookie = `cp_device=${id}; path=/; max-age=${60 * 60 * 24 * 365 * 2}; SameSite=Lax`
+  return id
+}
+
 export default function RejoindrePage() {
   const { token } = useParams()
   const router = useRouter()
@@ -52,9 +61,14 @@ export default function RejoindrePage() {
   const valider = async (e) => {
     e.preventDefault()
     setErreur('')
-    if (!prenom.trim()) { setErreur('Ton prénom est requis.'); return }
-    if (!cgu) { setErreur('Merci d’accepter les CGU et la politique de confidentialité.'); return }
-    if (!isPasswordValid(password)) { setErreur('Le mot de passe ne respecte pas encore toutes les règles.'); return }
+    // Tout ce qui manque d'un coup, plutôt qu'une erreur à la fois et autant d'allers-retours.
+    const manques = [
+      !prenom.trim() && 'ton prénom',
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) && 'une adresse email valide',
+      !isPasswordValid(password) && 'un mot de passe qui respecte toutes les règles',
+      !cgu && 'l’acceptation des CGU',
+    ].filter(Boolean)
+    if (manques.length) { setErreur(`Il manque : ${manques.join(', ')}.`); return }
     setEnvoi(true)
     const res = await fetch(`/api/rejoindre/${token}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
@@ -71,6 +85,12 @@ export default function RejoindrePage() {
     }
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
     if (error) { router.push('/login'); return }
+    // Ce téléphone est validé d'office : le client vient d'ouvrir SON lien personnel et de choisir
+    // son mot de passe. Sans ça, il tombait aussitôt sur « Nouvel appareil détecté » et devait aller
+    // chercher un code par email avant de voir son espace.
+    await fetch('/api/device/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deviceId: ensureDeviceCookie() }),
+    }).catch(() => {})
     router.push(`/s/${token}`)
   }
 
@@ -101,7 +121,7 @@ export default function RejoindrePage() {
             </button>
           </>
         ) : (
-          <form onSubmit={valider} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <form onSubmit={valider} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ textAlign: 'center', marginBottom: 4 }}>
               <div style={{ fontFamily: 'var(--font-title)', fontSize: 20, color: 'var(--bordeaux)' }}>
                 {infos.prenom ? `Bienvenue ${infos.prenom}` : 'Bienvenue'}

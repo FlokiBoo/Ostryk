@@ -40,22 +40,16 @@ import { registerPushNotifications } from '@/lib/pushRegistration'
 import { unlockAudio } from '@/lib/audioBeep'
 import { unlockSpeech } from '@/lib/speak'
 
+// Numéro affiché devant chaque exercice, le même que l'étape du player (Seance.js) : les exercices
+// d'une super série partagent le leur. Pas de codes A / B1 côté sportif (jargon interne) ; la super
+// série se lit par sa consigne (getSupersetFlow), avec les noms.
 function computeLabels(exercises) {
   const labels = {}
-  let letterIdx = 0, i = 0
-  while (i < exercises.length) {
-    const g = exercises[i].superset_group
-    if (!g) {
-      labels[exercises[i].id] = String.fromCharCode(65 + letterIdx)
-      letterIdx++; i++
-    } else {
-      let j = i
-      while (j < exercises.length && exercises[j].superset_group === g) j++
-      const letter = String.fromCharCode(65 + letterIdx)
-      for (let k = i; k < j; k++) labels[exercises[k].id] = `${letter}${k - i + 1}`
-      letterIdx++; i = j
-    }
-  }
+  let numero = 0
+  exercises.forEach((e, i) => {
+    if (!e.superset_group || exercises[i - 1]?.superset_group !== e.superset_group) numero++
+    labels[e.id] = String(numero)
+  })
   return labels
 }
 
@@ -113,15 +107,15 @@ function supersetGroupName(size) {
   return 'GIANTSET'
 }
 
-function getSupersetFlow(exos, ei, labels) {
+function getSupersetFlow(exos, ei) {
   const exo = exos[ei]
   if (!exo.superset_group) return null
   if (ei > 0 && exos[ei - 1].superset_group === exo.superset_group) return null
   const group = []
   for (let j = ei; j < exos.length && exos[j].superset_group === exo.superset_group; j++) group.push(exos[j])
   if (group.length < 2) return null
-  const exoLabels = group.map(e => labels[e.id] || '?')
-  return `${supersetGroupName(group.length)}, tu fais ${exoLabels.join(' puis ')} et ensuite tu prends la récup.`
+  const noms = group.map(e => e.name || '?')
+  return `${supersetGroupName(group.length)}, tu fais ${noms.join(' puis ')} et ensuite tu prends la récup.`
 }
 
 function today() {
@@ -312,7 +306,10 @@ function AthleteView({ params }) {
   const queueKey = `coachpro_offline_queue_${token}`
   const loadQueue = () => { try { return JSON.parse(localStorage.getItem(queueKey) || '[]') } catch { return [] } }
   const saveQueue = (q) => { try { localStorage.setItem(queueKey, JSON.stringify(q)) } catch { /* stockage plein/indisponible — pas bloquant */ } }
-  const enqueue = (op) => { const q = loadQueue(); q.push(op); saveQueue(q) }
+  // _qid : identifie chaque opération, pour que la fin d'un flush ne retire que celles qu'il a
+  // réellement envoyées (voir flushQueue).
+  const newQid = () => `q-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const enqueue = (op) => { const q = loadQueue(); q.push({ ...op, _qid: newQid() }); saveQueue(q) }
 
   // Correspondance id temporaire → id réel, persistée elle aussi. Elle ne peut pas vivre seulement
   // le temps d'un flush : l'écran garde ses ids temporaires jusqu'à ce que reloadExerciseSets soit
@@ -384,9 +381,12 @@ function AthleteView({ params }) {
   // précède), donc on s'arrête à la première erreur et on garde la suite pour le prochain essai.
   const flushQueue = async () => {
     if (flushingRef.current) return
-    const q = loadQueue()
-    if (!q.length) { flushRetryRef.current = 0; return }
+    const initiale = loadQueue()
+    if (!initiale.length) { flushRetryRef.current = 0; return }
     flushingRef.current = true
+    // Opérations mises en file avant l'ajout de _qid : on leur en donne un tout de suite.
+    const q = initiale.map(op => (op._qid ? op : { ...op, _qid: newQid() }))
+    if (q.some((op, i) => op !== initiale[i])) saveQueue(q)
 
     const tempIdMap = loadAliases() // tempId -> id réel, conservé d'un flush à l'autre
     const resolveSetId = id => (isTempSetId(id) && tempIdMap[id]) ? tempIdMap[id] : id
@@ -449,9 +449,13 @@ function AthleteView({ params }) {
       }
     } catch { failed = true }
 
-    // Les opérations qui suivent celles déjà passées peuvent référencer un tempId désormais résolu :
-    // on réécrit les ids connus pour que le prochain essai reparte sur les vraies lignes.
-    const rest = q.slice(done).map(op => {
+    // On relit la file au lieu de réécrire celle du début : des séries validées PENDANT l'envoi y
+    // ont été ajoutées, et les écraser les perdait (deux tours validés à moins d'une seconde →
+    // le second jamais en base). On ne retire que les opérations réellement passées. Celles qui
+    // restent peuvent référencer un tempId désormais résolu : on réécrit les ids connus pour que
+    // le prochain essai reparte sur les vraies lignes.
+    const envoyees = new Set(q.slice(0, done).map(op => op._qid))
+    const rest = loadQueue().filter(op => !envoyees.has(op._qid)).map(op => {
       const next = { ...op }
       if (next.setId) next.setId = resolveSetId(next.setId)
       return next
@@ -470,7 +474,9 @@ function AthleteView({ params }) {
       flushRetryRef.current = 0
       // Plus rien en attente : les alias n'ont plus personne à résoudre.
       if (!rest.length) { try { localStorage.removeItem(aliasKey) } catch { /* pas bloquant */ } }
-      if (done > 0) setToast('Synchronisé ✓')
+      // Opérations arrivées pendant l'envoi : leur propre déclenchement a été ignoré (flush en cours).
+      else scheduleFlush()
+      if (done > 0) setToast('Synchronisé')
     }
   }
 
@@ -1113,7 +1119,7 @@ function AthleteView({ params }) {
     const stillPending = q.some(op => op.type === 'add_exercise_set' && op.tempId === setId)
     const rest = q.filter(op => op.tempId !== setId && op.setId !== setId)
     if (stillPending) { saveQueue(rest); return }
-    saveQueue([...rest, { type: 'delete_exercise_set', setId }])
+    saveQueue([...rest, { type: 'delete_exercise_set', setId, _qid: newQid() }])
     scheduleFlush()
   }
 
@@ -1322,10 +1328,11 @@ function AthleteView({ params }) {
             onEnsureExerciseSets={ensureExerciseSets}
             onSaveExerciseSet={saveExerciseSet}
             onQuitter={() => setPlayerStarted(false)}
-            // Pas de notation côté client : la séance est validée avec sa durée, puis retour à
-            // l'accueil. Une séance déjà faite (refaite depuis l'historique) met simplement à jour son bilan.
-            onTerminer={async ({ duree_min }) => {
-              await validate(focusSession.id, focusProgSessions, { duration_minutes: duree_min }, { isUpdate: isDone, skipCelebration: true })
+            // Pas de notation côté client : la séance est validée dès l'écran de fin (onEnregistrer),
+            // puis « Retour à l'accueil » ne fait que naviguer. Une séance déjà faite (refaite depuis
+            // l'historique) met simplement à jour son bilan.
+            onEnregistrer={({ duree_min }) => validate(focusSession.id, focusProgSessions, { duration_minutes: duree_min }, { isUpdate: isDone, skipCelebration: true })}
+            onTerminer={async () => {
               setPlayerStarted(false)
               router.push(`/s/${token}${isCoachView ? '?coach=1' : ''}`)
             }}
@@ -1586,11 +1593,19 @@ function AthleteView({ params }) {
               {athlete.subscription_cancel_at_period_end ? 'Fin d’abonnement à venir' : 'Renouvellement à venir'}
             </div>
             <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16, textAlign: 'center' }}>
-              {athlete.subscription_cancel_at_period_end ? 'Ton abonnement prend fin le' : 'Ton abonnement se renouvelle automatiquement le'}{' '}
+              {athlete.subscription_cancel_at_period_end ? 'Ton abonnement se termine le' : 'Ton abonnement se renouvelle automatiquement le'}{' '}
               {new Date(athlete.subscription_current_period_end).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}.
+              {athlete.subscription_cancel_at_period_end ? ' Tu gardes ton accès jusque-là et tu ne seras plus prélevé ; ensuite, ton compte repasse en accès gratuit.' : ''}
             </div>
-            <button onClick={dismissRenewalPopup} style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '11px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%' }}>
-              Compris
+            {athlete.subscription_cancel_at_period_end ? (
+              <button onClick={() => { dismissRenewalPopup(); setShowSubscription(true) }} style={{ background: 'var(--bordeaux)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '11px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%', marginBottom: 8 }}>
+                Continuer mon abonnement
+              </button>
+            ) : null}
+            <button onClick={dismissRenewalPopup} style={athlete.subscription_cancel_at_period_end
+              ? { background: 'none', color: 'var(--text3)', border: 'none', padding: '8px', fontSize: 13, fontWeight: 600, cursor: 'pointer', width: '100%' }
+              : { background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: '11px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%' }}>
+              {athlete.subscription_cancel_at_period_end ? 'Plus tard' : 'Compris'}
             </button>
           </div>
         </div>
@@ -1988,10 +2003,12 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
             {session.locked ? 'Réservé aux abonnés' : session.hidden ? 'Pas encore dévoilée' : `${exos.length} exercice${exos.length !== 1 ? 's' : ''}${isCompleted ? ' · déjà validée' : isSkipped ? ' · sautée' : ''}`}
           </div>
         </div>
-        {isOpen && !isCompleted && !session.locked && !session.hidden && onValidate && (
-          <button onClick={e => { e.stopPropagation(); onValidate() }} disabled={validating}
+        {/* Raccourci de validation dans l'en-tête : absent quand le player est proposé (le sportif
+            le prenait pour un statut « déjà fait »), et confirmé ailleurs, un tap suffisant sinon. */}
+        {isOpen && !isCompleted && !session.locked && !session.hidden && onValidate && !playerMode && (
+          <button onClick={e => { e.stopPropagation(); if (isCoach || confirm('Marquer cette séance comme faite ?')) onValidate() }} disabled={validating}
             style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-            ✓ Validé
+            ✓ Marquer faite
           </button>
         )}
         <span style={{ fontSize: 18, color: 'var(--text3)' }}>{isOpen ? '▲' : '▼'}</span>
@@ -2099,7 +2116,7 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
                         minWidth: 24, height: 24, borderRadius: '50%', background: 'var(--beige)', color: 'var(--bordeaux)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, padding: '0 4px', flexShrink: 0,
                       }}>
-                        {labels[exo.id] || String.fromCharCode(65 + ei)}
+                        {labels[exo.id] || ei + 1}
                       </span>
                       <span style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>{exo.name}</span>
                       {exo.video_url && (
@@ -2147,7 +2164,7 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
                   background: isCollapsed ? '#DCFCE7' : 'var(--green-light)', color: isCollapsed ? '#166534' : 'var(--green)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, padding: '0 4px', flexShrink: 0,
                 }}>
-                  {isCollapsed ? '✓' : (labels[exo.id] || String.fromCharCode(65 + ei))}
+                  {isCollapsed ? '✓' : (labels[exo.id] || ei + 1)}
                 </div>
                 <span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>{exo.name}</span>
                 {isCollapsed ? (
@@ -2211,7 +2228,7 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
               })()}
 
               {(() => {
-                const flow = getSupersetFlow(exos, ei, labels)
+                const flow = getSupersetFlow(exos, ei)
                 return flow ? (
                   <div style={{ fontSize: 14, lineHeight: 1.4, color: '#6366f1', background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 10, padding: '10px 14px', marginBottom: 10, fontWeight: 700, letterSpacing: '0.2px' }}>
                     {flow}
@@ -2424,7 +2441,17 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
             </>
           ) : (
             <>
-              {onValidate && (
+              {onValidate && playerMode && !isCompleted && !isRecurring ? (
+                // Le player (« Démarrer ») est le chemin principal : valider sans lui reste possible,
+                // mais en lien discret et confirmé, pour ne pas hésiter entre deux gros boutons.
+                <button
+                  onClick={() => { if (confirm('Marquer cette séance comme faite sans noter tes séries ?')) onValidate({}) }}
+                  disabled={validating}
+                  style={{ marginTop: 4, background: 'none', color: 'var(--text3)', border: 'none', padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'pointer', width: '100%', textDecoration: 'underline' }}
+                >
+                  {validating ? 'Validation…' : 'Déjà faite ? La marquer comme faite'}
+                </button>
+              ) : onValidate && (
                 <button
                   onClick={() => onValidate({})}
                   disabled={validating}

@@ -32,6 +32,11 @@ export async function POST(request, { params }) {
   if (!priceId) return NextResponse.json({ error: `Prix Stripe non configuré pour la formule ${tier}` }, { status: 500 })
 
   const subscription = await stripe.subscriptions.retrieve(athlete.stripe_subscription_id)
+  // Résiliation programmée : un changement avec prorata ferait payer la différence alors que
+  // l'abonnement s'arrête quand même à la date prévue.
+  if (subscription.cancel_at_period_end || subscription.cancel_at) {
+    return NextResponse.json({ error: 'Ton abonnement se termine bientôt : continue-le d’abord, puis tu pourras changer de formule.' }, { status: 400 })
+  }
   const itemId = subscription.items.data[0]?.id
   if (!itemId) return NextResponse.json({ error: 'Abonnement Stripe invalide' }, { status: 500 })
 

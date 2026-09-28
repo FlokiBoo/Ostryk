@@ -121,9 +121,12 @@ function construireBlocs(session) {
   // Les exercices d'un ancien bloc échauffement / retour au calme vivent dans leur section.
   const exos = (session.exercises || []).filter(e => e.name && !['warmup', 'cooldown'].includes(e.block_type))
   return grouperEnBlocs(exos).map((groupe, gi) => {
+    // L'id reste une lettre (clé de l'état mémorisé sur le téléphone) mais n'est jamais affiché :
+    // le sportif voit des numéros et les noms d'exercices, pas de codes A / B1.
     const lettre = String.fromCharCode(65 + gi)
     return {
       id: lettre,
+      numero: gi + 1,
       tours: Math.max(1, ...groupe.map(e => parseInt(e.sets, 10) || 1)),
       repos_sec: Math.max(0, ...groupe.map(e => parseRestSeconds(e.rest) || 0)),
       enchaine: groupe.length > 1,
@@ -145,7 +148,8 @@ function construireBlocs(session) {
         })
         return {
           id: e.id,
-          code: groupe.length > 1 ? `${lettre}${i + 1}` : lettre,
+          // Position dans l'enchaînement (1, 2…), seulement pour une super série.
+          code: groupe.length > 1 ? String(i + 1) : null,
           nom: e.name,
           // Charge proposée sur tout exercice compté en répétitions (même au poids du corps, où elle
           // reste simplement vide) ; pas sur un exercice au temps, aux calories ou à la distance.
@@ -239,17 +243,23 @@ function etatInitialBloc(bloc, exerciseSets) {
 const fmt = (v) => (v === null || v === undefined ? '' : (Math.round(v * 10) / 10).toString().replace('.', ','))
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
+// Nom d'exercice dans une phrase : « tes séries de pompes », pas « de Pompes ».
+const dansPhrase = (nom) => (/^[A-ZÀ-Ý][a-zà-ÿ]/.test(nom) ? nom.charAt(0).toLowerCase() + nom.slice(1) : nom)
+
+// Mot pour un passage : une « série » pour un exercice seul, un « tour » pour une super série.
+const motTour = (bloc) => (bloc.enchaine ? 'tour' : 'série')
+
 function consigneBloc(bloc) {
-  const codes = bloc.exercices.map(e => e.code)
+  const noms = bloc.exercices.map(e => dansPhrase(e.nom))
   if (bloc.enchaine) {
     const repos = bloc.repos_sec ? ` Repose-toi ${bloc.repos_sec} secondes, puis recommence.` : ''
-    const liste = `${codes.slice(0, -1).join(', puis ')}, puis ${codes[codes.length - 1]}`
-    return `Fais ${liste}.${repos}`
+    const liste = `${noms.slice(0, -1).join(', puis ')}, puis ${noms[noms.length - 1]}`
+    return `Enchaîne ${liste} sans pause : ça fait un tour. ${bloc.tours} tour${bloc.tours > 1 ? 's' : ''} au total.${repos}`
   }
   // Séries classiques : dans les données actuelles, un bloc non enchaîné n'a qu'un exercice.
   const repos = bloc.repos_sec ? ` Repos ${bloc.repos_sec} secondes entre les séries.` : ''
-  if (codes.length === 1) return `Fais tes ${bloc.tours} série${bloc.tours > 1 ? 's' : ''} de ${codes[0]}.${repos}`
-  return `Fais tes ${bloc.tours} séries de ${codes[0]} avant de passer à ${codes[1]}.${repos}`
+  if (noms.length === 1) return `Fais tes ${bloc.tours} série${bloc.tours > 1 ? 's' : ''} de ${noms[0]}.${repos}`
+  return `Fais tes ${bloc.tours} séries de ${noms[0]} avant de passer à ${noms[1]}.${repos}`
 }
 
 // Empêche l'écran de s'éteindre pendant la séance ; se ré-acquiert au retour au premier plan.
@@ -427,7 +437,7 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
   return (
     <div style={{ flex: pleineLargeur ? '1 1 100%' : '1 1 calc(50% - 4px)', minWidth: 0, boxSizing: 'border-box', background: T.blanc, borderRadius: 14, padding: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ background: T.texteSec, color: T.blanc, borderRadius: 100, fontSize: 10, padding: '2px 7px', flex: 'none' }}>{exercice.code}</span>
+        {exercice.code ? <span style={{ background: T.texteSec, color: T.blanc, borderRadius: 100, fontSize: 10, padding: '2px 7px', flex: 'none' }}>{exercice.code}</span> : null}
         {/* minWidth: 0 : sans lui, un nom long impose sa largeur à la carte et casse la grille à deux colonnes. */}
         <span title={exercice.nom} style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exercice.nom}</span>
         {onNotePrivee ? (
@@ -550,7 +560,7 @@ function Muscles({ muscles, largeur = 120, fond = T.blanc }) {
 // Visuel au format story (9:16) partagé sur Instagram, WhatsApp… via la feuille de partage native.
 // Rendu hors écran puis capturé en image (1080 × 1920). Sans les notes plaisir / difficulté, qui
 // restent privées au coach.
-function CarteStory({ refCarte, session, prenom, nbBlocs, volume, citation, muscles }) {
+function CarteStory({ refCarte, session, prenom, nbExercices, volume, citation, muscles }) {
   return (
     <div aria-hidden style={{ position: 'fixed', left: -10000, top: 0, pointerEvents: 'none' }}>
       <div ref={refCarte} data-scale="3" style={{
@@ -561,7 +571,7 @@ function CarteStory({ refCarte, session, prenom, nbBlocs, volume, citation, musc
         <p style={{ fontFamily: TITRE, fontSize: 24, lineHeight: 1.15, color: T.bordeaux, margin: '6px 0 2px' }}>{session.title || 'Séance'}</p>
         <p style={{ fontSize: 11, color: T.texteSec, margin: '0 0 14px' }}>{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-          {[[volume, 'séries'], [nbBlocs, 'blocs']].map(([v, l]) => (
+          {[[volume, 'séries'], [nbExercices, `exercice${nbExercices > 1 ? 's' : ''}`]].map(([v, l]) => (
             <div key={l} style={{ flex: 1, background: T.blanc, borderRadius: 10, padding: '8px 6px', textAlign: 'center' }}>
               <p style={{ fontFamily: TITRE, fontSize: 20, margin: 0 }}>{v}</p>
               <p style={{ fontSize: 10, color: T.texteSec, margin: 0 }}>{l}</p>
@@ -607,7 +617,7 @@ function Echelle({ titre, valeur, couleur, libelles, onChoisir }) {
 
 // Fin de séance en mode coach : notation plaisir / difficulté sur 10 (même échelle que les stats du
 // sportif, program_completions.pleasure / difficulty), puis récapitulatif partageable.
-function FinCoach({ session, athleteNom, nbBlocs, volume, muscles, onTerminer, onPartager }) {
+function FinCoach({ session, athleteNom, nbExercices, volume, muscles, onTerminer, onPartager }) {
   const [plaisir, setPlaisir] = useState(0)
   const [difficulte, setDifficulte] = useState(0)
   const [recap, setRecap] = useState(false)
@@ -627,7 +637,7 @@ function FinCoach({ session, athleteNom, nbBlocs, volume, muscles, onTerminer, o
   return (
     <>
       <p style={{ fontFamily: TITRE, fontSize: 18, color: T.bordeaux, margin: '0 0 2px' }}>Séance terminée</p>
-      <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 14px' }}>{session.title || 'Séance'} · {nbBlocs} bloc{nbBlocs > 1 ? 's' : ''}</p>
+      <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 14px' }}>{session.title || 'Séance'} · {nbExercices} exercice{nbExercices > 1 ? 's' : ''}</p>
       <Echelle titre="Plaisir" valeur={plaisir} couleur={T.bordeaux} libelles={{ 1: 'Pénible', 4: 'Moyen', 7: 'Bon', 10: 'Excellent' }} onChoisir={setPlaisir} />
       <Echelle titre="Difficulté" valeur={difficulte} couleur={T.vert} libelles={{ 1: 'Très facile', 4: 'Modérée', 7: 'Dure', 10: 'Maximale' }} onChoisir={setDifficulte} />
       <button type="button" onClick={() => setRecap(true)} style={{
@@ -680,7 +690,7 @@ function FinCoach({ session, athleteNom, nbBlocs, volume, muscles, onTerminer, o
           }}>
             {partageSocial ? 'Préparation de l’image…' : '↗ Partager en story, WhatsApp…'}
           </button>
-          <CarteStory refCarte={carteRef} session={session} prenom={(athleteNom || '').split(' ')[0]} nbBlocs={nbBlocs}
+          <CarteStory refCarte={carteRef} session={session} prenom={(athleteNom || '').split(' ')[0]} nbExercices={nbExercices}
             volume={volume} citation={citation} muscles={muscles} />
           <p style={{ fontSize: 11, color: T.texteSec, textAlign: 'center', margin: '8px 0 0' }}>
             {partage ? `Envoyé à ${prenom}` : `Tes notes restent privées · ${prenom} reçoit la citation et les muscles`}
@@ -693,7 +703,7 @@ function FinCoach({ session, athleteNom, nbBlocs, volume, muscles, onTerminer, o
 
 // Fin de séance côté sportif. Pas de durée affichée : mesurée entre l'ouverture et la fin du player,
 // elle compte les pauses et les reprises le lendemain, donc toujours fausse.
-function FinClient({ session, nbBlocs, volume, muscles, terminaison, onTerminer }) {
+function FinClient({ session, nbExercices, volume, muscles, terminaison, onTerminer }) {
   const [citation] = useState(() => randomCitation())
   const [partageSocial, setPartageSocial] = useState(false)
   const carteRef = useRef(null)
@@ -710,7 +720,7 @@ function FinClient({ session, nbBlocs, volume, muscles, terminaison, onTerminer 
         <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>{session.title || 'Séance'}</p>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        {[[volume, 'séries'], [nbBlocs, 'blocs']].map(([v, l]) => (
+        {[[volume, 'séries'], [nbExercices, `exercice${nbExercices > 1 ? 's' : ''}`]].map(([v, l]) => (
           <div key={l} style={{ flex: 1, background: T.blanc, borderRadius: 12, padding: 12, textAlign: 'center' }}>
             <p style={{ fontFamily: TITRE, fontSize: 22, margin: 0 }}>{v}</p>
             <p style={{ fontSize: 11, color: T.texteSec, margin: '2px 0 0' }}>{l}</p>
@@ -730,7 +740,7 @@ function FinClient({ session, nbBlocs, volume, muscles, terminaison, onTerminer 
       }}>
         {terminaison ? 'Enregistrement…' : "Retour à l'accueil"}
       </button>
-      <CarteStory refCarte={carteRef} session={session} nbBlocs={nbBlocs} volume={volume} citation={citation} muscles={muscles} />
+      <CarteStory refCarte={carteRef} session={session} nbExercices={nbExercices} volume={volume} citation={citation} muscles={muscles} />
     </>
   )
 }
@@ -826,7 +836,7 @@ function fusionnerBloc(bloc, depuisBase, memo) {
   récapitulatif partageable (onPartagerRecap). Les séries, elles, passent par les mêmes
   onEnsureExerciseSets / onSaveExerciseSet : c'est l'appelant qui les marque entered_by_role = 'coach'.
 */
-export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null }) {
+export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null }) {
   const coach = mode === 'coach'
   useKeepAwake()
   const [memo] = useState(() => lireEtat(athleteId, session.id))
@@ -842,7 +852,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   }, [session])
   const etapes = useMemo(() => [
     ...(sections.echauffement ? [{ id: 'echauffement', type: 'texte', rond: '△', libelle: sections.echauffement.titre, section: sections.echauffement }] : []),
-    ...blocs.map(b => ({ id: b.id, type: 'bloc', rond: b.id, libelle: `Bloc ${b.id}`, bloc: b })),
+    ...blocs.map(b => ({ id: b.id, type: 'bloc', rond: String(b.numero), libelle: b.exercices.map(e => e.nom).join(' + '), bloc: b })),
     ...(sections.retourAuCalme ? [{ id: 'retourAuCalme', type: 'texte', rond: '▽', libelle: sections.retourAuCalme.titre, section: sections.retourAuCalme }] : []),
   ], [blocs, sections])
   const muscles = useMemo(() => musclesDeLaSeance(session), [session])
@@ -864,6 +874,14 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   const [notePriveeOuverte, setNotePriveeOuverte] = useState(null) // { exercice, texte, envoi }
   const [fin, setFin] = useState(null) // horodatage de fin de séance, null tant qu'elle continue
   const [terminaison, setTerminaison] = useState(false)
+
+  // Côté sportif, la séance est enregistrée dès l'écran « Séance terminée » : il le prend pour la
+  // fin et ferme souvent l'app là, sans toucher « Retour à l'accueil ». Une seule fois par player.
+  const enregistrement = useRef(null)
+  useEffect(() => {
+    if (!fin || coach || !onEnregistrer || enregistrement.current) return
+    enregistrement.current = Promise.resolve(onEnregistrer({ duree_min: null })).catch(() => { enregistrement.current = null })
+  }, [fin, coach, onEnregistrer])
 
   // Réécrit à chaque changement (frappe comprise) : au prochain montage, on rouvre exactement ici.
   useEffect(() => {
@@ -927,28 +945,34 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
       onSaveExerciseSet(e.id, id, 'reps_prescribed', p.repsTexte ?? (p.reps != null ? String(p.reps) : null))
       onSaveExerciseSet(e.id, id, 'kg_prescribed', e.unite === 'kg' ? p.kg ?? null : null)
     })
-    setToast('✓ Tour enregistré')
+    setToast(`${b.enchaine ? 'Tour enregistré' : 'Série enregistrée'}`)
     return true
   }
 
   if (fin) {
     // Récap : uniquement ce que le sportif a validé — séries avec reps ou charge saisies (une prescription
-    // du coach seule ne compte pas), blocs terminés dans le player.
+    // du coach seule ne compte pas), exercices des blocs terminés dans le player.
     const series = blocs.reduce((acc, b) => acc + b.exercices.reduce((n, e) =>
       n + (exerciseSets[e.id] || []).filter(st => rempli(st?.reps_done) || rempli(st?.kg_done)).length, 0), 0)
-    const blocsValides = blocs.filter(b => faits[b.id]).length
+    const exercicesValides = blocs.filter(b => faits[b.id]).reduce((n, b) => n + b.exercices.length, 0)
     if (coach) {
       return (
         <Page bandeauCoach={athleteNom} titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
-          <FinCoach session={session} athleteNom={athleteNom} nbBlocs={blocsValides} volume={series} muscles={muscles}
+          <FinCoach session={session} athleteNom={athleteNom} nbExercices={exercicesValides} volume={series} muscles={muscles}
             onTerminer={onTerminer} onPartager={onPartagerRecap} />
         </Page>
       )
     }
     return (
       <Page bandeauCoach={coach ? athleteNom : null} titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
-        <FinClient session={session} nbBlocs={blocsValides} volume={series} muscles={muscles} terminaison={terminaison}
-          onTerminer={async () => { setTerminaison(true); await onTerminer({ duree_min: null }) }} />
+        <FinClient session={session} nbExercices={exercicesValides} volume={series} muscles={muscles} terminaison={terminaison}
+          onTerminer={async () => {
+            setTerminaison(true)
+            // Enregistrement déjà lancé à l'arrivée sur cet écran : on l'attend (ou on le relance
+            // s'il a échoué) avant de partir ; sans onEnregistrer, onTerminer enregistre lui-même.
+            if (onEnregistrer) await (enregistrement.current || onEnregistrer({ duree_min: null }))
+            await onTerminer({ duree_min: null })
+          }} />
         <Toast message={toast} show={!!toast} onDone={() => setToast(null)} position="top" />
       </Page>
     )
@@ -975,7 +999,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
               await onEnregistrerNotePrivee({ program_session_id: session.id, program_exercise_id: exercice.id, texte: texte.trim() })
               setNotesPrivees(n => ({ ...n, [exercice.id]: texte.trim() }))
               setNotePriveeOuverte(null)
-              setToast('✓ Note enregistrée')
+              setToast('Note enregistrée')
             } catch (err) {
               setNotePriveeOuverte(n => ({ ...n, envoi: false }))
               setToast(err?.message || 'Note non enregistrée')
@@ -1010,6 +1034,10 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   const t = etat.liste[etat.courant]
   const impair = bloc.exercices.length % 2 === 1
   const valides = toursValides(bloc, exerciseSets)
+  const mot = motTour(bloc)
+  const Mot = mot.charAt(0).toUpperCase() + mot.slice(1)
+  // Tant qu'il reste des séries prévues, l'action principale est de valider la série en cours.
+  const resteAPrevoir = etat.courant + 1 < bloc.tours
   const ligneTour = (tt, i) => (
     <button key={i} type="button" onClick={() => setTours(p => ({ ...p, [bloc.id]: { ...p[bloc.id], courant: i } }))} style={{
       width: '100%', textAlign: 'left', background: T.blanc, border: 'none', borderRadius: 12, padding: '9px 12px', marginBottom: 8,
@@ -1018,9 +1046,14 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
       <span style={{ width: 18, height: 18, borderRadius: '50%', background: i < valides ? T.vert : T.muted, color: T.blanc, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
         {i < valides ? '✓' : ''}
       </span>
-      <span style={{ fontSize: 12, color: T.texteSec, minWidth: 44 }}>Tour {i + 1}</span>
+      <span style={{ fontSize: 12, color: T.texteSec, minWidth: 52 }}>{mot.charAt(0).toUpperCase() + mot.slice(1)} {i + 1}</span>
       <span style={{ fontSize: 11, color: T.texteCorps, flex: 1 }}>
-        {bloc.exercices.map(e => `${e.code} ${e.unite === 'kg' ? `${fmt(tt[e.id].kg) || '—'}×${tt[e.id].reps ?? '—'}` : tt[e.id].reps ?? '—'}`).join(' · ')}
+        {bloc.exercices.map(e => {
+          const v = tt[e.id]
+          const reps = `${v.reps ?? '—'} ${e.unite_reps}`
+          const valeur = e.unite === 'kg' && v.kg !== null ? `${fmt(v.kg)} kg × ${reps}` : reps
+          return bloc.enchaine ? `${e.nom} : ${valeur}` : valeur
+        }).join(' · ')}
       </span>
     </button>
   )
@@ -1036,9 +1069,9 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
 
       <div style={{ border: `2px solid ${T.bordeaux}`, borderRadius: 16, padding: 8, marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, margin: '2px 0 8px' }}>
-          <span style={{ background: T.bordeaux, color: T.clair, borderRadius: 100, padding: '3px 10px', fontSize: 12 }}>Tour {etat.courant + 1}</span>
+          <span style={{ background: T.bordeaux, color: T.clair, borderRadius: 100, padding: '3px 10px', fontSize: 12 }}>{Mot} {etat.courant + 1}</span>
           <span style={{ fontSize: 12, color: T.texteSec }}>
-            {etat.courant + 1 > bloc.tours ? 'supplémentaire' : `sur ${bloc.tours} prévu${bloc.tours > 1 ? 's' : ''}`}
+            {etat.courant + 1 > bloc.tours ? 'en plus' : `sur ${bloc.tours}`}
             {etat.courant < valides ? ' · en modification' : ''}
           </span>
         </div>
@@ -1085,10 +1118,16 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
         })
         chrono.arreter()
       }} style={{
-        width: '100%', marginTop: 8, background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12, height: 44, fontSize: 13,
-        color: T.texte, cursor: 'pointer', fontFamily: 'inherit',
+        width: '100%', marginTop: 8, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
+        ...(resteAPrevoir
+          ? { background: T.bordeaux, color: T.clair, border: 'none', height: 50, fontSize: 14 }
+          : { background: T.blanc, color: T.texte, border: `1px solid ${T.bordure}`, height: 44, fontSize: 13 }),
       }}>
-        + {etat.courant + 1 < etat.liste.length ? `${etat.courant < valides ? 'Enregistrer' : 'Valider'} et passer au tour ${etat.courant + 2}` : `Ajouter le tour ${etat.courant + 2}`}
+        {etat.courant < valides
+          ? `Enregistrer et passer ${mot === 'série' ? 'à la' : 'au'} ${mot} ${etat.courant + 2}`
+          : resteAPrevoir || etat.courant + 1 < etat.liste.length
+            ? `✓ J'ai fini ${mot === 'série' ? 'la' : 'le'} ${mot} ${etat.courant + 1} → ${mot} ${etat.courant + 2}`
+            : `+ Faire ${mot === 'série' ? 'une' : 'un'} ${mot} de plus`}
       </button>
 
       <button type="button" onClick={() => {
@@ -1098,10 +1137,12 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
         if (derniereEtape) setFin(Date.now())
         else setIndex(index + 1)
       }} style={{
-        width: '100%', marginTop: 8, background: T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 50, fontSize: 14,
-        cursor: 'pointer', fontFamily: 'inherit',
+        width: '100%', marginTop: 8, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
+        ...(resteAPrevoir
+          ? { background: T.blanc, color: T.texte, border: `1px solid ${T.bordure}`, height: 44, fontSize: 13 }
+          : { background: T.bordeaux, color: T.clair, border: 'none', height: 50, fontSize: 14 }),
       }}>
-        {derniereEtape ? 'Terminer la séance' : `Terminer le bloc ${bloc.id}`}
+        {derniereEtape ? 'Terminer la séance' : 'Exercice suivant →'}
       </button>
     </>
   )

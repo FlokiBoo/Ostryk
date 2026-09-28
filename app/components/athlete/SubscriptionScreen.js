@@ -21,6 +21,11 @@ export default function SubscriptionScreen({ athlete, token, onClose }) {
   const [offerSent, setOfferSent] = useState({})
 
   const isActive = athlete.subscription_status === 'active'
+  // Résiliation programmée : encore actif jusqu'à la date, mais plus de renouvellement.
+  const seTermine = isActive && !!athlete.subscription_cancel_at_period_end
+  const dateFin = athlete.subscription_current_period_end
+    ? new Date(athlete.subscription_current_period_end).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null
 
   const subscribe = async (tier) => {
     setSubscribing(tier)
@@ -80,13 +85,27 @@ export default function SubscriptionScreen({ athlete, token, onClose }) {
       <div style={{ flex: 1, overflowY: 'auto', maxWidth: 460, width: '100%', margin: '0 auto', boxSizing: 'border-box', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {isActive ? (
+          seTermine ? (
+            <div style={{ background: '#FFF4E5', border: '1px solid #F5C98B', borderRadius: 'var(--ostryk-card-radius)', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#8A4B00' }}>
+                Ton abonnement {SUBSCRIPTION_TIERS[athlete.subscription_tier]?.label || athlete.subscription_tier} se termine{dateFin ? ` le ${dateFin}` : ''}
+              </div>
+              <div style={{ fontSize: 12.5, color: '#8A4B00', lineHeight: 1.45 }}>
+                Tu gardes tout ton accès jusqu’à cette date, et tu ne seras plus prélevé. Ensuite, ton compte repasse en accès gratuit : ton historique est conservé.
+              </div>
+              <button onClick={openPortal} disabled={portalLoading}
+                style={{ background: 'var(--bordeaux)', border: 'none', borderRadius: 'var(--ostryk-pill-radius)', padding: '12px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
+                {portalLoading ? '…' : 'Continuer mon abonnement'}
+              </button>
+            </div>
+          ) : (
           <div style={{ background: 'var(--green-light)', border: '1px solid #B8EAD8', borderRadius: 'var(--ostryk-card-radius)', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#0D6B4F' }}>
               ✓ Abonnement actif — {SUBSCRIPTION_TIERS[athlete.subscription_tier]?.label || athlete.subscription_tier}
             </div>
-            {athlete.subscription_current_period_end && (
+            {dateFin && (
               <div style={{ fontSize: 12, color: '#0D6B4F' }}>
-                {athlete.subscription_cancel_at_period_end ? 'Prend fin le' : 'Renouvellement automatique le'} {new Date(athlete.subscription_current_period_end).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                Renouvellement automatique le {dateFin}
               </div>
             )}
             <button onClick={openPortal} disabled={portalLoading}
@@ -94,6 +113,7 @@ export default function SubscriptionScreen({ athlete, token, onClose }) {
               {portalLoading ? '…' : 'Gérer mon abonnement'}
             </button>
           </div>
+          )
         ) : (
           <>
             <div style={{ background: 'var(--bordeaux)', borderRadius: 'var(--ostryk-card-radius)', padding: '18px 16px', color: '#fff' }}>
@@ -178,7 +198,9 @@ export default function SubscriptionScreen({ athlete, token, onClose }) {
                   {subscribing === t.key ? '…' : 'Choisir cette formule'}
                 </button>
               )}
-              {!isCurrent && isActive && (
+              {/* Changer de formule sur un abonnement qui se termine ferait payer la différence
+                  pour quelques jours : il faut d'abord le continuer (bouton ci-dessus). */}
+              {!isCurrent && isActive && !seTermine && (
                 <button onClick={() => changePlan(t.key)} disabled={changingPlan === t.key} style={{
                   background: 'transparent', color: 'var(--vert-foret)', border: '1.5px solid var(--vert-foret)',
                   borderRadius: 'var(--ostryk-pill-radius)', padding: '12px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: 2,
