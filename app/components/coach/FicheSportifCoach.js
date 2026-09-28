@@ -566,6 +566,8 @@ export default function FicheSportifCoach({
   onRevenirVersionProgramme = null,
   onVoirHistorique = () => {},
   onMessage = () => {},
+  // PWA / webview natif : pas de bouton retour système, la fiche doit fournir le sien.
+  onRetour = null,
 }) {
   const [onglet, setOnglet] = useState("recentes");
   const [ouverteId, setOuverteId] = useState(null);
@@ -629,6 +631,26 @@ export default function FicheSportifCoach({
         color: T.texte,
       }}
     >
+      {onRetour ? (
+        <button
+          type="button"
+          onClick={onRetour}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: T.texteSec,
+            fontSize: 14,
+            fontWeight: 600,
+            padding: "0 0 12px",
+          }}
+        >
+          ← Athlètes
+        </button>
+      ) : null}
       <header style={{ ...carte, display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap", padding: 14 }}>
         <span
           style={{

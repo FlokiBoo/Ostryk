@@ -247,6 +247,8 @@ export default function FicheSportifPage() {
       onVoirHistorique={() => router.push(`/programs/${athleteId}`)}
       // Le panneau de messagerie est global (ChatWidget dans app/layout.js), ouvert par événement.
       onMessage={() => window.dispatchEvent(new Event('open-chat-widget'))}
+      // Rouverte directement au lancement (ResumeLastView), la fiche peut n'avoir aucun historique.
+      onRetour={() => (window.history.length > 1 ? router.back() : router.push('/athletes'))}
     />
   )
 }
