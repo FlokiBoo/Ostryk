@@ -550,7 +550,7 @@ function Muscles({ muscles, largeur = 120, fond = T.blanc }) {
 // Visuel au format story (9:16) partagé sur Instagram, WhatsApp… via la feuille de partage native.
 // Rendu hors écran puis capturé en image (1080 × 1920). Sans les notes plaisir / difficulté, qui
 // restent privées au coach.
-function CarteStory({ refCarte, session, prenom, dureeMin, nbBlocs, volume, citation, muscles }) {
+function CarteStory({ refCarte, session, prenom, nbBlocs, volume, citation, muscles }) {
   return (
     <div aria-hidden style={{ position: 'fixed', left: -10000, top: 0, pointerEvents: 'none' }}>
       <div ref={refCarte} data-scale="3" style={{
@@ -561,7 +561,7 @@ function CarteStory({ refCarte, session, prenom, dureeMin, nbBlocs, volume, cita
         <p style={{ fontFamily: TITRE, fontSize: 24, lineHeight: 1.15, color: T.bordeaux, margin: '6px 0 2px' }}>{session.title || 'Séance'}</p>
         <p style={{ fontSize: 11, color: T.texteSec, margin: '0 0 14px' }}>{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-          {[[dureeMin, 'minutes'], [nbBlocs, 'blocs'], [volume, 'séries']].map(([v, l]) => (
+          {[[volume, 'séries'], [nbBlocs, 'blocs']].map(([v, l]) => (
             <div key={l} style={{ flex: 1, background: T.blanc, borderRadius: 10, padding: '8px 6px', textAlign: 'center' }}>
               <p style={{ fontFamily: TITRE, fontSize: 20, margin: 0 }}>{v}</p>
               <p style={{ fontSize: 10, color: T.texteSec, margin: 0 }}>{l}</p>
@@ -607,7 +607,7 @@ function Echelle({ titre, valeur, couleur, libelles, onChoisir }) {
 
 // Fin de séance en mode coach : notation plaisir / difficulté sur 10 (même échelle que les stats du
 // sportif, program_completions.pleasure / difficulty), puis récapitulatif partageable.
-function FinCoach({ session, athleteNom, dureeMin, nbBlocs, volume, muscles, onTerminer, onPartager }) {
+function FinCoach({ session, athleteNom, nbBlocs, volume, muscles, onTerminer, onPartager }) {
   const [plaisir, setPlaisir] = useState(0)
   const [difficulte, setDifficulte] = useState(0)
   const [recap, setRecap] = useState(false)
@@ -623,11 +623,11 @@ function FinCoach({ session, athleteNom, dureeMin, nbBlocs, volume, muscles, onT
       await shareCardImage(carteRef.current, { filename: 'seance.png', title: session.title || 'Séance terminée', backgroundColor: T.beige })
     } finally { setPartageSocial(false) }
   }
-  const note = { plaisir: plaisir || null, difficulte: difficulte || null, duree_min: dureeMin }
+  const note = { plaisir: plaisir || null, difficulte: difficulte || null, duree_min: null }
   return (
     <>
       <p style={{ fontFamily: TITRE, fontSize: 18, color: T.bordeaux, margin: '0 0 2px' }}>Séance terminée</p>
-      <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 14px' }}>{session.title || 'Séance'} · {dureeMin} minute{dureeMin > 1 ? 's' : ''} · {nbBlocs} bloc{nbBlocs > 1 ? 's' : ''}</p>
+      <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 14px' }}>{session.title || 'Séance'} · {nbBlocs} bloc{nbBlocs > 1 ? 's' : ''}</p>
       <Echelle titre="Plaisir" valeur={plaisir} couleur={T.bordeaux} libelles={{ 1: 'Pénible', 4: 'Moyen', 7: 'Bon', 10: 'Excellent' }} onChoisir={setPlaisir} />
       <Echelle titre="Difficulté" valeur={difficulte} couleur={T.vert} libelles={{ 1: 'Très facile', 4: 'Modérée', 7: 'Dure', 10: 'Maximale' }} onChoisir={setDifficulte} />
       <button type="button" onClick={() => setRecap(true)} style={{
@@ -641,7 +641,7 @@ function FinCoach({ session, athleteNom, dureeMin, nbBlocs, volume, muscles, onT
         <FeuilleModale onFermer={() => setRecap(false)}>
           <p style={{ fontFamily: TITRE, fontSize: 18, color: T.bordeaux, margin: '0 0 2px' }}>{session.title || 'Séance'}</p>
           <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 12px' }}>
-            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} · {dureeMin} minute{dureeMin > 1 ? 's' : ''}
+            {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
           <div style={{ background: T.vert, borderRadius: 14, padding: '16px 14px', marginBottom: 12 }}>
             <p style={{ fontFamily: TITRE, fontSize: 16, lineHeight: 1.5, color: T.clair, margin: 0, textAlign: 'center' }}>«&nbsp;{citation.texte}&nbsp;»</p>
@@ -680,13 +680,57 @@ function FinCoach({ session, athleteNom, dureeMin, nbBlocs, volume, muscles, onT
           }}>
             {partageSocial ? 'Préparation de l’image…' : '↗ Partager en story, WhatsApp…'}
           </button>
-          <CarteStory refCarte={carteRef} session={session} prenom={(athleteNom || '').split(' ')[0]} dureeMin={dureeMin} nbBlocs={nbBlocs}
+          <CarteStory refCarte={carteRef} session={session} prenom={(athleteNom || '').split(' ')[0]} nbBlocs={nbBlocs}
             volume={volume} citation={citation} muscles={muscles} />
           <p style={{ fontSize: 11, color: T.texteSec, textAlign: 'center', margin: '8px 0 0' }}>
             {partage ? `Envoyé à ${prenom}` : `Tes notes restent privées · ${prenom} reçoit la citation et les muscles`}
           </p>
         </FeuilleModale>
       ) : null}
+    </>
+  )
+}
+
+// Fin de séance côté sportif. Pas de durée affichée : mesurée entre l'ouverture et la fin du player,
+// elle compte les pauses et les reprises le lendemain, donc toujours fausse.
+function FinClient({ session, nbBlocs, volume, muscles, terminaison, onTerminer }) {
+  const [citation] = useState(() => randomCitation())
+  const [partageSocial, setPartageSocial] = useState(false)
+  const carteRef = useRef(null)
+  const partagerStory = async () => {
+    setPartageSocial(true)
+    try {
+      await shareCardImage(carteRef.current, { filename: 'seance.png', title: session.title || 'Séance terminée', backgroundColor: T.beige })
+    } finally { setPartageSocial(false) }
+  }
+  return (
+    <>
+      <div style={{ background: T.vert, borderRadius: 20, padding: '20px 16px', color: T.clair, textAlign: 'center', marginBottom: 12 }}>
+        <p style={{ fontFamily: TITRE, fontSize: 24, margin: '0 0 4px' }}>Séance terminée</p>
+        <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>{session.title || 'Séance'}</p>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {[[volume, 'séries'], [nbBlocs, 'blocs']].map(([v, l]) => (
+          <div key={l} style={{ flex: 1, background: T.blanc, borderRadius: 12, padding: 12, textAlign: 'center' }}>
+            <p style={{ fontFamily: TITRE, fontSize: 22, margin: 0 }}>{v}</p>
+            <p style={{ fontSize: 11, color: T.texteSec, margin: '2px 0 0' }}>{l}</p>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginBottom: 14 }}><Muscles muscles={muscles} /></div>
+      <button type="button" disabled={partageSocial} onClick={partagerStory} style={{
+        width: '100%', marginBottom: 8, background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: 12, height: 50, fontSize: 15,
+        color: T.texte, cursor: 'pointer', fontFamily: 'inherit',
+      }}>
+        {partageSocial ? 'Préparation de l’image…' : '↗ Partager (story, WhatsApp…)'}
+      </button>
+      <button type="button" disabled={terminaison} onClick={onTerminer} style={{
+        width: '100%', background: T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 52, fontSize: 15,
+        fontFamily: 'inherit', cursor: 'pointer', opacity: terminaison ? 0.6 : 1,
+      }}>
+        {terminaison ? 'Enregistrement…' : "Retour à l'accueil"}
+      </button>
+      <CarteStory refCarte={carteRef} session={session} nbBlocs={nbBlocs} volume={volume} citation={citation} muscles={muscles} />
     </>
   )
 }
@@ -889,36 +933,18 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
 
   if (fin) {
     const series = blocs.reduce((acc, b) => acc + toursValides(b, exerciseSets) * b.exercices.length, 0)
-    const dureeMin = Math.max(1, Math.round((fin - debut) / 60000))
     if (coach) {
       return (
         <Page bandeauCoach={athleteNom} titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
-          <FinCoach session={session} athleteNom={athleteNom} dureeMin={dureeMin} nbBlocs={blocs.length} volume={series} muscles={muscles}
+          <FinCoach session={session} athleteNom={athleteNom} nbBlocs={blocs.length} volume={series} muscles={muscles}
             onTerminer={onTerminer} onPartager={onPartagerRecap} />
         </Page>
       )
     }
     return (
       <Page bandeauCoach={coach ? athleteNom : null} titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
-        <div style={{ background: T.vert, borderRadius: 20, padding: '20px 16px', color: T.clair, textAlign: 'center', marginBottom: 12 }}>
-          <p style={{ fontFamily: TITRE, fontSize: 24, margin: '0 0 4px' }}>Séance terminée</p>
-          <p style={{ fontSize: 12, color: T.muted, margin: 0 }}>{session.title || 'Séance'} · {dureeMin} minute{dureeMin > 1 ? 's' : ''}</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          {[[series, 'séries'], [blocs.length, 'blocs'], [dureeMin, 'minutes']].map(([v, l]) => (
-            <div key={l} style={{ flex: 1, background: T.blanc, borderRadius: 12, padding: 12, textAlign: 'center' }}>
-              <p style={{ fontFamily: TITRE, fontSize: 22, margin: 0 }}>{v}</p>
-              <p style={{ fontSize: 11, color: T.texteSec, margin: '2px 0 0' }}>{l}</p>
-            </div>
-          ))}
-        </div>
-        <div style={{ marginBottom: 14 }}><Muscles muscles={muscles} /></div>
-        <button type="button" disabled={terminaison} onClick={async () => { setTerminaison(true); await onTerminer({ duree_min: dureeMin }) }} style={{
-          width: '100%', background: T.bordeaux, color: T.clair, border: 'none', borderRadius: 12, height: 52, fontSize: 15,
-          fontFamily: 'inherit', cursor: 'pointer', opacity: terminaison ? 0.6 : 1,
-        }}>
-          {terminaison ? 'Enregistrement…' : "Retour à l'accueil"}
-        </button>
+        <FinClient session={session} nbBlocs={blocs.length} volume={series} muscles={muscles} terminaison={terminaison}
+          onTerminer={async () => { setTerminaison(true); await onTerminer({ duree_min: null }) }} />
         <Toast message={toast} show={!!toast} onDone={() => setToast(null)} position="top" />
       </Page>
     )
