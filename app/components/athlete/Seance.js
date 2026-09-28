@@ -932,18 +932,22 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   }
 
   if (fin) {
-    const series = blocs.reduce((acc, b) => acc + toursValides(b, exerciseSets) * b.exercices.length, 0)
+    // Récap : uniquement ce que le sportif a validé — séries avec reps ou charge saisies (une prescription
+    // du coach seule ne compte pas), blocs terminés dans le player.
+    const series = blocs.reduce((acc, b) => acc + b.exercices.reduce((n, e) =>
+      n + (exerciseSets[e.id] || []).filter(st => rempli(st?.reps_done) || rempli(st?.kg_done)).length, 0), 0)
+    const blocsValides = blocs.filter(b => faits[b.id]).length
     if (coach) {
       return (
         <Page bandeauCoach={athleteNom} titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
-          <FinCoach session={session} athleteNom={athleteNom} nbBlocs={blocs.length} volume={series} muscles={muscles}
+          <FinCoach session={session} athleteNom={athleteNom} nbBlocs={blocsValides} volume={series} muscles={muscles}
             onTerminer={onTerminer} onPartager={onPartagerRecap} />
         </Page>
       )
     }
     return (
       <Page bandeauCoach={coach ? athleteNom : null} titre={session.title || 'Séance'} etapes={etapes} index={-1} faits={faits} fin onNaviguer={i => { setFin(null); setIndex(i) }} onFermer={() => setFin(null)}>
-        <FinClient session={session} nbBlocs={blocs.length} volume={series} muscles={muscles} terminaison={terminaison}
+        <FinClient session={session} nbBlocs={blocsValides} volume={series} muscles={muscles} terminaison={terminaison}
           onTerminer={async () => { setTerminaison(true); await onTerminer({ duree_min: null }) }} />
         <Toast message={toast} show={!!toast} onDone={() => setToast(null)} position="top" />
       </Page>
