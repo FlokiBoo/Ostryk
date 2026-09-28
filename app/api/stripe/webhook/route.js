@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
@@ -133,10 +132,6 @@ export async function POST(request) {
   try {
     event = stripe.webhooks.constructEvent(body, signature, secret)
   } catch (err) {
-    // Diagnostic sans exposer le secret : empreinte SHA-256 comparable avec
-    // `printf %s 'whsec_…' | shasum -a 256` sur la valeur affichée dans Stripe.
-    const fingerprint = createHash('sha256').update(secret).digest('hex').slice(0, 12)
-    console.error(`Webhook Stripe, signature invalide : secret de ${secret.length} caractères, préfixe whsec_ ${secret.startsWith('whsec_') ? 'OK' : 'ABSENT'}, empreinte ${fingerprint}`)
     return NextResponse.json({ error: `Signature invalide : ${err.message}` }, { status: 400 })
   }
 
