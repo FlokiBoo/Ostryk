@@ -96,6 +96,14 @@ async function notifySubscriptionEvent(subscription, kind) {
 
 async function notifyPaymentFailed(invoice) {
   if (!invoice.customer) return
+  // Une facture restée ouverte continue d'être relancée par Stripe même après la fin de son
+  // abonnement : inutile de notifier le coach tous les jours pour un abonnement déjà terminé.
+  // Depuis l'API 2025-03-31, l'abonnement d'une facture est sous parent.subscription_details.
+  const subscriptionId = invoice.parent?.subscription_details?.subscription ?? invoice.subscription
+  if (subscriptionId) {
+    const subscription = await stripe.subscriptions.retrieve(typeof subscriptionId === 'string' ? subscriptionId : subscriptionId.id)
+    if (subscription.status === 'canceled') return
+  }
   const { data: athlete } = await supabaseAdmin.from('athletes').select('name, coach_id').eq('stripe_customer_id', invoice.customer).maybeSingle()
   if (!athlete?.coach_id) return
   await supabaseAdmin.from('notifications').insert({
