@@ -53,6 +53,8 @@ export default function AthletesPage() {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('alpha')
   const [showTests, setShowTests] = useState(false)
+  const [archivedAthletes, setArchivedAthletes] = useState([])
+  const [showArchived, setShowArchived] = useState(false)
   const [menu, setMenu] = useState(null) // { athlete, top, left, openUp }
   const [busyId, setBusyId] = useState(null)
   const [togglingLeader, setTogglingLeader] = useState(null) // `${athleteId}:${groupId}`
@@ -74,8 +76,9 @@ export default function AthletesPage() {
   useEffect(() => { load() }, [])
 
   async function load() {
-    const [{ data }, { data: groups }, { data: progs }, { data: progComps }, { data: actValidated }] = await Promise.all([
+    const [{ data }, { data: archived }, { data: groups }, { data: progs }, { data: progComps }, { data: actValidated }] = await Promise.all([
       supabase.from('athletes').select('*').neq('archived', true).order('name'),
+      supabase.from('athletes').select('*').eq('archived', true).order('name'),
       supabase.from('groups').select('id, name, group_members(athlete_id, is_leader)'),
       supabase.from('programs').select('title, athlete_id').not('athlete_id', 'is', null).neq('archived', true),
       // Dernière activité par sportif — mêmes 2 sources que le dashboard coach (app/page.js),
@@ -84,6 +87,7 @@ export default function AthletesPage() {
       supabase.from('activity_logs').select('athlete_id, validated_at').not('validated_at', 'is', null),
     ])
     setAthletes(data || [])
+    setArchivedAthletes(archived || [])
     const byAthlete = {}
     ;(groups || []).forEach(g => {
       ;(g.group_members || []).forEach(m => {
@@ -136,6 +140,16 @@ export default function AthletesPage() {
     setBusyId(null)
     if (error) { alert('Erreur : ' + error.message); return }
     setAthletes(prev => prev.filter(x => x.id !== a.id))
+    setArchivedAthletes(prev => [...prev, { ...a, archived: true }].sort((x, y) => x.name.localeCompare(y.name)))
+  }
+
+  const unarchiveAthlete = async (a) => {
+    setBusyId(a.id)
+    const { error } = await supabase.from('athletes').update({ archived: false }).eq('id', a.id)
+    setBusyId(null)
+    if (error) { alert('Erreur : ' + error.message); return }
+    setArchivedAthletes(prev => prev.filter(x => x.id !== a.id))
+    setAthletes(prev => [...prev, { ...a, archived: false }])
   }
 
   const deleteAthlete = async (a) => {
@@ -150,6 +164,7 @@ export default function AthletesPage() {
       return
     }
     setAthletes(prev => prev.filter(x => x.id !== a.id))
+    setArchivedAthletes(prev => prev.filter(x => x.id !== a.id))
   }
 
   const testCount = (athletes || []).filter(a => a.is_test).length
@@ -374,6 +389,45 @@ export default function AthletesPage() {
             }}>
               {showTests ? 'Masquer' : 'Afficher'} mes fiches de test ({testCount})
             </button>
+          )}
+
+          {archivedAthletes.length > 0 && (
+            <button onClick={() => setShowArchived(s => !s)} style={{
+              alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--text3)',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '2px 0', textDecoration: 'underline',
+            }}>
+              📦 {showArchived ? 'Masquer' : 'Afficher'} les sportifs archivés ({archivedAthletes.length})
+            </button>
+          )}
+          {showArchived && archivedAthletes.length > 0 && (
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', overflow: 'hidden' }}>
+              {archivedAthletes.map((a, i) => (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', opacity: busyId === a.id ? 0.5 : 1 }}>
+                  <div style={{
+                    width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                    background: 'var(--bg2)', color: 'var(--text3)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800,
+                  }}>
+                    {initials(a.name)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {a.name}
+                  </div>
+                  <button onClick={() => unarchiveAthlete(a)} disabled={busyId === a.id} style={{
+                    background: 'var(--green-light)', color: 'var(--green)', border: '1px solid var(--green)',
+                    borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                  }}>
+                    Désarchiver
+                  </button>
+                  <button onClick={() => deleteAthlete(a)} disabled={busyId === a.id} title="Supprimer définitivement" style={{
+                    background: 'none', border: '1px solid var(--border2)', borderRadius: 20, padding: '5px 9px',
+                    fontSize: 12, cursor: 'pointer', color: '#991B1B', flexShrink: 0,
+                  }}>
+                    🗑
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
 
           {athletes === null ? (
