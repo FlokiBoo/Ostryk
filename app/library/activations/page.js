@@ -5,6 +5,8 @@ import { VideoCamera, Lightning, PencilSimple, Eye, EyeSlash, TextB, TextItalic,
 import { supabase } from '@/lib/supabase'
 import AthletesSidebar from '@/app/components/AthletesSidebar'
 import VideoListEditor from '@/app/components/VideoListEditor'
+import TexteGras from '@/app/components/TexteGras'
+import { basculerGras } from '@/lib/sectionsTexte'
 
 function emptyForm() {
   return { name: '', text: '', note: '', videos: [] }
@@ -77,6 +79,15 @@ function MentionTextarea({ value, onChange, videos, onAddVideo, placeholder, row
 
   const closeMention = () => { setMention(null); setSuggs([]) }
 
+  const handleKeyDown = (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'b') return
+    e.preventDefault()
+    const ta = e.currentTarget
+    const r = basculerGras(value, ta.selectionStart, ta.selectionEnd)
+    onChange(r.valeur)
+    requestAnimationFrame(() => { taRef.current?.focus(); taRef.current?.setSelectionRange(r.debut, r.fin) })
+  }
+
   const insert = (name, videoUrl) => {
     if (!mention) return
     const before = value.slice(0, mention.hashIdx)
@@ -104,6 +115,7 @@ function MentionTextarea({ value, onChange, videos, onAddVideo, placeholder, row
     <div style={{ position: 'relative' }}>
       <textarea ref={taRef} placeholder={placeholder} value={value}
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
         onBlur={() => setTimeout(closeMention, 150)}
         rows={rows} style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
       {mention && mention.query.trim().length >= 1 && (
@@ -250,7 +262,7 @@ export default function ActivationsLibraryPage() {
                 style={inp} />
               <div>
                 <label style={fieldLabel}>Description</label>
-                <MentionTextarea placeholder="Texte de l'activation… (tape # pour lier un mouvement)"
+                <MentionTextarea placeholder="Texte de l'activation… (tape # pour lier un mouvement, ⌘B pour le gras)"
                   value={newForm.text} onChange={text => setNewForm(f => ({ ...f, text }))}
                   videos={newForm.videos} onAddVideo={v => setNewForm(f => ({ ...f, videos: [...f.videos, v] }))}
                   rows={4} />
@@ -285,7 +297,7 @@ export default function ActivationsLibraryPage() {
                     <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} style={inp} />
                     <div>
                       <label style={fieldLabel}>Description</label>
-                      <MentionTextarea placeholder="Texte de l'activation… (tape # pour lier un mouvement)"
+                      <MentionTextarea placeholder="Texte de l'activation… (tape # pour lier un mouvement, ⌘B pour le gras)"
                         value={editForm.text} onChange={text => setEditForm(f => ({ ...f, text }))}
                         videos={editForm.videos} onAddVideo={v => setEditForm(f => ({ ...f, videos: [...f.videos, v] }))}
                         rows={4} />
@@ -322,7 +334,7 @@ export default function ActivationsLibraryPage() {
                           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', background: 'var(--bg2)', borderRadius: 20, padding: '2px 8px', flexShrink: 0, fontFamily: 'var(--font-ui)' }}>Masqué</span>
                         )}
                       </div>
-                      {item.text && <div style={{ fontSize: 13, color: '#5A5348', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{item.text}</div>}
+                      {item.text && <div style={{ fontSize: 13, color: '#5A5348', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}><TexteGras texte={item.text} /></div>}
                       {item.videos?.length > 0 && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
                           {item.videos.map((v, vi) => (

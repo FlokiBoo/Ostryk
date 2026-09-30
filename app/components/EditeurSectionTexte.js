@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { segmentsGras } from '@/lib/sectionsTexte'
 
 /*
   Éditeur des sections texte d'une séance (échauffement, retour au calme) — maquette
@@ -62,6 +63,23 @@ function creerJeton(id, nom, etat) {
   return span
 }
 
+// Texte d'une ligne → nœuds du DOM éditable, les **passages** du format devenant des <strong>.
+function ajouterTexte(parent, texte) {
+  segmentsGras(texte).forEach(seg => {
+    if (!seg.gras) { parent.appendChild(document.createTextNode(seg.texte)); return }
+    const strong = document.createElement('strong')
+    strong.textContent = seg.texte
+    parent.appendChild(strong)
+  })
+}
+
+// Un élément mis en gras par ⌘B : <b>/<strong> selon le navigateur, ou un style font-weight.
+function estGras(noeud, grasParent) {
+  const poids = noeud.style?.fontWeight
+  if (poids) return poids === 'bold' || Number(poids) >= 600
+  return grasParent || noeud.nodeName === 'B' || noeud.nodeName === 'STRONG'
+}
+
 export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque = [], onChange = () => {}, onCreerMouvement = null, muscles = [] }) {
   const editeur = useRef(null)
   const [suggestions, setSuggestions] = useState(null) // { contexte, resultats, actif }
@@ -81,9 +99,10 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
         div.appendChild(m
           ? creerJeton(m.id, m.nom, m.video_url ? 'video' : 'sansVideo')
           : creerJeton(ligne.mouvementId, ligne.mouvementNom || 'Mouvement supprimé', 'introuvable'))
-        div.appendChild(document.createTextNode(` ${ligne.texte || ''}`))
+        div.appendChild(document.createTextNode(' '))
+        ajouterTexte(div, ligne.texte || '')
       } else if (ligne.texte) {
-        div.textContent = ligne.texte
+        ajouterTexte(div, ligne.texte)
       } else {
         div.appendChild(document.createElement('br'))
       }
@@ -96,17 +115,17 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
   function lireContenu() {
     const lignes = [{ parts: [] }]
     const pousser = () => lignes.push({ parts: [] })
-    const parcourir = (noeud) => {
+    const parcourir = (noeud, gras = false) => {
       noeud.childNodes.forEach(n => {
         if (n.nodeType === 3) {
-          if (n.textContent) lignes[lignes.length - 1].parts.push({ type: 'texte', valeur: n.textContent })
+          if (n.textContent) lignes[lignes.length - 1].parts.push({ type: 'texte', valeur: n.textContent, gras })
         } else if (n.nodeName === 'BR') {
           pousser()
         } else if (n.dataset?.mouvement) {
           lignes[lignes.length - 1].parts.push({ type: 'mouvement', id: n.dataset.mouvement, nom: n.dataset.nom || n.textContent })
         } else {
           if ((n.nodeName === 'DIV' || n.nodeName === 'P') && lignes[lignes.length - 1].parts.length) pousser()
-          parcourir(n)
+          parcourir(n, estGras(n, gras))
         }
       })
     }
@@ -114,10 +133,22 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
     // Lignes vides gardées (aération du coach), sauf en fin de texte.
     const out = lignes.map(l => {
       const jeton = l.parts.find(p => p.type === 'mouvement')
-      const texte = l.parts
-        .filter(p => p !== jeton)
-        .map(p => (p.type === 'texte' ? p.valeur : p.nom))
-        .join(' ')
+      // Les morceaux gras consécutifs forment un seul **passage**, espaces de bord laissés dehors.
+      let brut = ''
+      let enGras = null
+      const fermerGras = () => {
+        if (enGras === null) return
+        const [, avant, coeur, apres] = enGras.match(/^(\s*)([\s\S]*?)(\s*)$/)
+        brut += coeur ? `${avant}**${coeur}**${apres}` : enGras
+        enGras = null
+      }
+      l.parts.filter(p => p !== jeton).forEach(p => {
+        if (p.type === 'texte' && p.gras) { enGras = (enGras ?? '') + p.valeur; return }
+        fermerGras()
+        brut += p.type === 'texte' ? p.valeur : ` ${p.nom} `
+      })
+      fermerGras()
+      const texte = brut
         .replace(/ /g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
@@ -199,6 +230,13 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
   }
 
   function surTouche(e) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault()
+      document.execCommand('styleWithCSS', false, false)
+      document.execCommand('bold')
+      onChange(lireContenu())
+      return
+    }
     if (!suggestions?.resultats.length) return
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
@@ -226,7 +264,7 @@ export default function EditeurSectionTexte({ titre, contenu = [], bibliotheque 
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
           <span style={{ fontFamily: 'var(--font-title)', fontSize: 13, color: T.bordeaux }}>{titre}</span>
           <span style={{ fontSize: 11, color: T.texteSec }}>
-            Tape <strong style={{ fontWeight: 600 }}>#</strong> pour citer un mouvement · un mouvement par ligne
+            Tape <strong style={{ fontWeight: 600 }}>#</strong> pour citer un mouvement · un mouvement par ligne · <strong style={{ fontWeight: 600 }}>⌘B</strong> gras
           </span>
         </div>
 

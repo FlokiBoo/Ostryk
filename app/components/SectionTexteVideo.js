@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
+import TexteGras from '@/app/components/TexteGras'
 
 /*
   Rendu client d'une section texte (échauffement, retour au calme) — SectionTexteVideo de la
@@ -118,7 +119,7 @@ export default function SectionTexteVideo({ section, mouvements = {}, fait = fal
                       </span>
                     </button>
                     <p style={{ fontSize: 13, margin: '8px 4px 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.nom}</p>
-                    <p style={{ fontSize: 11, color: T.texteSec, margin: '0 4px', minHeight: 15 }}>{v.dose || '—'}</p>
+                    <p style={{ fontSize: 11, color: T.texteSec, margin: '0 4px', minHeight: 15 }}>{v.dose ? <TexteGras texte={v.dose} /> : '—'}</p>
                   </div>
                 )
               })}
@@ -149,7 +150,7 @@ export default function SectionTexteVideo({ section, mouvements = {}, fait = fal
             <div style={{ fontSize: 13, lineHeight: 1.75, marginTop: 10 }}>
               {contenu.length === 0 ? <span style={{ color: T.texteSec }}>Rien pour l&apos;instant.</span> : null}
               {contenu.map((ligne, i) => {
-                if (!ligne.mouvementId) return <div key={i} style={{ color: T.texteCorps, minHeight: ligne.texte ? undefined : 12 }}>{ligne.texte}</div>
+                if (!ligne.mouvementId) return <div key={i} style={{ color: T.texteCorps, minHeight: ligne.texte ? undefined : 12 }}><TexteGras texte={ligne.texte} /></div>
                 const m = mouvements[ligne.mouvementId]
                 const idx = vignettes.findIndex(v => v.cle === ligne.mouvementId)
                 const actif = idx !== -1 && idx === courant && vignettes.length > 1
@@ -162,7 +163,7 @@ export default function SectionTexteVideo({ section, mouvements = {}, fait = fal
                     ) : (
                       <span style={{ fontWeight: 500 }}>{m?.nom || ligne.mouvementNom || 'Mouvement'}</span>
                     )}{' '}
-                    <span style={{ color: T.texteCorps }}>{ligne.texte}</span>
+                    <span style={{ color: T.texteCorps }}><TexteGras texte={ligne.texte} /></span>
                   </div>
                 )
               })}
