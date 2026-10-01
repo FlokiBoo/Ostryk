@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { getCoachId } from '@/lib/coach'
 import { notifyAssigned } from '@/lib/notify'
+import { coachingHref } from '@/lib/coachingHref'
 import ActivityTypeSelect from '@/app/components/ActivityTypeSelect'
 
 export default function MicrocyclesBlock({ athleteId, athleteToken }) {
@@ -51,7 +52,7 @@ export default function MicrocyclesBlock({ athleteId, athleteToken }) {
     const [{ data }, { data: completions }] = await Promise.all([
       supabase
         .from('programs')
-        .select('*, program_sessions(id, title, order_index)')
+        .select('*, program_sessions(id, title, order_index, program_exercises(name))')
         .eq('athlete_id', athleteId)
         .order('created_at', { ascending: false }),
       supabase.from('program_completions').select('program_session_id').eq('athlete_id', athleteId),
@@ -448,7 +449,7 @@ export default function MicrocyclesBlock({ athleteId, athleteToken }) {
                     </span>
                     {athleteToken && (
                       <Link
-                        href={`/s/${athleteToken}?coach=1&session=${nextSession.id}&focus=1`}
+                        href={coachingHref({ athleteId, athleteToken, session: nextSession })}
                         onClick={e => e.stopPropagation()}
                         title="Lancer cette séance (coaching)"
                         style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer', color: 'var(--green)', padding: '2px 4px', flexShrink: 0, textDecoration: 'none' }}
@@ -493,7 +494,7 @@ export default function MicrocyclesBlock({ athleteId, athleteToken }) {
                       // un espace normal de l'app, pas un onglet séparé qui peut se perdre si le coach
                       // quitte l'app pendant la séance — retour terrain.
                       <Link
-                        href={`/s/${athleteToken}?coach=1&session=${sess.id}&focus=1`}
+                        href={coachingHref({ athleteId, athleteToken, session: sess })}
                         title="Lancer cette séance (coaching)"
                         style={{ background: 'none', border: 'none', display: 'flex', cursor: 'pointer', color: 'var(--green)', padding: '2px 4px', flexShrink: 0, textDecoration: 'none' }}
                       ><Barbell size={16} /></Link>

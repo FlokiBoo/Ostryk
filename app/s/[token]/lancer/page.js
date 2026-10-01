@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { coachingHref } from '@/lib/coachingHref'
 
 export default function LancerPage({ params }) {
   const { token } = use(params)
@@ -19,7 +20,7 @@ export default function LancerPage({ params }) {
 
       const { data: progs } = await supabase
         .from('programs')
-        .select('id, title, activity_type, pinned_board, program_sessions(id, title, order_index)')
+        .select('id, title, activity_type, pinned_board, program_sessions(id, title, order_index, program_exercises(name))')
         .eq('athlete_id', ath.id)
         .neq('archived', true)
         .order('created_at', { ascending: false })
@@ -43,8 +44,8 @@ export default function LancerPage({ params }) {
     load()
   }, [token])
 
-  const launchSession = (sessionId) => {
-    router.push(`/s/${token}?session=${sessionId}&focus=1&coach=1`)
+  const launchSession = (session) => {
+    router.push(coachingHref({ athleteId: athlete.id, athleteToken: token, session }))
   }
 
   return (
@@ -88,7 +89,7 @@ export default function LancerPage({ params }) {
                 {visible.map((s, i) => {
                   const fullIdx = prog.sessions.indexOf(s)
                   return (
-                    <button key={s.id} onClick={() => launchSession(s.id)} style={{
+                    <button key={s.id} onClick={() => launchSession(s)} style={{
                       display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
                       background: s.done ? '#FEF2F2' : 'none', border: 'none', borderTop: i > 0 ? '1px solid var(--border)' : 'none',
                       padding: '12px 14px', cursor: 'pointer', fontFamily: 'inherit',
