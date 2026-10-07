@@ -58,9 +58,9 @@ function blocsDeSeance(session, setsParExercice) {
         unite: kg != null ? 'kg' : null,
         pas: 2.5,
         prescritTexte: Number.isNaN(nombre) && e.reps ? String(e.reps) : null,
-        prescrit: Array.from({ length: nbSeries }, () => ({ kg, reps: Number.isNaN(nombre) ? 1 : nombre })),
+        prescrit: Array.from({ length: nbSeries }, (_, k) => ({ kg, reps: Number.isNaN(nombre) ? 1 : nombre, sec: e.set_details?.[k]?.sec ?? null })),
         realise: faites.length
-          ? faites.map(s => ({ kg: s.kg_done != null ? Number(s.kg_done) : null, reps: parseInt(s.reps_done, 10) || 0 }))
+          ? faites.map(s => ({ kg: s.kg_done != null ? Number(s.kg_done) : null, reps: parseInt(s.reps_done, 10) || 0, sec: s.sec_done != null ? Number(s.sec_done) : null }))
           : null,
       }
     }),
@@ -397,7 +397,7 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
     const ligne = (setsRef.current[exerciseId] || []).find(s => s.id === setId)
     if (!ligne) return
     const v = champ === 'kg_done' ? (valeur === '' || valeur == null ? null : parseFloat(valeur))
-      : champ === 'kg_prescribed' ? (valeur === '' || valeur == null ? null : Number(valeur))
+      : champ === 'kg_prescribed' || champ === 'sec_done' || champ === 'sec_prescribed' ? (valeur === '' || valeur == null ? null : Number(valeur))
       : (valeur || null)
     majSets(prev => ({ ...prev, [exerciseId]: prev[exerciseId].map(s => (s.id === setId ? { ...s, [champ]: v } : s)) }))
     const cle = `${exerciseId}|${ligne.set_index}`

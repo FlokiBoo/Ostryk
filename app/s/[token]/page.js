@@ -23,6 +23,7 @@ import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
 import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
 import TempoBadge, { getTempoDisplay } from '@/app/components/TempoBadge'
+import { unitesDeSerie, secondesPrescrites } from '@/lib/unitesSerie'
 import { UNITS, unitOf, formatPerformance } from '@/app/components/TrackedMovementsBlock'
 import TimerModal from '@/app/components/TimerModal'
 import SplitTimerSession from '@/app/components/SplitTimerSession'
@@ -440,7 +441,10 @@ function AthleteView({ params }) {
           // s'arrête là plutôt que d'abandonner la saisie, le prochain essai la reprendra dans l'ordre.
           if (isTempSetId(realId)) { failed = true; break }
           const { error } = await supabase.from('program_exercise_sets').update({ [op.field]: op.value }).eq('id', realId)
-          if (error) { failed = true; break }
+          // Colonne absente de la base (migration pas encore passée) : réessayer n'y changera rien,
+          // et s'arrêter ici bloquerait toutes les saisies suivantes. On abandonne ce seul champ.
+          const colonneAbsente = error && ['PGRST204', '42703'].includes(error.code)
+          if (error && !colonneAbsente) { failed = true; break }
         } else if (op.type === 'delete_exercise_set') {
           hasExerciseSetOps = true
           const realId = resolveSetId(op.setId)
@@ -1104,8 +1108,10 @@ function AthleteView({ params }) {
 
   const saveExerciseSet = async (exerciseId, setId, field, value) => {
     // kg_prescribed arrive déjà en nombre (Seance.js) : 0 kg prescrit reste 0, seul l'absent est null.
+    const versNombre = (v) => { const n = parseFloat(String(v).replace(',', '.')); return Number.isNaN(n) ? null : n }
     const parsedValue = field === 'kg_done' ? (value === '' ? null : parseFloat(value))
       : field === 'kg_prescribed' ? (value === '' || value == null ? null : Number(value))
+      : field === 'sec_done' || field === 'sec_prescribed' ? (value === '' || value == null ? null : versNombre(value))
       : (value || null)
     setExerciseSets(prev => ({
       ...prev,
@@ -1959,8 +1965,10 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
     ;(exerciseSets[exo.id] || []).forEach(s => {
       const repsSetEl = document.getElementById(`log-set-reps-${s.id}`)
       const kgSetEl = document.getElementById(`log-set-kg-${s.id}`)
+      const secSetEl = document.getElementById(`log-set-sec-${s.id}`)
       if (repsSetEl) onSaveExerciseSet(exo.id, s.id, 'reps_done', repsSetEl.value)
       if (kgSetEl) onSaveExerciseSet(exo.id, s.id, 'kg_done', kgSetEl.value)
+      if (secSetEl) onSaveExerciseSet(exo.id, s.id, 'sec_done', secSetEl.value)
     })
     setSavedIds(p => ({ ...p, [exo.id]: true }))
     setExpandedOverride(p => ({ ...p, [exo.id]: false }))
@@ -2133,6 +2141,7 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
                         {exo.sets && <Pill value={exo.sets} label="séries" />}
                         {exo.reps && <Pill value={exo.reps} label="reps" />}
                         {exo.kg && <Pill value={`${exo.kg} kg`} />}
+                  {secondesPrescrites(exo.set_details) && <Pill value={secondesPrescrites(exo.set_details)} label="sec" />}
                         {exo.rest && <Pill value={exo.rest} label="récup" color="#EFF6FF" textColor="#1D4ED8" />}
                       </div>
                     )}
@@ -2306,6 +2315,7 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
                   {exo.sets && <Pill value={exo.sets} label="séries" />}
                   {exo.reps && <Pill value={exo.reps} label="reps" />}
                   {exo.kg && <Pill value={`${exo.kg} kg`} />}
+                  {secondesPrescrites(exo.set_details) && <Pill value={secondesPrescrites(exo.set_details)} label="sec" />}
                   {exo.rest && <Pill value={exo.rest} label="récup" color="#EFF6FF" textColor="#1D4ED8" onClick={() => { unlockAudio(); unlockSpeech(); setShowTimer({ seconds: parseRestSeconds(exo.rest), label: 'RÉCUP' }) }} />}
                 </div>
               )}
@@ -2331,6 +2341,12 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
                           if (kgEl) kgEl.value = prevKg
                           onSaveExerciseSet(exo.id, s.id, 'reps_done', prevReps)
                           onSaveExerciseSet(exo.id, s.id, 'kg_done', prevKg)
+                          const secEl = document.getElementById(`log-set-sec-${s.id}`)
+                          if (secEl) {
+                            const prevSec = document.getElementById(`log-set-sec-${prev.id}`)?.value ?? (prev.sec_done ?? '')
+                            secEl.value = prevSec
+                            onSaveExerciseSet(exo.id, s.id, 'sec_done', prevSec)
+                          }
                           setSavedIds(p => ({ ...p, [exo.id]: false }))
                         }
                         return (
@@ -2345,6 +2361,15 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
                               onBlur={e => onSaveExerciseSet(exo.id, s.id, 'reps_done', e.target.value)}
                               style={logInputStyle} />
                           </div>
+                          {unitesDeSerie(exo.set_details).includes('sec') && (
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, marginBottom: 3 }}>Temps (sec)</div>
+                              <input id={`log-set-sec-${s.id}`} type="text" inputMode="decimal" placeholder={secondesPrescrites(exo.set_details) || ''} defaultValue={s.sec_done ?? ''}
+                                onChange={() => setSavedIds(p => ({ ...p, [exo.id]: false }))}
+                                onBlur={e => onSaveExerciseSet(exo.id, s.id, 'sec_done', e.target.value)}
+                                style={logInputStyle} />
+                            </div>
+                          )}
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, marginBottom: 3 }}>Charge (kg)</div>
                             <input id={`log-set-kg-${s.id}`} type="text" placeholder={exo.kg ? `${exo.kg} kg` : ''} defaultValue={s.kg_done ?? ''}

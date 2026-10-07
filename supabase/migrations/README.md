@@ -40,6 +40,7 @@ décrivent les **changements** sans décrire l'état de départ.
 | `20260924090500_a9_note_privee_coach.sql` | A9 | ☑ 2026-09-26 |
 | `20260924100000_materiel_mouvement.sql` | Bibliothèque | ☑ 2026-09-24 |
 | `20260925090000_sections_texte.sql` | Échauffement / retour au calme | ☑ 2026-09-25 |
+| `20261007090000_secondes_serie.sql` | Secondes | ☐ |
 
 Tous ces fichiers sont **additifs** : ils ajoutent des colonnes nullables, des contraintes qui ne
 mordent que sur des valeurs hors bornes, et une policy qui élargit l'accès. Aucun ne supprime, ne

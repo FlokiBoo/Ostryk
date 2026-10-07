@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { unitesDeSerie, ecrireMaintien, lireMaintien } from '@/lib/unitesSerie'
+import { unitesDeSerie } from '@/lib/unitesSerie'
 import Toast from '@/app/components/Toast'
 import { parseMusclesFromText, randomCitation, BodySVG } from '@/app/components/CelebrationModal'
 import { COLOR_BY_GROUP } from '@/app/components/MuscleAnatomyDiagram'
@@ -194,7 +194,7 @@ const libelleMuscle = (m) => (m.charAt(0).toUpperCase() + m.slice(1)).replace(/-
 /* ------------------------------------------------------------------ */
 
 const rempli = (v) => v !== null && v !== undefined && v !== ''
-const serieFaite = (s) => !!s && [s.reps_done, s.kg_done, s.reps_prescribed, s.kg_prescribed].some(rempli)
+const serieFaite = (s) => !!s && [s.reps_done, s.kg_done, s.sec_done, s.reps_prescribed, s.kg_prescribed, s.sec_prescribed].some(rempli)
 
 // Tours déjà validés d'un bloc : séries faites en tête de liste, pour TOUS les exercices du bloc.
 function toursValides(bloc, exerciseSets) {
@@ -234,11 +234,10 @@ function etatInitialBloc(bloc, exerciseSets) {
     const t = {}
     bloc.exercices.forEach(e => {
       const s = (exerciseSets[e.id] || [])[i]
-      const tenu = e.maintien ? lireMaintien(s.reps_done) : null
       t[e.id] = {
         kg: e.unite === 'kg' && rempli(s.kg_done) ? parseFloat(s.kg_done) : null,
-        reps: tenu ? tenu.reps : premierNombre(s.reps_done),
-        sec: tenu ? tenu.sec : null,
+        reps: premierNombre(s.reps_done),
+        sec: e.maintien && rempli(s.sec_done) ? parseFloat(s.sec_done) : null,
       }
     })
     liste.push(t)
@@ -957,12 +956,15 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
       const v = t[e.id]
       const p = prescriptionEffective(e, etat.courant)
       const id = lignes[k].id
-      onSaveExerciseSet(e.id, id, 'reps_done', e.maintien ? ecrireMaintien(v.reps, v.sec ?? null) : v.reps === null ? '' : String(v.reps))
+      onSaveExerciseSet(e.id, id, 'reps_done', v.reps === null ? '' : String(v.reps))
       onSaveExerciseSet(e.id, id, 'kg_done', e.unite === 'kg' && v.kg !== null ? String(v.kg) : '')
-      onSaveExerciseSet(e.id, id, 'reps_prescribed', e.maintien && p.sec != null
-        ? ecrireMaintien(p.reps ?? null, p.sec)
-        : p.repsTexte ?? (p.reps != null ? String(p.reps) : null))
+      onSaveExerciseSet(e.id, id, 'reps_prescribed', p.repsTexte ?? (p.reps != null ? String(p.reps) : null))
       onSaveExerciseSet(e.id, id, 'kg_prescribed', e.unite === 'kg' ? p.kg ?? null : null)
+      // Uniquement sur un maintien : aucun autre exercice n'écrit ces colonnes.
+      if (e.maintien) {
+        onSaveExerciseSet(e.id, id, 'sec_done', v.sec ?? null)
+        onSaveExerciseSet(e.id, id, 'sec_prescribed', p.sec ?? null)
+      }
     })
     setToast(`${b.enchaine ? 'Tour enregistré' : 'Série enregistrée'}`)
     return true
@@ -972,7 +974,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
     // Récap : uniquement ce que le sportif a validé — séries avec reps ou charge saisies (une prescription
     // du coach seule ne compte pas), exercices des blocs terminés dans le player.
     const series = blocs.reduce((acc, b) => acc + b.exercices.reduce((n, e) =>
-      n + (exerciseSets[e.id] || []).filter(st => rempli(st?.reps_done) || rempli(st?.kg_done)).length, 0), 0)
+      n + (exerciseSets[e.id] || []).filter(st => rempli(st?.reps_done) || rempli(st?.kg_done) || rempli(st?.sec_done)).length, 0), 0)
     const exercicesValides = blocs.filter(b => faits[b.id]).reduce((n, b) => n + b.exercices.length, 0)
     if (coach) {
       return (

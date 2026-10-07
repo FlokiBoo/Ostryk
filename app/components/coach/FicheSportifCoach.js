@@ -467,7 +467,12 @@ function ApercuSeance({ seance, onLancer, onPersonnaliser, onRevenirVersionProgr
                           }
                         }
                         const reps = !(faite && ex.realise) && ex.prescritTexte ? ex.prescritTexte : v.reps;
-                        const texte = avecCharge
+                        // Maintien chronométré : le temps tenu prime, les reps ne s'affichent que s'il y en a.
+                        const tenu = v.sec != null ? `${fmt(v.sec)} s` : null;
+                        const maintien = tenu ? (reps ? `${reps}×${tenu}` : tenu) : null;
+                        const texte = maintien
+                          ? (avecCharge ? `${fmt(v.kg)} kg · ${maintien}` : maintien)
+                          : avecCharge
                           ? `${fmt(v.kg)}×${reps}`
                           : `${reps}${ex.uniteReps ? " " + ex.uniteReps : ""}`;
                         return (
