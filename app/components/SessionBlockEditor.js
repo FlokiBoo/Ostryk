@@ -19,12 +19,13 @@ import { MUSCLE_GROUPS as REAL_MUSCLE_GROUPS, JOINT_GROUPS } from '@/app/compone
 import { parseMusclesFromText } from '@/app/components/CelebrationModal'
 import { isCardioMovementName, cardioMovementSortKey, PACE_BASES } from '@/lib/raceEstimates'
 import { hasCardioSteps } from '@/lib/cardioSteps'
+import { UNITES_SERIE, UNITES_PAR_DEFAUT, unitesParDefaut, unitesDeSerie } from '@/lib/unitesSerie'
 import CardioStepEditor from '@/app/components/CardioStepEditor'
 import {
   X, TextB, TextItalic, LinkSimple, ListBullets, TextTSlash,
   CaretLeft, CaretRight, ArrowsDownUp, Plus, FileText, Flame, Snowflake, Barbell,
   DotsThreeVertical, Info, MagnifyingGlass, Check, Timer, DotsSixVertical,
-  ArrowsClockwise, Heartbeat, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack,
+  ArrowsClockwise, Heartbeat, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack, CaretDown,
 } from '@phosphor-icons/react'
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
@@ -184,6 +185,7 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
     const sets = Array.from({ length: setCount }, (_, i) => ({ id: `set-${firstId}-${i}` }))
     const setNotes = {}
     const setValues = {}
+    const unites = {}
     const paceValues = {}
     const cardioStructures = {}
     // La granularité par set est perdue côté ancien schéma (un seul `note` par exercice) : on la
@@ -195,12 +197,14 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
         setNotes[`${sets[0].id}:${exId}`] = r.note
         setNotes[`note:${exId}`] = r.note
       }
-      // set_details : reps/kg par set, index-aligné sur `sets` (voir flattenBlocksToExerciseRows).
+      // set_details : reps/kg/sec par set, index-aligné sur `sets` (voir flattenBlocksToExerciseRows).
       if (Array.isArray(r.set_details)) {
+        const unitesExo = unitesDeSerie(r.set_details)
+        if (!unitesParDefaut(unitesExo)) unites[exId] = unitesExo
         r.set_details.forEach((d, i) => {
           const set = sets[i]
-          if (set && d && (d.reps || d.kg != null || d.tempo)) {
-            setValues[`${set.id}:${exId}`] = { reps: d.reps || '', kg: d.kg != null ? String(d.kg) : '', tempo: d.tempo || '' }
+          if (set && d && (d.reps || d.kg != null || d.sec != null || d.tempo)) {
+            setValues[`${set.id}:${exId}`] = { reps: d.reps || '', kg: d.kg != null ? String(d.kg) : '', sec: d.sec != null ? String(d.sec) : '', tempo: d.tempo || '' }
           }
         })
       }
@@ -229,6 +233,7 @@ function groupExercisesIntoBlocks(rows, musclesMap = {}) {
       restSeconds: parseRestToSeconds(g.rows[0].rest),
       setNotes,
       setValues,
+      unites,
       paceValues,
       cardioStructures,
       // Timer lié au bloc entier (superset compris) : porté par le premier exercice du bloc
@@ -355,12 +360,18 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
         )]
         // Reps/kg gardent leur granularité par set (contrairement à `note` ci-dessus, fusionnée
         // en une seule chaîne) : un tableau index-aligné sur `sets`, relu par groupExercisesIntoBlocks.
+        // Seules les mesures affichées sont écrites : une valeur restée dans une unité retirée ne
+        // doit pas réapparaître côté sportif.
+        const unites = block.unites?.[ex.id] || UNITES_PAR_DEFAUT
+        const nombre = (unite, v) => unites.includes(unite) && v !== '' && v != null && !Number.isNaN(parseFloat(v)) ? parseFloat(v) : null
         const setDetails = (block.sets || []).map(s => {
           const v = block.setValues?.[`${s.id}:${ex.id}`]
           return {
             reps: v?.reps || null,
-            kg: v?.kg !== '' && v?.kg != null ? parseFloat(v.kg) : null,
+            kg: nombre('kg', v?.kg),
+            sec: nombre('sec', v?.sec),
             tempo: v?.tempo || null,
+            ...(unitesParDefaut(unites) ? {} : { unites }),
           }
         })
         rows.push({
@@ -375,7 +386,7 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
           pct_low: null,
           pct_high: null,
           cardio_structure: null,
-          set_details: setDetails.some(d => d.reps || d.kg != null || d.tempo) ? setDetails : null,
+          set_details: setDetails.some(d => d.reps || d.kg != null || d.sec != null || d.tempo) || !unitesParDefaut(unites) ? setDetails : null,
           timer_config,
           focus_muscles: ex.focus_muscles || null,
         })
@@ -553,6 +564,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   // Popover "Dupliquer" ouvert sur une cellule reps/kg (setCellKey), voir copySetValueToNextSet /
   // copySetValueToAllSets — un seul à la fois, comme les autres popovers de ce fichier (RestDivider).
   const [copyMenuOpenKey, setCopyMenuOpenKey] = useState(null)
+  // Popover de choix d'unité (kg / secondes) : `${setCellKey}:${rang de la mesure}`.
+  const [uniteMenuOpenKey, setUniteMenuOpenKey] = useState(null)
   const blockIdCounter = useRef(0)
 
   const nextBlockId = () => {
@@ -861,6 +874,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     Object.entries(original.paceValues || {}).forEach(([exId, value]) => {
       paceValues[exerciseIdMap.get(exId) ?? exId] = value
     })
+    const unites = {}
+    Object.entries(original.unites || {}).forEach(([exId, value]) => {
+      unites[exerciseIdMap.get(exId) ?? exId] = value
+    })
     const cardioStructures = {}
     Object.entries(original.cardioStructures || {}).forEach(([exId, value]) => {
       cardioStructures[exerciseIdMap.get(exId) ?? exId] = value
@@ -874,6 +891,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       sets,
       setNotes: remapRecord(original.setNotes),
       setValues: remapRecord(original.setValues),
+      unites,
       paceValues,
       cardioStructures,
     }
@@ -1062,9 +1080,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       const setNotes = Object.fromEntries(Object.entries(b.setNotes || {}).filter(([k]) => !dropKey(k)))
       const paceValues = { ...(b.paceValues || {}) }
       delete paceValues[exerciseId]
+      const unites = { ...(b.unites || {}) }
+      delete unites[exerciseId]
       const cardioStructures = { ...(b.cardioStructures || {}) }
       delete cardioStructures[exerciseId]
-      return { ...b, exercises, setValues, setNotes, paceValues, cardioStructures }
+      return { ...b, exercises, setValues, setNotes, unites, paceValues, cardioStructures }
     }))
     setUnsavedChanges(true)
     setExerciseMenuOpenId(null)
@@ -1360,11 +1380,48 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       if (i !== activeBlockIndex) return b
       const key = setCellKey(setId, exerciseId)
       const setValues = { ...(b.setValues || {}) }
-      setValues[key] = { ...(setValues[key] || { reps: '', kg: '', tempo: '' }), [field]: value }
+      setValues[key] = { ...(setValues[key] || { reps: '', kg: '', sec: '', tempo: '' }), [field]: value }
       return { ...b, setValues }
     }))
     setUnsavedChanges(true)
   }
+
+  // Mesures affichées à côté des reps (kg, secondes, ou les deux) : un choix par exercice, valable
+  // pour tous les sets du bloc — un maintien reste un maintien d'un set à l'autre.
+  const updateUnites = (exerciseId, transformer) => {
+    setBlocks(blocks.map((b, i) => {
+      if (i !== activeBlockIndex) return b
+      const avant = b.unites?.[exerciseId] || UNITES_PAR_DEFAUT
+      const apres = transformer(avant)
+      const setValues = { ...(b.setValues || {}) }
+      // Une seule mesure dont on change l'unité : le nombre déjà tapé suit la case.
+      const renomme = avant.length === 1 && apres.length === 1 && avant[0] !== apres[0]
+      for (const s of (b.sets || [])) {
+        const key = setCellKey(s.id, exerciseId)
+        const v = setValues[key]
+        if (!v) continue
+        const suivant = { ...v }
+        if (renomme) suivant[apres[0]] = v[avant[0]] || ''
+        Object.keys(UNITES_SERIE).forEach(u => { if (!apres.includes(u)) suivant[u] = '' })
+        setValues[key] = suivant
+      }
+      return { ...b, setValues, unites: { ...(b.unites || {}), [exerciseId]: apres } }
+    }))
+    setUnsavedChanges(true)
+  }
+
+  // Choisir l'unité déjà prise par l'autre case échange simplement les deux.
+  const changeUnite = (exerciseId, rang, unite) => updateUnites(exerciseId, avant => {
+    if (avant[rang] === unite) return avant
+    return avant.includes(unite) ? [...avant].reverse() : avant.map((u, k) => (k === rang ? unite : u))
+  })
+  const addUnite = (exerciseId) => updateUnites(exerciseId, avant => {
+    const libre = Object.keys(UNITES_SERIE).find(u => !avant.includes(u))
+    return libre ? [...avant, libre] : avant
+  })
+  const removeUnite = (exerciseId, rang) => updateUnites(exerciseId, avant => (
+    avant.length > 1 ? avant.filter((_, k) => k !== rang) : avant
+  ))
 
   // Copie reps+kg d'un set vers le set juste après, pour ce même exercice.
   const copySetValueToNextSet = (setId, exerciseId) => {
@@ -2259,7 +2316,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                           </div>
                           {activeBlock.exercises.map(ex => {
                             const hasNote = Boolean(activeBlock.setNotes?.[setCellKey(s.id, ex.id)])
-                            const value = activeBlock.setValues?.[setCellKey(s.id, ex.id)] || { reps: '', kg: '', tempo: '' }
+                            const value = activeBlock.setValues?.[setCellKey(s.id, ex.id)] || { reps: '', kg: '', sec: '', tempo: '' }
+                            const unites = activeBlock.unites?.[ex.id] || UNITES_PAR_DEFAUT
                             return (
                               <div key={ex.id} style={{ marginBottom: 10 }}>
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -2299,7 +2357,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                                 >
                                   <FileText size={14} /> Notes
                                 </button>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                   <input
                                     type="text"
                                     placeholder=""
@@ -2308,21 +2366,79 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                                     style={{ width: 60, boxSizing: 'border-box', textAlign: 'center', border: `1px solid ${c.border}`, borderRadius: 6, padding: '8px 6px', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
                                   />
                                   <span style={{ fontSize: 13, color: c.textMuted }}>rep</span>
-                                  <input
-                                    type="number"
-                                    step="0.5"
-                                    min="0"
-                                    placeholder=""
-                                    value={value.kg}
-                                    onChange={e => updateSetValue(s.id, ex.id, 'kg', e.target.value)}
-                                    style={{ width: 60, boxSizing: 'border-box', textAlign: 'center', border: `1px solid ${c.border}`, borderRadius: 6, padding: '8px 6px', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
-                                  />
-                                  <span style={{ fontSize: 13, color: c.textMuted }}>kg</span>
-                                  {activeBlock.sets.length > 1 && (value.reps || value.kg) && (
+                                  {unites.map((unite, rang) => {
+                                    const menuKey = `${setCellKey(s.id, ex.id)}:${rang}`
+                                    return (
+                                      <div key={unite} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <input
+                                          type="number"
+                                          step={UNITES_SERIE[unite].pas}
+                                          min="0"
+                                          placeholder=""
+                                          aria-label={`${UNITES_SERIE[unite].nom} — ${ex.name}, set ${i + 1}`}
+                                          value={value[unite] || ''}
+                                          onChange={e => updateSetValue(s.id, ex.id, unite, e.target.value)}
+                                          style={{ width: 60, boxSizing: 'border-box', textAlign: 'center', border: `1px solid ${c.border}`, borderRadius: 6, padding: '8px 6px', fontSize: 14, outline: 'none', fontFamily: 'inherit' }}
+                                        />
+                                        <div style={{ position: 'relative' }}>
+                                          <button
+                                            onClick={() => setUniteMenuOpenKey(k => k === menuKey ? null : menuKey)}
+                                            title="Changer d'unité"
+                                            aria-haspopup="menu"
+                                            aria-expanded={uniteMenuOpenKey === menuKey}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 2, border: `1px solid ${c.border}`, background: c.bg, borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: c.text, fontSize: 13, fontFamily: 'inherit' }}
+                                          >
+                                            {UNITES_SERIE[unite].suffixe} <CaretDown size={10} />
+                                          </button>
+                                          {uniteMenuOpenKey === menuKey && (
+                                            <>
+                                              <div onClick={() => setUniteMenuOpenKey(null)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
+                                              <div role="menu" style={{
+                                                position: 'absolute', left: 0, top: '100%', marginTop: 4, background: c.bg, border: `1px solid ${c.border}`,
+                                                borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100, padding: 6,
+                                                display: 'flex', flexDirection: 'column', gap: 2, width: 150, whiteSpace: 'nowrap',
+                                              }}>
+                                                {Object.entries(UNITES_SERIE).map(([cle, u]) => (
+                                                  <button
+                                                    key={cle}
+                                                    role="menuitem"
+                                                    onClick={() => { changeUnite(ex.id, rang, cle); setUniteMenuOpenKey(null) }}
+                                                    style={{ textAlign: 'left', padding: '6px 8px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', background: cle === unite ? c.blueBorder : 'none', color: cle === unite ? c.blue : c.text }}
+                                                  >
+                                                    {u.nom}
+                                                  </button>
+                                                ))}
+                                                {unites.length > 1 && (
+                                                  <button
+                                                    role="menuitem"
+                                                    onClick={() => { removeUnite(ex.id, rang); setUniteMenuOpenKey(null) }}
+                                                    style={{ textAlign: 'left', padding: '6px 8px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none', borderTop: `1px solid ${c.border}`, background: 'none', color: '#991B1B' }}
+                                                  >
+                                                    Retirer
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                  {unites.length < Object.keys(UNITES_SERIE).length && (
+                                    <button
+                                      onClick={() => addUnite(ex.id)}
+                                      title="Ajouter une mesure (kg ou secondes)"
+                                      aria-label={`Ajouter une mesure sur ${ex.name}`}
+                                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, flexShrink: 0, borderRadius: '50%', border: `1.5px solid ${c.blue}`, background: 'none', color: c.blue, cursor: 'pointer', padding: 0 }}
+                                    >
+                                      <Plus size={12} weight="bold" />
+                                    </button>
+                                  )}
+                                  {activeBlock.sets.length > 1 && (value.reps || value.kg || value.sec) && (
                                     <div style={{ position: 'relative' }}>
                                       <button
                                         onClick={() => setCopyMenuOpenKey(k => k === setCellKey(s.id, ex.id) ? null : setCellKey(s.id, ex.id))}
-                                        title="Dupliquer reps/kg"
+                                        title="Dupliquer les valeurs"
                                         style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', padding: '4px 6px', cursor: 'pointer', color: c.blue, fontSize: 12 }}
                                       >
                                         <CopySimple size={14} />

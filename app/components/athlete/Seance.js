@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { unitesDeSerie, ecrireMaintien, lireMaintien } from '@/lib/unitesSerie'
 import Toast from '@/app/components/Toast'
 import { parseMusclesFromText, randomCitation, BodySVG } from '@/app/components/CelebrationModal'
 import { COLOR_BY_GROUP } from '@/app/components/MuscleAnatomyDiagram'
@@ -135,6 +136,9 @@ function construireBlocs(session) {
         const nbSeries = Math.max(1, parseInt(e.sets, 10) || 1)
         const repsRef = details.find(d => d?.reps)?.reps ?? e.reps
         const unite_reps = uniteReps(repsRef)
+        // Maintien chronométré choisi par le coach (unité « secondes » de l'éditeur), lesté ou non.
+        const unites = unitesDeSerie(details)
+        const maintien = unites.includes('sec')
         // Prescription explicite par série (set_details), ou, pour la première, les reps/kg de
         // l'exercice. null quand le coach n'a rien écrit pour cette série : le tour reprend alors les
         // valeurs du tour précédent (voir valeursTour).
@@ -142,9 +146,10 @@ function construireBlocs(session) {
           const d = details[k] || {}
           const repsTexte = d.reps || (k === 0 ? e.reps : null) || null
           const kgBrut = d.kg ?? (k === 0 && e.kg !== undefined && e.kg !== '' ? e.kg : null)
-          if (!repsTexte && kgBrut === null) return null
+          const sec = maintien && d.sec != null && !Number.isNaN(parseFloat(d.sec)) ? parseFloat(d.sec) : null
+          if (!repsTexte && kgBrut === null && sec === null) return null
           const kg = kgBrut === null ? null : parseFloat(kgBrut)
-          return { reps: premierNombre(repsTexte), repsTexte: repsTexte ? String(repsTexte) : null, kg: Number.isNaN(kg) ? null : kg }
+          return { reps: premierNombre(repsTexte), repsTexte: repsTexte ? String(repsTexte) : null, kg: Number.isNaN(kg) ? null : kg, sec }
         })
         return {
           id: e.id,
@@ -153,8 +158,10 @@ function construireBlocs(session) {
           nom: e.name,
           // Charge proposée sur tout exercice compté en répétitions (même au poids du corps, où elle
           // reste simplement vide) ; pas sur un exercice au temps, aux calories ou à la distance.
-          unite: unite_reps === 'reps' ? 'kg' : undefined,
+          unite: (maintien ? unites.includes('kg') : unite_reps === 'reps') ? 'kg' : undefined,
+          maintien,
           pas: 2.5,
+          pas_sec: 5,
           unite_reps,
           pas_reps: unite_reps === 'secondes' ? 5 : 1,
           tempo: details.map(d => d?.tempo).find(Boolean) || null,
@@ -212,8 +219,8 @@ function valeursTour(bloc, index, precedent) {
   const out = {}
   bloc.exercices.forEach(e => {
     const p = e.prescriptions[index]
-    if (p) out[e.id] = { kg: e.unite === 'kg' ? p.kg : null, reps: p.reps }
-    else out[e.id] = { kg: precedent?.[e.id]?.kg ?? null, reps: precedent?.[e.id]?.reps ?? null }
+    if (p) out[e.id] = { kg: e.unite === 'kg' ? p.kg : null, reps: p.reps, sec: e.maintien ? p.sec ?? null : null }
+    else out[e.id] = { kg: precedent?.[e.id]?.kg ?? null, reps: precedent?.[e.id]?.reps ?? null, sec: precedent?.[e.id]?.sec ?? null }
   })
   return out
 }
@@ -227,7 +234,12 @@ function etatInitialBloc(bloc, exerciseSets) {
     const t = {}
     bloc.exercices.forEach(e => {
       const s = (exerciseSets[e.id] || [])[i]
-      t[e.id] = { kg: e.unite === 'kg' && rempli(s.kg_done) ? parseFloat(s.kg_done) : null, reps: premierNombre(s.reps_done) }
+      const tenu = e.maintien ? lireMaintien(s.reps_done) : null
+      t[e.id] = {
+        kg: e.unite === 'kg' && rempli(s.kg_done) ? parseFloat(s.kg_done) : null,
+        reps: tenu ? tenu.reps : premierNombre(s.reps_done),
+        sec: tenu ? tenu.sec : null,
+      }
     })
     liste.push(t)
   }
@@ -485,6 +497,11 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
         {exercice.unite === 'kg' ? (
           <div style={{ flex: 1 }}>
             <Champ exercice={exercice} champ="kg" valeur={valeur.kg} suffixe="kg" onPas={d => onPas('kg', d)} onSaisie={v => onSaisie('kg', v)} />
+          </div>
+        ) : null}
+        {exercice.maintien ? (
+          <div style={{ flex: 1 }}>
+            <Champ exercice={exercice} champ="sec" valeur={valeur.sec ?? null} suffixe="sec" onPas={d => onPas('sec', d)} onSaisie={v => onSaisie('sec', v)} />
           </div>
         ) : null}
         <div style={{ flex: 1 }}>
@@ -940,9 +957,11 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
       const v = t[e.id]
       const p = prescriptionEffective(e, etat.courant)
       const id = lignes[k].id
-      onSaveExerciseSet(e.id, id, 'reps_done', v.reps === null ? '' : String(v.reps))
+      onSaveExerciseSet(e.id, id, 'reps_done', e.maintien ? ecrireMaintien(v.reps, v.sec ?? null) : v.reps === null ? '' : String(v.reps))
       onSaveExerciseSet(e.id, id, 'kg_done', e.unite === 'kg' && v.kg !== null ? String(v.kg) : '')
-      onSaveExerciseSet(e.id, id, 'reps_prescribed', p.repsTexte ?? (p.reps != null ? String(p.reps) : null))
+      onSaveExerciseSet(e.id, id, 'reps_prescribed', e.maintien && p.sec != null
+        ? ecrireMaintien(p.reps ?? null, p.sec)
+        : p.repsTexte ?? (p.reps != null ? String(p.reps) : null))
       onSaveExerciseSet(e.id, id, 'kg_prescribed', e.unite === 'kg' ? p.kg ?? null : null)
     })
     setToast(`${b.enchaine ? 'Tour enregistré' : 'Série enregistrée'}`)
@@ -1050,7 +1069,8 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
       <span style={{ fontSize: 11, color: T.texteCorps, flex: 1 }}>
         {bloc.exercices.map(e => {
           const v = tt[e.id]
-          const reps = `${v.reps ?? '—'} ${e.unite_reps}`
+          const tenu = e.maintien ? `${fmt(v.sec ?? null) || '—'} sec` : null
+          const reps = tenu ? (v.reps === null ? tenu : `${v.reps} × ${tenu}`) : `${v.reps ?? '—'} ${e.unite_reps}`
           const valeur = e.unite === 'kg' && v.kg !== null ? `${fmt(v.kg)} kg × ${reps}` : reps
           return bloc.enchaine ? `${e.nom} : ${valeur}` : valeur
         }).join(' · ')}
@@ -1090,6 +1110,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
                 const ref = prescriptionEffective(e, etat.courant)
                 // Case vide : la première flèche repose la valeur de référence.
                 if (champ === 'kg') v.kg = v.kg === null ? ref.kg ?? 0 : Math.max(0, v.kg + d * e.pas)
+                else if (champ === 'sec') v.sec = v.sec == null ? ref.sec ?? e.pas_sec : Math.max(0, v.sec + d * e.pas_sec)
                 else v.reps = v.reps === null ? ref.reps ?? 1 : Math.max(0, v.reps + d * e.pas_reps)
                 return v
               })}
@@ -1097,6 +1118,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
                 const n = brut.trim() === '' ? null : parseFloat(brut.replace(',', '.'))
                 const valide = n === null || Number.isNaN(n) ? null : n
                 if (champ === 'kg') v.kg = valide
+                else if (champ === 'sec') v.sec = valide
                 else v.reps = valide === null ? null : Math.round(valide)
                 return v
               })}
