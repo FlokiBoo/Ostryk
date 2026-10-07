@@ -31,7 +31,7 @@ import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
 import EditeurSectionTexte from '@/app/components/EditeurSectionTexte'
 import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
-import { sectionDeSeance, lignesDeTexte } from '@/lib/sectionsTexte'
+import { sectionDeSeance, lignesDeProtocole } from '@/lib/sectionsTexte'
 
 // Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
 // petit helper autonome plutôt qu'un import cross-fichier).
@@ -1013,14 +1013,19 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   // Insère un protocole d'activation pré-construit (bibliothèque coach, app/library/activations)
   // dans l'échauffement / retour au calme actif — ajoute à la suite plutôt qu'écraser : un coach
   // compose parfois une activation à partir de plusieurs protocoles. Le texte du protocole devient
-  // des lignes ; chacune de ses vidéos devient un jeton quand un mouvement du même nom existe dans
-  // la bibliothèque, sinon une ligne de texte (le coach pourra la citer avec #).
+  // des lignes, ses mentions "#Nom" des jetons à leur place dans le texte. Une vidéo du protocole
+  // que le texte ne cite pas est ajoutée à la suite : en jeton quand un mouvement du même nom existe
+  // dans la bibliothèque, sinon en ligne de texte (le coach pourra la citer avec #).
   const insererProtocole = (preset) => {
     if (!activeBlock || !['warmup', 'cooldown'].includes(activeBlock.type)) return
     const parNom = new Map(bibliothequeSections.map(m => [m.nom.trim().toLowerCase(), m]))
-    const ajout = [...lignesDeTexte(preset.text), ...(preset.videos || []).map(v => {
+    const texte = lignesDeProtocole(preset.text, bibliothequeSections)
+    const dejaCites = new Set(texte.map(l => l.mouvementId).filter(Boolean))
+    const ajout = [...texte, ...(preset.videos || []).flatMap(v => {
       const m = parNom.get((v.name || '').trim().toLowerCase())
-      return m ? { mouvementId: m.id, texte: '', mouvementNom: m.nom } : { texte: v.name || '' }
+      if (m && dejaCites.has(m.id)) return []
+      if (m) dejaCites.add(m.id)
+      return [m ? { mouvementId: m.id, texte: '', mouvementNom: m.nom } : { texte: v.name || '' }]
     })]
     setSections(prev => {
       const actuelle = prev[activeBlock.type] || { contenu: [], videosLibres: [], version: 0 }
