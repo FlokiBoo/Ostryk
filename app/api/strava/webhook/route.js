@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { getValidStravaToken, fetchStravaActivity, processStravaActivity } from '@/lib/strava'
+import { getValidStravaToken, fetchStravaActivity, processStravaActivity, stravaDejaTraitee } from '@/lib/strava'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -34,13 +34,11 @@ export async function POST(request) {
 
   // Strava redélivre parfois le même événement plusieurs fois (retry si on met trop de temps à
   // répondre) — sans ça, chaque retry consommait une séance de plus dans le programme réel de
-  // l'athlète (3 séances marquées faites pour une seule vraie sortie) ou recréait une nouvelle
-  // "Séance libre" en double. L'id d'activité Strava est stable d'un retry à l'autre : on
-  // l'utilise comme clé d'idempotence, avant même d'aller chercher/créer une séance.
+  // l'athlète (3 séances marquées faites pour une seule vraie sortie) ou comptait deux fois la même
+  // activité libre. L'id d'activité Strava est stable d'un retry à l'autre : on l'utilise comme clé
+  // d'idempotence, avant même d'aller chercher une séance.
   const stravaActivityId = body.object_id
-  const { data: alreadyProcessed } = await supabaseAdmin.from('program_completions')
-    .select('id').eq('athlete_id', athlete.id).eq('strava_activity_id', stravaActivityId).maybeSingle()
-  if (alreadyProcessed) return NextResponse.json({ ok: true })
+  if (await stravaDejaTraitee(athlete.id, stravaActivityId)) return NextResponse.json({ ok: true })
 
   const accessToken = await getValidStravaToken(athlete)
   if (!accessToken) return NextResponse.json({ ok: true })
