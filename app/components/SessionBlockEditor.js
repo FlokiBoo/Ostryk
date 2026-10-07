@@ -816,7 +816,9 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const addExerciseLikeBlock = (type) => {
     const cooldownIndex = blocks.findIndex(b => b.type === 'cooldown')
     const insertAt = cooldownIndex === -1 ? blocks.length : cooldownIndex
-    const newBlock = { id: nextBlockId(), type, name: '', description: '', note: '' }
+    // exercises/sets vides et non absents : un circuit tout juste créé s'affiche tout de suite (voir
+    // le || isCircuitBlock du rendu), et son rendu lit activeBlock.exercises sans repli.
+    const newBlock = { id: nextBlockId(), type, name: '', description: '', note: '', exercises: [], sets: [] }
     setBlocks([...blocks.slice(0, insertAt), newBlock, ...blocks.slice(insertAt)])
     setActiveBlockId(newBlock.id)
     setUnsavedChanges(true)
