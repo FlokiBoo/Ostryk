@@ -50,6 +50,25 @@ function fmtKm(km) {
   return km % 1 === 0 ? `${km} km` : `${km.toFixed(1)} km`
 }
 
+// Un programme multi-sports (triathlon…) porte un seul activity_type pour toutes ses séances : la
+// séance de natation y était comptée comme "Triathlon". Il n'existe pas de discipline par séance,
+// on la lit donc dans son titre — mêmes libellés que STRAVA_TYPE_MAP (lib/strava.js) pour
+// s'additionner aux activités Strava. Limité aux programmes multi-sports : ailleurs, un titre
+// comme "Renfo course à pied" ferait basculer une séance de musculation en course.
+const MULTISPORT = /triathlon|duathlon|aquathlon|swimrun|multi.?sport/i
+const DISCIPLINES_TITRE = [
+  { motif: /natation|nage|swim|piscine/i, label: 'Natation 🏊' },
+  { motif: /v[ée]lo|cycl|bike|home.?trainer/i, label: 'Vélo 🚴' },
+  { motif: /course|run|footing|trail|fractionn/i, label: 'Running 🏃‍♀️' },
+]
+function labelSeance(programSession) {
+  const type = programSession?.programs?.activity_type || 'Musculation 🏋️'
+  if (!MULTISPORT.test(type)) return type
+  // Un enchaînement cite plusieurs disciplines : il reste au nom du programme.
+  const trouvees = DISCIPLINES_TITRE.filter(d => d.motif.test(programSession.title || ''))
+  return trouvees.length === 1 ? trouvees[0].label : type
+}
+
 async function fetchStats(athleteId, start, end) {
   const [{ data: actLogs }, { data: comps }] = await Promise.all([
     supabase.from('activity_logs')
@@ -58,7 +77,7 @@ async function fetchStats(athleteId, start, end) {
       .gte('date', start)
       .lte('date', end),
     supabase.from('program_completions')
-      .select('program_session_id, duration_minutes, distance_km, program_sessions(program_id, programs(activity_type))')
+      .select('program_session_id, duration_minutes, distance_km, program_sessions(program_id, title, programs(activity_type))')
       .eq('athlete_id', athleteId)
       .gte('completed_at', start + 'T00:00:00')
       .lte('completed_at', end + 'T23:59:59'),
@@ -72,7 +91,7 @@ async function fetchStats(athleteId, start, end) {
     if (l.duration_minutes) durByLabel[key] = (durByLabel[key] || 0) + parseInt(l.duration_minutes)
   })
   ;(comps || []).forEach(c => {
-    const key = c.program_sessions?.programs?.activity_type || 'Musculation 🏋️'
+    const key = labelSeance(c.program_sessions)
     countByLabel[key] = (countByLabel[key] || 0) + 1
     if (c.duration_minutes) durByLabel[key] = (durByLabel[key] || 0) + parseInt(c.duration_minutes)
     if (c.distance_km) kmByLabel[key] = (kmByLabel[key] || 0) + parseFloat(c.distance_km)
