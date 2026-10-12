@@ -1337,6 +1337,8 @@ function AthleteView({ params }) {
             exerciseSets={exerciseSets}
             onEnsureExerciseSets={ensureExerciseSets}
             onSaveExerciseSet={saveExerciseSet}
+            notesExercices={exerciseLogs}
+            onEnregistrerNote={(exerciseId, nom, texte) => saveExerciseLog(exerciseId, nom, 'note', texte)}
             onQuitter={() => setPlayerStarted(false)}
             // Pas de notation côté client : la séance est validée dès l'écran de fin (onEnregistrer),
             // puis « Retour à l'accueil » ne fait que naviguer. Une séance déjà faite (refaite depuis

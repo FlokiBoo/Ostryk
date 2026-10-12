@@ -118,7 +118,7 @@ function grouperEnBlocs(exos) {
   return groupes
 }
 
-function construireBlocs(session) {
+function construireBlocs(session, ajouts = {}) {
   // Les exercices d'un ancien bloc échauffement / retour au calme vivent dans leur section.
   const exos = (session.exercises || []).filter(e => e.name && !['warmup', 'cooldown'].includes(e.block_type))
   return grouperEnBlocs(exos).map((groupe, gi) => {
@@ -139,6 +139,11 @@ function construireBlocs(session) {
         // Maintien chronométré choisi par le coach (unité « secondes » de l'éditeur), lesté ou non.
         const unites = unitesDeSerie(details)
         const maintien = unites.includes('sec')
+        // Mesures que le coach n'a pas prévues et que le sportif peut ajouter lui-même (voir
+        // `ajouts` dans Seance). Pas de secondes en plus sur un exercice déjà compté en secondes.
+        const chargePrevue = maintien ? unites.includes('kg') : unite_reps === 'reps'
+        const ajoutable = { kg: !chargePrevue, sec: !maintien && unite_reps !== 'secondes' }
+        const ajoute = { kg: ajoutable.kg && !!ajouts[e.id]?.kg, sec: ajoutable.sec && !!ajouts[e.id]?.sec }
         // Prescription explicite par série (set_details), ou, pour la première, les reps/kg de
         // l'exercice. null quand le coach n'a rien écrit pour cette série : le tour reprend alors les
         // valeurs du tour précédent (voir valeursTour).
@@ -158,8 +163,10 @@ function construireBlocs(session) {
           nom: e.name,
           // Charge proposée sur tout exercice compté en répétitions (même au poids du corps, où elle
           // reste simplement vide) ; pas sur un exercice au temps, aux calories ou à la distance.
-          unite: (maintien ? unites.includes('kg') : unite_reps === 'reps') ? 'kg' : undefined,
-          maintien,
+          unite: chargePrevue || ajoute.kg ? 'kg' : undefined,
+          maintien: maintien || ajoute.sec,
+          ajoutable,
+          ajoute,
           pas: 2.5,
           pas_sec: 5,
           unite_reps,
@@ -443,8 +450,14 @@ function Champ({ exercice, champ, valeur, suffixe, onPas, onSaisie }) {
   )
 }
 
-function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null }) {
+function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null, maNote = '', onMaNote = null, onAjout = null }) {
   const [noteOuverte, setNoteOuverte] = useState(false)
+  const [saisieNote, setSaisieNote] = useState(false)
+  const pastille = {
+    border: `1px solid ${T.bordure}`, background: 'none', color: T.texteSec, borderRadius: 100, fontSize: 11,
+    padding: '0 10px', height: 30, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+  }
+  const mesuresAjoutables = onAjout ? ['kg', 'sec'].filter(c => exercice.ajoutable[c]) : []
   return (
     <div style={{ flex: pleineLargeur ? '1 1 100%' : '1 1 calc(50% - 4px)', minWidth: 0, boxSizing: 'border-box', background: T.blanc, borderRadius: 14, padding: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -507,6 +520,38 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
           <Champ exercice={exercice} champ="reps" valeur={valeur.reps} suffixe={exercice.unite_reps} onPas={d => onPas('reps', d)} onSaisie={v => onSaisie('reps', v)} />
         </div>
       </div>
+
+      {onMaNote && (saisieNote || maNote) ? (
+        <textarea
+          rows={2}
+          autoFocus={saisieNote && !maNote}
+          defaultValue={maNote}
+          placeholder="Ta note sur cet exercice…"
+          aria-label={`Ta note sur ${exercice.nom}`}
+          onBlur={e => {
+            const texte = e.target.value.trim()
+            if (texte !== (maNote || '')) onMaNote(exercice, texte)
+            if (!texte) setSaisieNote(false)
+          }}
+          style={{
+            width: '100%', boxSizing: 'border-box', marginTop: 8, border: `1px solid ${T.bordure}`, borderRadius: 8, background: T.fond,
+            padding: '7px 9px', fontSize: 16, lineHeight: 1.4, color: T.texte, fontFamily: 'inherit', resize: 'none', outline: 'none',
+          }}
+        />
+      ) : null}
+
+      {(onMaNote && !saisieNote && !maNote) || mesuresAjoutables.length > 0 ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {onMaNote && !saisieNote && !maNote ? (
+            <button type="button" onClick={() => setSaisieNote(true)} style={pastille}>✎ Note</button>
+          ) : null}
+          {mesuresAjoutables.map(c => (
+            <button key={c} type="button" onClick={() => onAjout(c)} style={pastille}>
+              {exercice.ajoute[c] ? '×' : '+'} {c === 'kg' ? 'Charge' : 'Secondes'}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -852,14 +897,23 @@ function fusionnerBloc(bloc, depuisBase, memo) {
   récapitulatif partageable (onPartagerRecap). Les séries, elles, passent par les mêmes
   onEnsureExerciseSets / onSaveExerciseSet : c'est l'appelant qui les marque entered_by_role = 'coach'.
 */
-export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null }) {
+export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null, notesExercices = {}, onEnregistrerNote = null }) {
   const coach = mode === 'coach'
   useKeepAwake()
   const [memo] = useState(() => lireEtat(athleteId, session.id))
   const [video, setVideo] = useState(null)
   const chrono = useChrono(memo?.repos)
   const [debut] = useState(() => (typeof memo?.debut === 'number' ? memo.debut : Date.now()))
-  const blocs = useMemo(() => construireBlocs(session), [session])
+  // Charge ou secondes ajoutées par le sportif sur un exercice où le coach ne les a pas prévues.
+  // Retrouvées au montage dans la mémoire du téléphone, sinon dans les séries déjà saisies.
+  const [ajouts, setAjouts] = useState(() => Object.fromEntries((session.exercises || []).map(e => {
+    const sets = exerciseSets[e.id] || []
+    return [e.id, {
+      kg: !!memo?.ajouts?.[e.id]?.kg || sets.some(s => rempli(s?.kg_done)),
+      sec: !!memo?.ajouts?.[e.id]?.sec || sets.some(s => rempli(s?.sec_done)),
+    }]
+  })))
+  const blocs = useMemo(() => construireBlocs(session, ajouts), [session, ajouts])
   // Étapes de navigation : échauffement (△), blocs A, B, C…, retour au calme (▽). Sections envoyées
   // prêtes par l'API ; recalculées ici pour une séance créée côté client (séance libre).
   const sections = useMemo(() => session.sections || {
@@ -903,10 +957,10 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   useEffect(() => {
     try {
       localStorage.setItem(sessionProgressKey(athleteId, session.id), JSON.stringify({
-        blockIndex: index, section: etapes[index]?.id, blocs: tours, faits, repos: chrono.etat, debut, updatedAt: Date.now(),
+        blockIndex: index, section: etapes[index]?.id, blocs: tours, faits, ajouts, repos: chrono.etat, debut, updatedAt: Date.now(),
       }))
     } catch { /* stockage indisponible — reprise sur les séries en base */ }
-  }, [athleteId, session.id, index, etapes, tours, faits, chrono.etat, debut])
+  }, [athleteId, session.id, index, etapes, tours, faits, ajouts, chrono.etat, debut])
 
   // Séries à créer pour le bloc affiché (autant que de tours listés, au moins les tours prévus).
   // Provisionnement local et synchrone côté page ; le ref évite un double appel (effets rejoués en
@@ -1108,6 +1162,13 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
               onVideo={e => setVideo({ nom: e.nom, video_url: e.video_url })}
               notePrivee={notesPrivees[e.id]}
               onNotePrivee={coach && onEnregistrerNotePrivee ? ex => setNotePriveeOuverte({ exercice: ex, texte: notesPrivees[ex.id] || '', envoi: false }) : null}
+              maNote={notesExercices[e.id]?.note || ''}
+              onMaNote={onEnregistrerNote ? (ex, texte) => onEnregistrerNote(ex.id, ex.nom, texte) : null}
+              onAjout={champ => {
+                // Mesure retirée : sa valeur du tour en cours part avec elle.
+                if (e.ajoute[champ]) majValeur(bloc, e, champ, v => ({ ...v, [champ]: null }))
+                setAjouts(prev => ({ ...prev, [e.id]: { ...prev[e.id], [champ]: !e.ajoute[champ] } }))
+              }}
               onPas={(champ, d) => majValeur(bloc, e, champ, v => {
                 const ref = prescriptionEffective(e, etat.courant)
                 // Case vide : la première flèche repose la valeur de référence.
