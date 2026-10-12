@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import SwipeCarousel from "./SwipeCarousel";
 
 /*
   Accueil client Ostryk — v3 de la maquette, branchée sur le modèle réel des séances.
@@ -288,7 +289,7 @@ function CarteSeance({ date, seance, enAvant, onCommencer, onDecaler, onOuvrir }
     action = (
       <>
         <button type="button" onClick={() => onOuvrir(seance)} style={boutonLeger}>
-          Voir la séance
+          {seance.alternative ? "Faire cette séance" : "Voir la séance"}
         </button>
         {peutDecaler ? lienDecaler : null}
       </>
@@ -309,7 +310,7 @@ function CarteSeance({ date, seance, enAvant, onCommencer, onDecaler, onOuvrir }
         />
         <span style={{ ...libelleSection, fontSize: 10, color: couleurSec }}>
           {seance.programme || TYPE_LABEL[seance.type]}
-          {estAujourdhui(date) ? " · aujourd'hui" : ` · ${dateCourte(date)}`}
+          {seance.alternative ? " · au choix" : estAujourdhui(date) ? " · aujourd'hui" : ` · ${dateCourte(date)}`}
         </span>
         {seance.is_coached ? (
           <span style={{ fontSize: 10, color: couleurSec }}>· avec ton coach</span>
@@ -375,17 +376,28 @@ function JourSelectionne({ entree, prochaine, prochaineHorsSemaine, onCommencer,
   const indexEnAvant = seances.findIndex((s) => statutSeance(date, s) === "a_faire");
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {seances.map((s, i) => (
-        <CarteSeance
-          key={s.id}
-          date={date}
-          seance={s}
-          enAvant={i === indexEnAvant}
-          onCommencer={onCommencer}
-          onDecaler={onDecaler}
-          onOuvrir={onOuvrir}
-        />
-      ))}
+      {seances.map((s, i) => {
+        const carte = (seance, enAvant) => (
+          <CarteSeance
+            key={seance.id}
+            date={date}
+            seance={seance}
+            enAvant={enAvant}
+            onCommencer={onCommencer}
+            onDecaler={onDecaler}
+            onOuvrir={onOuvrir}
+          />
+        );
+        if (!s.suivantes?.length) return carte(s, i === indexEnAvant);
+        return (
+          <SwipeCarousel
+            key={s.id}
+            peek
+            activeColor={T.vert}
+            slides={[s, ...s.suivantes].map((x, j) => ({ key: x.id, content: carte(x, j === 0 && i === indexEnAvant) }))}
+          />
+        );
+      })}
     </div>
   );
 }

@@ -355,7 +355,16 @@ export default function WodTab({
       ? (session.date < todayIso ? todayIso : session.date)
       : semaineDates[dayKey != null && dayKey > todayIdx ? dayKey : todayIdx]
     const idx = semaineDates.indexOf(iso)
-    if (idx !== -1) semaine[idx].seances.push(toSeance(session, program, false, iso))
+    if (idx !== -1) {
+      // Les deux autres séances à faire du programme, proposées en glissant la carte : celle que
+      // le sportif ouvre devient sa séance en cours (openedSessionId, voir nextUncompletedOf), donc
+      // la carte principale au retour. Une séance déjà décalée à une date a sa place sur son jour.
+      const suivantes = program.sessions
+        .filter(s => s.id !== session.id && s.session_type !== 'recurrent' && !s.hidden && !s.locked && !s.date && !isValidated(s))
+        .slice(0, 2)
+        .map(s => ({ ...toSeance(s, program, false, iso), decalable: false, alternative: true }))
+      semaine[idx].seances.push({ ...toSeance(session, program, false, iso), suivantes })
+    }
     else if (!prochaineApres || iso < prochaineApres.date) prochaineApres = { titre: session.title || 'Séance', date: iso }
     program.sessions.forEach(s => {
       if (s.id === session.id || s.session_type === 'recurrent' || s.hidden || isValidated(s) || !s.date || s.date <= iso) return
