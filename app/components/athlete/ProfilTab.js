@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import ChatThread from '@/app/components/ChatThread'
 import SettingsScreen from './SettingsScreen'
 import SubscriptionScreen from './SubscriptionScreen'
-import { SUBSCRIPTION_TIERS } from '@/lib/subscriptionTiers'
+import { SUBSCRIPTION_TIERS, SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 
 function calcAge(birthDate) {
   if (!birthDate) return null
@@ -111,7 +111,7 @@ export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate
         </div>
       </div>
 
-      {!isSubscribed && (
+      {SUBSCRIPTIONS_ENABLED && !isSubscribed && (
         <button onClick={() => setShowSubscription(true)} style={{
           background: 'var(--bordeaux)', color: '#fff', border: 'none', borderRadius: 'var(--ostryk-card-radius)',
           padding: '16px', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12,

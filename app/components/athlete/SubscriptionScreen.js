@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Check, Sparkle } from '@phosphor-icons/react'
-import { SUBSCRIPTION_TIERS, SUBSCRIPTION_PITCH } from '@/lib/subscriptionTiers'
+import { SUBSCRIPTION_TIERS, SUBSCRIPTION_PITCH, SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 import { ONE_TIME_OFFERS } from '@/lib/offers'
 
 // Écran d'abonnement du sportif. Vivait auparavant en dur dans SettingsScreen, derrière
@@ -143,7 +143,7 @@ export default function SubscriptionScreen({ athlete, token, onClose }) {
           </>
         )}
 
-        {Object.values(SUBSCRIPTION_TIERS).map(t => {
+        {SUBSCRIPTIONS_ENABLED && Object.values(SUBSCRIPTION_TIERS).map(t => {
           const isCurrent = isActive && athlete.subscription_tier === t.key
           const featured = !isActive && t.highlight
           return (

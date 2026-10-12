@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { buildKnownRaces } from '@/lib/raceEstimates'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
+import { SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -76,7 +77,7 @@ export async function GET(request, { params }) {
   // coach l'a personnalisé) pour donner envie de passer payant. Un programme donné directement par
   // le coach (is_self_service = false) reste toujours accessible en entier, quel que soit l'abonnement.
   // Chacun avance à son rythme, pas de notion de semaine.
-  const shouldGateFreeTier = !isCoach && athlete.subscription_status !== 'active'
+  const shouldGateFreeTier = SUBSCRIPTIONS_ENABLED && !isCoach && athlete.subscription_status !== 'active'
   const gatedProgs = shouldGateFreeTier
     ? (progs || []).map(p => {
         if (!p.is_self_service) return p

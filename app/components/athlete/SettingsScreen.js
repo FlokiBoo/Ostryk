@@ -5,7 +5,7 @@ import { CreditCard, Circle, Lock, Question, Envelope, Bug, FileText, DownloadSi
 import { supabase } from '@/lib/supabase'
 import PasswordSettingsModal from '@/app/components/PasswordSettingsModal'
 import SubscriptionScreen from './SubscriptionScreen'
-import { SUBSCRIPTION_TIERS } from '@/lib/subscriptionTiers'
+import { SUBSCRIPTION_TIERS, SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 import { clearLastPath } from '@/lib/lastPath'
 
 const rowStyle = {
@@ -111,6 +111,7 @@ export default function SettingsScreen({ athlete, token, onClose, onSexUpdate, o
 
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 8 }}>Compte</div>
 
+        {(SUBSCRIPTIONS_ENABLED || athlete.subscription_status === 'active') && (
         <button onClick={() => setShowSubscription(true)} style={rowStyle}>
           <span style={{ display: 'flex' }}><CreditCard size={20} /></span>
           <span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>
@@ -123,6 +124,7 @@ export default function SettingsScreen({ athlete, token, onClose, onSexUpdate, o
           </span>
           <span style={{ color: 'var(--text3)', fontSize: 18 }}>›</span>
         </button>
+        )}
 
         {athlete.strava_athlete_id ? (
           <>

@@ -3,8 +3,10 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { stripe, SUBSCRIPTION_TIERS } from '@/lib/stripe'
+import { SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 
 export async function POST(request, { params }) {
+  if (!SUBSCRIPTIONS_ENABLED) return NextResponse.json({ error: 'Les abonnements sont désactivés pour le moment.' }, { status: 403 })
   const { token } = await params
   const { tier } = await request.json()
   if (!SUBSCRIPTION_TIERS[tier]) return NextResponse.json({ error: 'formule invalide' }, { status: 400 })

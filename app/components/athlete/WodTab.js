@@ -8,6 +8,7 @@ import SwipeCarousel from './SwipeCarousel'
 import ChooseDaysModal from './ChooseDaysModal'
 import AccueilClient, { joursDeLaSemaine, isoLocal, parseJour, styleLibelleSection } from './AccueilClient'
 import { addDays } from '@/lib/programSchedule'
+import { SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 
 // Un programme multi-séances que personne n'a daté (ni le coach via day_of_week, ni le sportif via
 // athlete_days_of_week) doit d'abord demander son rythme hebdomadaire — c'est ChooseDaysModal, plus
@@ -310,7 +311,7 @@ export default function WodTab({
   // Un compte gratuit n'entendait parler d'abonnement qu'au moment précis où il butait sur la
   // limite de séances d'un programme libre-service — autant dire presque jamais. Bandeau permanent
   // mais volontairement fin (une ligne), placé sous la semaine : la séance du jour reste en tête.
-  const showUpsellBanner = !isCoachView && !athlete?.is_coach && athlete?.subscription_status !== 'active' && !!onOpenSubscription
+  const showUpsellBanner = SUBSCRIPTIONS_ENABLED && !isCoachView && !athlete?.is_coach && athlete?.subscription_status !== 'active' && !!onOpenSubscription
 
   // Semaine de l'accueil (lundi → dimanche). On y range
   //  - les séances validées cette semaine, au jour de leur validation (completed_at) ;

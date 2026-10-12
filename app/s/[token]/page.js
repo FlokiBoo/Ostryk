@@ -9,7 +9,7 @@ import MuscleAnatomyDiagram, { MUSCLE_GROUPS } from '@/app/components/MuscleAnat
 import FocusBodyDiagram from '@/app/components/FocusBodyDiagram'
 import Toast from '@/app/components/Toast'
 import SubscriptionScreen from '@/app/components/athlete/SubscriptionScreen'
-import { SUBSCRIPTION_TIERS, FREE_SESSIONS_DEFAULT } from '@/lib/subscriptionTiers'
+import { SUBSCRIPTION_TIERS, FREE_SESSIONS_DEFAULT, SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 import AthleteTabBar from '@/app/components/AthleteTabBar'
 import ChatHeaderButton from '@/app/components/ChatHeaderButton'
 import NotificationBell from '@/app/components/NotificationBell'
@@ -655,7 +655,7 @@ function AthleteView({ params }) {
       // fois tous les 7 jours, et seulement après une première séance validée (un compte tout neuf
       // n'a pas à être accueilli par un paywall).
       const skippedSet = new Set((comps || []).filter(c => c.skipped).map(c => c.program_session_id))
-      if (!isCoachView && !ath.is_coach && ath.subscription_status !== 'active' && completionSet.size > 0
+      if (SUBSCRIPTIONS_ENABLED && !isCoachView && !ath.is_coach && ath.subscription_status !== 'active' && completionSet.size > 0
           && !hasPendingDayPicker(progList, completionSet, skippedSet)) {
         const upsellKey = `coachpro_upsell_last_${token}`
         let lastShown = null
@@ -1028,7 +1028,7 @@ function AthleteView({ params }) {
     // Dernière séance accessible sans abonnement dans un programme en libre-service (voir la gate
     // côté serveur dans /api/athlete-view/[token]/route.js) : encourage à s'abonner pour débloquer
     // la suite du programme + tous les programmes de la plateforme.
-    if (athlete.subscription_status !== 'active') {
+    if (SUBSCRIPTIONS_ENABLED && athlete.subscription_status !== 'active') {
       const prog = programs.find(p => p.sessions.some(s => s.id === sessId))
       if (prog?.is_self_service) {
         const limit = prog.free_sessions_count ?? 3
