@@ -16,9 +16,10 @@ import { cloneTemplateToAthlete } from '@/lib/programTemplates'
 import ActivityTypeSelect from '@/app/components/ActivityTypeSelect'
 import { notifyAssigned, notifyProgramAvailable } from '@/lib/notify'
 import SessionBlockEditor from '@/app/components/SessionBlockEditor'
+import SeanceRealisee from '@/app/components/coach/SeanceRealisee'
 import {
   ClipboardText, CalendarBlank, Trash, UsersThree, Repeat,
-  CopySimple, ArrowsOutCardinal, Barbell, Heartbeat, Columns, X,
+  CopySimple, ArrowsOutCardinal, Barbell, Heartbeat, Columns, X, CheckCircle,
 } from '@phosphor-icons/react'
 
 function today() {
@@ -53,7 +54,7 @@ function DayCell({ children, isOver, setNodeRef, borderLeft }) {
 // poignée ⊕) plutôt qu'une puce entièrement "draggable" — même principe que SortableItem/DragHandle
 // ailleurs dans l'app : seule la poignée porte les listeners de glisser, le reste (case à cocher,
 // titre cliquable) reste utilisable normalement sans ambiguïté clic/glisser.
-function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact }) {
+function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact, doneAt }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: s.id })
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -72,6 +73,11 @@ function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact
     }}>
       <input type="checkbox" checked={selected} onChange={() => onToggleSelect(s.id)}
         style={{ accentColor: color, width: 13, height: 13, flexShrink: 0, cursor: 'pointer' }} />
+      {doneAt && (
+        <span title={`Terminée le ${new Date(doneAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`} style={{ display: 'flex', flexShrink: 0 }}>
+          <CheckCircle size={compact ? 13 : 16} weight="fill" />
+        </span>
+      )}
       <button onClick={() => onOpen(s.id)} title={s.title || 'Séance'} style={{
         flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', padding: compact ? '2px 0' : '5px 2px',
         font: 'inherit', fontWeight: 'inherit', color: 'inherit', cursor: 'pointer',
@@ -91,7 +97,7 @@ function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact
   )
 }
 
-function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds, onToggleSelect, onOpenSession, onAddAt, onAddFromWorkout, onDuplicateSession }) {
+function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds, doneDates, onToggleSelect, onOpenSession, onAddAt, onAddFromWorkout, onDuplicateSession }) {
   const { isOver, setNodeRef } = useDroppable({ id: `${week}-${d.key}` })
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   return (
@@ -101,7 +107,7 @@ function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{d.short}</span>
       </div>
       {cellSessions.map(s => (
-        <SessionChip key={s.id} s={s} selected={selectedIds.has(s.id)} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} />
+        <SessionChip key={s.id} s={s} selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} />
       ))}
       <div style={{ position: 'relative' }}>
         <button onClick={() => setAddMenuOpen(v => !v)} style={{
@@ -144,7 +150,7 @@ function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds
   )
 }
 
-function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSession, onMoveSession, onDuplicateSession, selectedIds, onToggleSelect }) {
+function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSession, onMoveSession, onDuplicateSession, selectedIds, doneDates, onToggleSelect }) {
   const byCell = {}
   sessions.forEach(s => {
     if (s.week_number == null || s.day_of_week == null) return
@@ -207,7 +213,7 @@ function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSe
                 return (
                   <WeekDayCell key={d.key} week={week} d={d} dayNumber={dayNumber}
                     cellSessions={byCell[`${week}-${d.key}`] || []} isFirstCol={di === 0}
-                    selectedIds={selectedIds} onToggleSelect={onToggleSelect}
+                    selectedIds={selectedIds} doneDates={doneDates} onToggleSelect={onToggleSelect}
                     onOpenSession={onOpenSession} onAddAt={onAddAt} onAddFromWorkout={onAddFromWorkout} onDuplicateSession={onDuplicateSession} />
                 )
               })}
@@ -219,7 +225,7 @@ function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSe
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '4px 2px' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)' }}>Non planifiées :</span>
             {unscheduled.map(s => (
-              <SessionChip key={s.id} s={s} compact selected={selectedIds.has(s.id)} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} />
+              <SessionChip key={s.id} s={s} compact selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} />
             ))}
           </div>
         )}
@@ -248,6 +254,10 @@ function ProgramEditorPage({ params }) {
   // Vue côte à côte : liste d'ids affichés en panneaux (SessionBlockEditor) plutôt que la simple
   // sélection ci-dessus, pour survivre à sa remise à zéro (ex: après une action sur la sélection).
   const [sideBySideIds, setSideBySideIds] = useState(null)
+  // Séances terminées par le sportif (id -> date de validation). Dans la vue côte à côte, elles
+  // s'ouvrent sur ce qui a été réalisé ; editingDoneIds liste celles repassées en édition.
+  const [doneDates, setDoneDates] = useState({})
+  const [editingDoneIds, setEditingDoneIds] = useState(new Set())
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [duplicatingSelected, setDuplicatingSelected] = useState(false)
   const [titleSaving, setTitleSaving] = useState(false)
@@ -388,6 +398,15 @@ function ProgramEditorPage({ params }) {
         circuits: s.circuits || [],
       }))
       setSessions(loaded)
+
+      if (!isTemplate && a && loaded.length) {
+        const { data: comps } = await supabase.from('program_completions')
+          .select('program_session_id, completed_at, skipped')
+          .eq('athlete_id', a.id).in('program_session_id', loaded.map(s => s.id))
+        const dates = {}
+        ;(comps || []).forEach(c => { if (!c.skipped) dates[c.program_session_id] = c.completed_at || true })
+        setDoneDates(dates)
+      }
 
       if (!isTemplate && a) {
         const [{ data: objs }, { data: blocks }] = await Promise.all([
@@ -1202,6 +1221,7 @@ function ProgramEditorPage({ params }) {
           onMoveSession={moveSessionToDay}
           onDuplicateSession={(id) => duplicateSession(id, null, { skipOpen: true })}
           selectedIds={selectedSessionIds}
+          doneDates={doneDates}
           onToggleSelect={toggleSessionSelected}
         />
 
@@ -1225,6 +1245,7 @@ function ProgramEditorPage({ params }) {
             <button
               onClick={() => {
                 setSideBySideIds(sessions.filter(s => selectedSessionIds.has(s.id)).map(s => s.id))
+                setEditingDoneIds(new Set())
                 setSelectedSessionIds(new Set())
               }}
               title="Ouvrir les séances sélectionnées côte à côte"
@@ -1262,18 +1283,30 @@ function ProgramEditorPage({ params }) {
               </span>
             </div>
             <div style={{ flex: 1, display: 'flex', overflowX: 'auto' }}>
-              {sideBySideIds.map(id => (
-                <div key={id} style={{ width: 480, flexShrink: 0, height: '100%', overflowY: 'auto', borderRight: '1px solid var(--border)' }}>
-                  <SessionBlockEditor
-                    sessionId={id}
-                    backHref={`/programs/${athleteId}/${programId}`}
-                    onClose={() => setSideBySideIds(prev => {
-                      const next = (prev || []).filter(x => x !== id)
-                      return next.length ? next : null
-                    })}
-                  />
-                </div>
-              ))}
+              {sideBySideIds.map(id => {
+                const closePanel = () => setSideBySideIds(prev => {
+                  const next = (prev || []).filter(x => x !== id)
+                  return next.length ? next : null
+                })
+                return (
+                  <div key={id} style={{ width: 480, flexShrink: 0, height: '100%', overflowY: 'auto', borderRight: '1px solid var(--border)' }}>
+                    {doneDates[id] && !editingDoneIds.has(id) ? (
+                      <SeanceRealisee
+                        sessionId={id}
+                        athleteId={athleteId}
+                        onEdit={() => setEditingDoneIds(prev => new Set(prev).add(id))}
+                        onClose={closePanel}
+                      />
+                    ) : (
+                      <SessionBlockEditor
+                        sessionId={id}
+                        backHref={`/programs/${athleteId}/${programId}`}
+                        onClose={closePanel}
+                      />
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
