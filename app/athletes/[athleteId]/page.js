@@ -257,6 +257,9 @@ export default function FicheSportifPage() {
 // directement sur Supabase (le coach est en ligne, face à son sportif — pas de file hors ligne).
 function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite, onFermer, onTerminee }) {
   const [mouvements, setMouvements] = useState(null)
+  // Exercices remplacés pendant ce coaching (id → nouveau nom) : `brute` ne se recharge qu'en fin
+  // de séance, l'écran doit suivre tout de suite.
+  const [remplacements, setRemplacements] = useState({})
   const [exerciseSets, setExerciseSets] = useState(() => {
     const out = {}
     for (const e of brute.program_exercises || []) {
@@ -280,8 +283,11 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
     const exercises = [...(brute.program_exercises || [])]
       .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
       .map(e => {
-        const m = parNom.get((e.name || '').trim().toLowerCase())
-        return { ...e, video_url: m?.youtube_url || m?.video_url || e.video_url || null }
+        const name = remplacements[e.id] ?? e.name
+        const m = parNom.get((name || '').trim().toLowerCase())
+        // Exercice remplacé : la vidéo et les muscles de l'ancien ne le concernent plus.
+        const ancien = remplacements[e.id] ? { video_url: null, focus_muscles: null } : {}
+        return { ...e, ...ancien, name, video_url: m?.youtube_url || m?.video_url || (remplacements[e.id] ? null : e.video_url) || null }
       })
     const base = { ...brute, exercises }
     return {
@@ -291,7 +297,7 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
         retourAuCalme: sectionDeSeance(base, 'retourAuCalme', mouvements),
       },
     }
-  }, [brute, mouvements])
+  }, [brute, mouvements, remplacements])
 
   const mouvementsSections = useMemo(() => Object.fromEntries((mouvements || []).map(m => [m.id, { id: m.id, nom: m.name, video_url: m.youtube_url || m.video_url || null }])), [mouvements])
 
@@ -413,6 +419,20 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
     if (error) throw new Error('Note non enregistrée : ' + error.message)
   }
 
+  // Remplacement définitif, sur la ligne existante : les séries, la prescription et les notes
+  // restent attachées à l'exercice (les supprimer effacerait ce qui vient d'être saisi).
+  const remplacerExercice = async ({ program_exercise_id, nom }) => {
+    const m = (mouvements || []).find(x => x.name.trim().toLowerCase() === nom.trim().toLowerCase())
+    const { error } = await supabase.from('program_exercises')
+      .update({ name: nom.trim(), video_url: m?.youtube_url || m?.video_url || null, focus_muscles: null })
+      .eq('id', program_exercise_id)
+    if (error) throw new Error('Exercice non remplacé : ' + error.message)
+    setRemplacements(prev => ({ ...prev, [program_exercise_id]: nom.trim() }))
+    // Séance désormais propre à ce sportif. Sans attendre ni bloquer : la colonne peut manquer
+    // (voir l'avertissement en tête de fichier).
+    supabase.from('program_sessions').update({ customized_at: new Date().toISOString() }).eq('id', brute.id).then(() => {})
+  }
+
   const enregistrerSeance = async (champs) => {
     const { error } = await supabase.from('program_completions').upsert({
       athlete_id: athleteId, program_session_id: brute.id, skipped: false,
@@ -473,6 +493,8 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
       onEnsureExerciseSets={ensureExerciseSets}
       onSaveExerciseSet={saveExerciseSet}
       onEnregistrerNotePrivee={enregistrerNotePrivee}
+      onRemplacerExercice={remplacerExercice}
+      bibliotheque={mouvements || []}
       onPartagerRecap={partagerRecap}
       onTerminer={terminer}
       onQuitter={onFermer}

@@ -451,7 +451,7 @@ function Champ({ exercice, champ, valeur, suffixe, onPas, onSaisie }) {
   )
 }
 
-function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null, maNote = '', onMaNote = null, onAjout = null, onHistorique = null }) {
+function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null, maNote = '', onMaNote = null, onAjout = null, onHistorique = null, onRemplacer = null }) {
   const [noteOuverte, setNoteOuverte] = useState(false)
   const [saisieNote, setSaisieNote] = useState(false)
   const pastille = {
@@ -541,7 +541,7 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
         />
       ) : null}
 
-      {(onMaNote && !saisieNote && !maNote) || mesuresAjoutables.length > 0 || onHistorique ? (
+      {(onMaNote && !saisieNote && !maNote) || mesuresAjoutables.length > 0 || onHistorique || onRemplacer ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
           {onMaNote && !saisieNote && !maNote ? (
             <button type="button" onClick={() => setSaisieNote(true)} style={pastille}>✎ Note</button>
@@ -553,6 +553,9 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
           ))}
           {onHistorique ? (
             <button type="button" onClick={() => onHistorique(exercice)} style={pastille}>↺ Historique</button>
+          ) : null}
+          {onRemplacer ? (
+            <button type="button" onClick={() => onRemplacer(exercice)} style={pastille}>⇄ Remplacer</button>
           ) : null}
         </div>
       ) : null}
@@ -901,7 +904,7 @@ function fusionnerBloc(bloc, depuisBase, memo) {
   récapitulatif partageable (onPartagerRecap). Les séries, elles, passent par les mêmes
   onEnsureExerciseSets / onSaveExerciseSet : c'est l'appelant qui les marque entered_by_role = 'coach'.
 */
-export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null, notesExercices = {}, onEnregistrerNote = null, historique = {} }) {
+export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null, notesExercices = {}, onEnregistrerNote = null, historique = {}, onRemplacerExercice = null, bibliotheque = [] }) {
   const coach = mode === 'coach'
   useKeepAwake()
   const [memo] = useState(() => lireEtat(athleteId, session.id))
@@ -947,6 +950,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   const [notesPrivees, setNotesPrivees] = useState(() => Object.fromEntries(blocs.flatMap(b => b.exercices.map(e => [e.id, e.note_privee]))))
   const [notePriveeOuverte, setNotePriveeOuverte] = useState(null) // { exercice, texte, envoi }
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null) // exercice dont on relit les saisies passées
+  const [remplacement, setRemplacement] = useState(null) // { exercice, texte, envoi }
   const [fin, setFin] = useState(null) // horodatage de fin de séance, null tant qu'elle continue
   const [terminaison, setTerminaison] = useState(false)
 
@@ -1065,6 +1069,46 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
       {contenu}
       {tempo ? <ExplicationTempo tempo={tempo} onFermer={() => setTempo(null)} /> : null}
       {video ? <FenetreVideo video={video} onFermer={() => setVideo(null)} /> : null}
+      {remplacement ? (() => {
+        const recherche = remplacement.texte.trim().toLowerCase()
+        const propositions = recherche
+          ? bibliotheque.filter(m => m.name.toLowerCase().includes(recherche) && m.name.trim().toLowerCase() !== remplacement.exercice.nom.trim().toLowerCase()).slice(0, 8)
+          : []
+        const exact = propositions.some(m => m.name.trim().toLowerCase() === recherche)
+        const choisir = async (nom) => {
+          const { exercice } = remplacement
+          setRemplacement(r => ({ ...r, envoi: true }))
+          try {
+            await onRemplacerExercice({ program_exercise_id: exercice.id, nom })
+            setRemplacement(null)
+            setToast('Exercice remplacé')
+          } catch (err) {
+            setRemplacement(r => ({ ...r, envoi: false }))
+            setToast(err?.message || 'Exercice non remplacé')
+          }
+        }
+        const ligne = {
+          display: 'block', width: '100%', textAlign: 'left', background: T.blanc, border: 'none', borderRadius: 10,
+          padding: '0 12px', minHeight: 44, marginBottom: 6, fontSize: 14, color: T.texte, cursor: 'pointer', fontFamily: 'inherit',
+        }
+        return (
+          <FeuilleModale onFermer={() => setRemplacement(null)}>
+            <p style={{ fontFamily: TITRE, fontSize: 16, margin: '0 0 2px' }}>Remplacer l&apos;exercice</p>
+            <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 12px' }}>{remplacement.exercice.nom} · séries, reps et charge prévues conservées</p>
+            <input autoFocus value={remplacement.texte} placeholder="Nom du nouvel exercice" aria-label="Nouvel exercice"
+              onChange={e => { const texte = e.target.value; setRemplacement(r => ({ ...r, texte })) }}
+              style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${T.bordure}`, borderRadius: 10, background: T.blanc, padding: '0 12px', height: 46, fontSize: 16, color: T.texte, fontFamily: 'inherit', outline: 'none', marginBottom: 10 }} />
+            {propositions.map(m => (
+              <button key={m.id} type="button" disabled={remplacement.envoi} onClick={() => choisir(m.name)} style={ligne}>{m.name}</button>
+            ))}
+            {recherche && !exact ? (
+              <button type="button" disabled={remplacement.envoi} onClick={() => choisir(remplacement.texte.trim())} style={{ ...ligne, background: 'none', border: `1px dashed ${T.bordure}`, color: T.texteCorps }}>
+                Utiliser « {remplacement.texte.trim()} » (hors bibliothèque)
+              </button>
+            ) : null}
+          </FeuilleModale>
+        )
+      })() : null}
       {historiqueOuvert ? (
         <FeuilleModale onFermer={() => setHistoriqueOuvert(null)}>
           <p style={{ fontFamily: TITRE, fontSize: 16, margin: '0 0 2px' }}>Historique</p>
@@ -1195,6 +1239,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
               maNote={notesExercices[e.id]?.note || ''}
               onMaNote={onEnregistrerNote ? (ex, texte) => onEnregistrerNote(ex.id, ex.nom, texte) : null}
               onHistorique={historique[cleExercice(e.nom)]?.length ? setHistoriqueOuvert : null}
+              onRemplacer={coach && onRemplacerExercice ? ex => setRemplacement({ exercice: ex, texte: '', envoi: false }) : null}
               onAjout={champ => {
                 // Mesure retirée : sa valeur du tour en cours part avec elle.
                 if (e.ajoute[champ]) majValeur(bloc, e, champ, v => ({ ...v, [champ]: null }))
