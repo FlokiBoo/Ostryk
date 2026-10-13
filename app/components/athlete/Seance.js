@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { unitesDeSerie } from '@/lib/unitesSerie'
+import { cleExercice } from '@/lib/historiqueExercice'
 import Toast from '@/app/components/Toast'
 import { parseMusclesFromText, randomCitation, BodySVG } from '@/app/components/CelebrationModal'
 import { COLOR_BY_GROUP } from '@/app/components/MuscleAnatomyDiagram'
@@ -450,7 +451,7 @@ function Champ({ exercice, champ, valeur, suffixe, onPas, onSaisie }) {
   )
 }
 
-function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null, maNote = '', onMaNote = null, onAjout = null }) {
+function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null, maNote = '', onMaNote = null, onAjout = null, onHistorique = null }) {
   const [noteOuverte, setNoteOuverte] = useState(false)
   const [saisieNote, setSaisieNote] = useState(false)
   const pastille = {
@@ -540,7 +541,7 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
         />
       ) : null}
 
-      {(onMaNote && !saisieNote && !maNote) || mesuresAjoutables.length > 0 ? (
+      {(onMaNote && !saisieNote && !maNote) || mesuresAjoutables.length > 0 || onHistorique ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
           {onMaNote && !saisieNote && !maNote ? (
             <button type="button" onClick={() => setSaisieNote(true)} style={pastille}>✎ Note</button>
@@ -550,6 +551,9 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
               {exercice.ajoute[c] ? '×' : '+'} {c === 'kg' ? 'Charge' : 'Secondes'}
             </button>
           ))}
+          {onHistorique ? (
+            <button type="button" onClick={() => onHistorique(exercice)} style={pastille}>↺ Historique</button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -897,7 +901,7 @@ function fusionnerBloc(bloc, depuisBase, memo) {
   récapitulatif partageable (onPartagerRecap). Les séries, elles, passent par les mêmes
   onEnsureExerciseSets / onSaveExerciseSet : c'est l'appelant qui les marque entered_by_role = 'coach'.
 */
-export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null, notesExercices = {}, onEnregistrerNote = null }) {
+export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null, notesExercices = {}, onEnregistrerNote = null, historique = {} }) {
   const coach = mode === 'coach'
   useKeepAwake()
   const [memo] = useState(() => lireEtat(athleteId, session.id))
@@ -942,6 +946,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
   const [tempo, setTempo] = useState(null)
   const [notesPrivees, setNotesPrivees] = useState(() => Object.fromEntries(blocs.flatMap(b => b.exercices.map(e => [e.id, e.note_privee]))))
   const [notePriveeOuverte, setNotePriveeOuverte] = useState(null) // { exercice, texte, envoi }
+  const [historiqueOuvert, setHistoriqueOuvert] = useState(null) // exercice dont on relit les saisies passées
   const [fin, setFin] = useState(null) // horodatage de fin de séance, null tant qu'elle continue
   const [terminaison, setTerminaison] = useState(false)
 
@@ -1060,6 +1065,31 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
       {contenu}
       {tempo ? <ExplicationTempo tempo={tempo} onFermer={() => setTempo(null)} /> : null}
       {video ? <FenetreVideo video={video} onFermer={() => setVideo(null)} /> : null}
+      {historiqueOuvert ? (
+        <FeuilleModale onFermer={() => setHistoriqueOuvert(null)}>
+          <p style={{ fontFamily: TITRE, fontSize: 16, margin: '0 0 2px' }}>Historique</p>
+          <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 12px' }}>{historiqueOuvert.nom} · tes dernières fois</p>
+          {(historique[cleExercice(historiqueOuvert.nom)] || []).slice(0, 10).map(h => (
+            <div key={h.id} style={{ background: T.blanc, borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
+              <p style={{ fontSize: 11, color: T.texteSec, margin: '0 0 6px' }}>
+                {h.date ? new Date(h.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) : 'Séance non terminée'} · {h.seance}
+              </p>
+              {h.series.map((st, i) => (
+                <p key={i} style={{ fontSize: 13, color: T.texte, margin: '2px 0', display: 'flex', gap: 10 }}>
+                  <span style={{ fontSize: 11, color: T.texteSec, minWidth: 48 }}>Série {i + 1}</span>
+                  <span>{[st.reps != null && st.reps !== '' ? `${st.reps} reps` : null, st.kg != null && st.kg !== '' ? `${fmt(Number(st.kg))} kg` : null, st.sec != null && st.sec !== '' ? `${fmt(Number(st.sec))} sec` : null].filter(Boolean).join(' × ')}</span>
+                </p>
+              ))}
+              {h.resume ? (
+                <p style={{ fontSize: 13, color: T.texte, margin: '2px 0' }}>
+                  {[h.resume.series ? `${h.resume.series} séries` : null, h.resume.reps ? `${h.resume.reps} reps` : null, h.resume.kg ? `${h.resume.kg} kg` : null].filter(Boolean).join(' · ')}
+                </p>
+              ) : null}
+              {h.note ? <p style={{ fontSize: 12, lineHeight: 1.45, color: T.texteCorps, fontStyle: 'italic', margin: '6px 0 0', whiteSpace: 'pre-wrap' }}>« {h.note} »</p> : null}
+            </div>
+          ))}
+        </FeuilleModale>
+      ) : null}
       {notePriveeOuverte ? (
         <FeuilleModale onFermer={() => setNotePriveeOuverte(null)}>
           <p style={{ fontFamily: TITRE, fontSize: 16, margin: '0 0 2px' }}>Note privée</p>
@@ -1164,6 +1194,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
               onNotePrivee={coach && onEnregistrerNotePrivee ? ex => setNotePriveeOuverte({ exercice: ex, texte: notesPrivees[ex.id] || '', envoi: false }) : null}
               maNote={notesExercices[e.id]?.note || ''}
               onMaNote={onEnregistrerNote ? (ex, texte) => onEnregistrerNote(ex.id, ex.nom, texte) : null}
+              onHistorique={historique[cleExercice(e.nom)]?.length ? setHistoriqueOuvert : null}
               onAjout={champ => {
                 // Mesure retirée : sa valeur du tour en cours part avec elle.
                 if (e.ajoute[champ]) majValeur(bloc, e, champ, v => ({ ...v, [champ]: null }))

@@ -10,6 +10,7 @@ import FocusBodyDiagram from '@/app/components/FocusBodyDiagram'
 import Toast from '@/app/components/Toast'
 import SubscriptionScreen from '@/app/components/athlete/SubscriptionScreen'
 import { SUBSCRIPTION_TIERS, FREE_SESSIONS_DEFAULT, SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
+import { historiqueParExercice } from '@/lib/historiqueExercice'
 import AthleteTabBar from '@/app/components/AthleteTabBar'
 import ChatHeaderButton from '@/app/components/ChatHeaderButton'
 import NotificationBell from '@/app/components/NotificationBell'
@@ -1338,6 +1339,7 @@ function AthleteView({ params }) {
             onEnsureExerciseSets={ensureExerciseSets}
             onSaveExerciseSet={saveExerciseSet}
             notesExercices={exerciseLogs}
+            historique={historiqueParExercice({ programs, exerciseSets, exerciseLogs, completionDates, sessionExclueId: focusSession.id })}
             onEnregistrerNote={(exerciseId, nom, texte) => saveExerciseLog(exerciseId, nom, 'note', texte)}
             onQuitter={() => setPlayerStarted(false)}
             // Pas de notation côté client : la séance est validée dès l'écran de fin (onEnregistrer),
