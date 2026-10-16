@@ -1301,6 +1301,7 @@ function ProgramEditorPage({ params }) {
                       <SessionBlockEditor
                         sessionId={id}
                         backHref={`/programs/${athleteId}/${programId}`}
+                        athleteId={isTemplate ? null : athleteId}
                         onClose={closePanel}
                       />
                     )}

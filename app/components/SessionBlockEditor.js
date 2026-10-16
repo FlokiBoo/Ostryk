@@ -25,13 +25,14 @@ import {
   X, TextB, TextItalic, LinkSimple, ListBullets, TextTSlash,
   CaretLeft, CaretRight, ArrowsDownUp, Plus, FileText, Flame, Snowflake, Barbell,
   DotsThreeVertical, Info, MagnifyingGlass, Check, Timer, DotsSixVertical,
-  ArrowsClockwise, Heartbeat, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack, CaretDown,
+  ArrowsClockwise, Heartbeat, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack, CaretDown, ClockCounterClockwise,
 } from '@phosphor-icons/react'
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
 import EditeurSectionTexte from '@/app/components/EditeurSectionTexte'
 import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
 import { sectionDeSeance, lignesDeProtocole } from '@/lib/sectionsTexte'
+import { historiqueParExercice, cleExercice } from '@/lib/historiqueExercice'
 
 // Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
 // petit helper autonome plutôt qu'un import cross-fichier).
@@ -453,7 +454,9 @@ const input = {
 // côte, voir app/programs/.../page.js) plutôt que comme une page à part entière, fermer CE panneau
 // ne doit pas naviguer loin des autres — le parent décide alors quoi faire (retirer le panneau).
 // Sans onClose, comportement page normale : navigation vers backHref.
-export default function SessionBlockEditor({ sessionId, backHref, canManageCatalog = true, onClose }) {
+// athleteId (optionnel) : séance d'un programme client — active le bouton Historique de chaque
+// exercice (ce que le sportif a saisi les fois précédentes). Absent sur les templates/workouts.
+export default function SessionBlockEditor({ sessionId, backHref, canManageCatalog = true, onClose, athleteId = null }) {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
@@ -534,6 +537,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   // une donnée propre à cette séance : écrit directement en base à la sauvegarde, sans passer par
   // handleSave/setUnsavedChanges (program_exercises ne porte ni muscles ni vidéo).
   const [advancedSettingsExerciseId, setAdvancedSettingsExerciseId] = useState(null)
+  // Historique d'un exercice chez ce sportif : { nom, entrees } — entrees null pendant le chargement.
+  const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
   const [advancedDraftMuscles, setAdvancedDraftMuscles] = useState([])
   const [advancedDraftVideoUrl, setAdvancedDraftVideoUrl] = useState('')
   const [savingAdvancedSettings, setSavingAdvancedSettings] = useState(false)
@@ -1175,6 +1180,38 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   }
 
   const closeAdvancedSettings = () => setAdvancedSettingsExerciseId(null)
+
+  // Historique du sportif sur ce mouvement, tous programmes confondus (relié par nom, comme côté
+  // sportif — voir lib/historiqueExercice.js). Chargé au clic et filtré sur les exercices du même
+  // nom avant de demander séries et notes, pour ne pas buter sur la limite de lignes de Supabase.
+  const openHistorique = async (ex) => {
+    const nom = ex.name
+    setHistoriqueOuvert({ nom, entrees: null })
+    const { data: progs } = await supabase.from('programs')
+      .select('id, title, program_sessions(id, title, program_exercises(id, name))')
+      .eq('athlete_id', athleteId)
+    const cle = cleExercice(nom)
+    const programs = (progs || []).map(p => ({
+      title: p.title,
+      sessions: (p.program_sessions || []).map(s => ({
+        id: s.id, title: s.title,
+        exercises: (s.program_exercises || []).filter(e => cleExercice(e.name) === cle),
+      })).filter(s => s.exercises.length),
+    }))
+    const exoIds = programs.flatMap(p => p.sessions.flatMap(s => s.exercises.map(e => e.id)))
+    const seanceIds = programs.flatMap(p => p.sessions.map(s => s.id))
+    const [{ data: sets }, { data: logs }, { data: comps }] = exoIds.length ? await Promise.all([
+      supabase.from('program_exercise_sets').select('program_exercise_id, set_index, reps_done, kg_done, sec_done').eq('athlete_id', athleteId).in('program_exercise_id', exoIds).order('set_index'),
+      supabase.from('program_exercise_logs').select('program_exercise_id, sets_done, reps_done, kg_done, note').eq('athlete_id', athleteId).in('program_exercise_id', exoIds),
+      supabase.from('program_completions').select('program_session_id, completed_at').eq('athlete_id', athleteId).in('program_session_id', seanceIds),
+    ]) : [{ data: [] }, { data: [] }, { data: [] }]
+    const exerciseSets = {}, exerciseLogs = {}, completionDates = {}
+    ;(sets || []).forEach(st => { (exerciseSets[st.program_exercise_id] ||= []).push(st) })
+    ;(logs || []).forEach(l => { exerciseLogs[l.program_exercise_id] = l })
+    ;(comps || []).forEach(co => { if (co.completed_at) completionDates[co.program_session_id] = co.completed_at })
+    const entrees = historiqueParExercice({ programs, exerciseSets, exerciseLogs, completionDates, sessionExclueId: sessionId })[cle] || []
+    setHistoriqueOuvert(prev => prev && prev.nom === nom ? { nom, entrees } : prev)
+  }
 
   const toggleAdvancedDraftMuscle = (key) => {
     setAdvancedDraftMuscles(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
@@ -2062,6 +2099,15 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                             >
                               <Backpack size={18} weight={ex.materiel ? 'fill' : 'regular'} />
                             </button>
+                            {athleteId && (
+                              <button
+                                onClick={() => openHistorique(ex)}
+                                title="Historique : résultats précédents du sportif sur cet exercice"
+                                style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: c.textMuted }}
+                              >
+                                <ClockCounterClockwise size={18} />
+                              </button>
+                            )}
                             <button
                               onClick={() => setExerciseMenuOpenId(v => v === ex.id ? null : ex.id)}
                               style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: c.textMuted }}
@@ -2335,13 +2381,25 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                                     </span>
                                   )}
                                 </div>
-                                {canManageCatalog && (
-                                  <button
-                                    onClick={() => openAdvancedSettings(ex)}
-                                    style={{ display: 'block', border: 'none', background: 'none', padding: 0, marginBottom: 8, color: c.blue, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}
-                                  >
-                                    Advanced settings
-                                  </button>
+                                {(canManageCatalog || athleteId) && (
+                                  <div style={{ display: 'flex', gap: 14, marginBottom: 8 }}>
+                                    {canManageCatalog && (
+                                      <button
+                                        onClick={() => openAdvancedSettings(ex)}
+                                        style={{ display: 'block', border: 'none', background: 'none', padding: 0, color: c.blue, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}
+                                      >
+                                        Advanced settings
+                                      </button>
+                                    )}
+                                    {athleteId && (
+                                      <button
+                                        onClick={() => openHistorique(ex)}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', padding: 0, color: c.blue, fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}
+                                      >
+                                        <ClockCounterClockwise size={13} /> Historique
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                                   <span style={{ fontSize: 12, color: c.textMuted }}>Tempo</span>
@@ -2995,6 +3053,53 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                 >
                   {savingAdvancedSettings ? '…' : 'Enregistrer'}
                 </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Historique du sportif sur un exercice — voir openHistorique. */}
+        {historiqueOuvert && (
+          <>
+            <div onClick={() => setHistoriqueOuvert(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 210 }} />
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 211,
+              width: 520, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 64px)', overflowY: 'auto',
+              background: c.bg, borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: `1px solid ${c.border}` }}>
+                <div>
+                  <span style={{ display: 'block', fontSize: 22, fontWeight: 700, color: c.text }}>Historique</span>
+                  <span style={{ fontSize: 13, color: c.textMuted }}>{historiqueOuvert.nom}</span>
+                </div>
+                <button onClick={() => setHistoriqueOuvert(null)} style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: c.text }}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div style={{ padding: '16px 24px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {historiqueOuvert.entrees === null ? (
+                  <span style={{ fontSize: 13, color: c.textMuted }}>Chargement…</span>
+                ) : historiqueOuvert.entrees.length === 0 ? (
+                  <span style={{ fontSize: 13, color: c.textMuted }}>Le sportif n&apos;a encore rien saisi sur cet exercice.</span>
+                ) : historiqueOuvert.entrees.slice(0, 15).map(h => (
+                  <div key={h.id} style={{ border: `1px solid ${c.border}`, borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 6 }}>
+                      {h.date ? new Date(h.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) : 'Séance non terminée'} · {h.seance}
+                    </div>
+                    {h.series.map((st, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 10, fontSize: 14, color: c.text, margin: '2px 0' }}>
+                        <span style={{ fontSize: 12, color: c.textMuted, minWidth: 52 }}>Série {i + 1}</span>
+                        <span>{[st.reps != null && st.reps !== '' ? `${st.reps} reps` : null, st.kg != null && st.kg !== '' ? `${String(st.kg).replace('.', ',')} kg` : null, st.sec != null && st.sec !== '' ? `${st.sec} sec` : null].filter(Boolean).join(' × ')}</span>
+                      </div>
+                    ))}
+                    {h.resume && (
+                      <div style={{ fontSize: 14, color: c.text, margin: '2px 0' }}>
+                        {[h.resume.series ? `${h.resume.series} séries` : null, h.resume.reps ? `${h.resume.reps} reps` : null, h.resume.kg ? `${h.resume.kg} kg` : null].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                    {h.note && <div style={{ fontSize: 13, lineHeight: 1.45, color: c.textMuted, fontStyle: 'italic', marginTop: 6, whiteSpace: 'pre-wrap' }}>« {h.note} »</div>}
+                  </div>
+                ))}
               </div>
             </div>
           </>
