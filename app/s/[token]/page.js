@@ -11,6 +11,7 @@ import Toast from '@/app/components/Toast'
 import SubscriptionScreen from '@/app/components/athlete/SubscriptionScreen'
 import { SUBSCRIPTION_TIERS, FREE_SESSIONS_DEFAULT, SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 import { historiqueParExercice } from '@/lib/historiqueExercice'
+import { telechargerSeancePdf } from '@/lib/seancePdf'
 import AthleteTabBar from '@/app/components/AthleteTabBar'
 import ChatHeaderButton from '@/app/components/ChatHeaderButton'
 import NotificationBell from '@/app/components/NotificationBell'
@@ -32,7 +33,7 @@ import WeeklyRecapPopup from '@/app/components/WeeklyRecapPopup'
 import {
   House, WifiSlash, Bell, Target, Repeat, SkipForward, Lock, EyeSlash, Backpack, UsersThree,
   Lightning, PencilSimple, Calculator, CalendarBlank, Prohibit, Lightbulb, ChartBar, ChartLineUp,
-  LinkSimple, Circle, Clock, DownloadSimple,
+  LinkSimple, Circle, Clock, DownloadSimple, FilePdf,
 } from '@phosphor-icons/react'
 import { annotatePaceReferences, formatPace, isRunMovement, isCardioMovementName, cardioMovementSortKey, is3030Movement, PACE_BASES, computePaceForBasePct, computeDistanceForBasePct, formatDistance, RACE_TARGETS, parsePaceInput } from '@/lib/raceEstimates'
 import { hasCardioSteps } from '@/lib/cardioSteps'
@@ -1356,6 +1357,7 @@ function AthleteView({ params }) {
           {focusSession ? (
             <SessionCard
               mouvementsSections={mouvementsSections}
+              athleteNom={athlete?.name || ''}
               session={focusSession}
               idx={0}
               isOpen={true}
@@ -1836,7 +1838,7 @@ function RunResultLogger({ exo, exerciseLogs, onSaveLog, onSyncRaceMetric, targe
   )
 }
 
-function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onToggle, onValidate, onUnvalidate, onSkip, onPostpone, validating, exerciseLogs = {}, onSaveLog, athleteId, trackedMovements = [], onSaveMetricResult, exerciseSets = {}, onAddExerciseSet, onEnsureExerciseSets, onSaveExerciseSet, onDeleteExerciseSet, isCoachView, isCoach, raceKnown = {}, onSyncRaceMetric, targetPaces, onSaveTargetPace, isFreeSession = false, onAddExercise, onToggleSuperset, onDuplicateFreeSession, onUpdateFreeSessionDate, circuitLogs = {}, onSaveCircuitLog, isGroupLeader = false, onLaunchTimer, onSaveCoachNote, onExerciseSaved, isRecurring = false, token, playerMode = false, onStartPlayer, mouvementsSections = {} }) {
+function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onToggle, onValidate, onUnvalidate, onSkip, onPostpone, validating, exerciseLogs = {}, onSaveLog, athleteId, trackedMovements = [], onSaveMetricResult, exerciseSets = {}, onAddExerciseSet, onEnsureExerciseSets, onSaveExerciseSet, onDeleteExerciseSet, isCoachView, isCoach, raceKnown = {}, onSyncRaceMetric, targetPaces, onSaveTargetPace, isFreeSession = false, onAddExercise, onToggleSuperset, onDuplicateFreeSession, onUpdateFreeSessionDate, circuitLogs = {}, onSaveCircuitLog, isGroupLeader = false, onLaunchTimer, onSaveCoachNote, onExerciseSaved, isRecurring = false, token, playerMode = false, onStartPlayer, mouvementsSections = {}, athleteNom = '' }) {
   const [showGroupPaces, setShowGroupPaces] = useState(false)
   const [showPostpone, setShowPostpone] = useState(false)
   const paceRefs = annotatePaceReferences(session.coach_notes, raceKnown)
@@ -1886,6 +1888,18 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
     retourAuCalme: sectionDeSeance(session, 'retourAuCalme'),
   }
   const [videoSection, setVideoSection] = useState(null)
+  const [pdfEnCours, setPdfEnCours] = useState(false)
+  const telechargerPdf = async () => {
+    if (pdfEnCours) return
+    setPdfEnCours(true)
+    try {
+      await telechargerSeancePdf({ session, exercises: session.exercises, sections, mouvements: mouvementsSections, sousTitre: athleteNom })
+    } catch {
+      alert("Le PDF n'a pas pu être créé. Réessaie dans un instant.")
+    } finally {
+      setPdfEnCours(false)
+    }
+  }
   // La liste condensée du mode player (juste nom + nb de séries, voir plus bas) n'affiche jamais la
   // note du coach — sans conséquence tant qu'elle mène à l'écran de séance (Seance.js), qui la montre à son tour,
   // mais pour une séance de course (redirigée vers cette vue complète, Seance.js ne gérant pas
@@ -2060,6 +2074,15 @@ function SessionCard({ session, idx, isOpen, isCompleted, isSkipped = false, onT
 
       {isOpen && !session.locked && !session.hidden && (
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {exos.length > 0 && (
+            <button onClick={telechargerPdf} disabled={pdfEnCours} style={{
+              alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: 5, background: 'none',
+              border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '5px 10px',
+              fontSize: 12, fontWeight: 600, color: 'var(--text2)', cursor: pdfEnCours ? 'default' : 'pointer', opacity: pdfEnCours ? 0.6 : 1,
+            }}>
+              <FilePdf size={14} /> {pdfEnCours ? 'Création…' : 'Télécharger en PDF'}
+            </button>
+          )}
           {(session.materiel || exos.some(e => e.materiel?.trim())) && (
             <div style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderLeft: '3px solid var(--bordeaux)', borderRadius: 'var(--r)', padding: '10px 12px' }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--bordeaux)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}><Backpack size={13} /> Matériel à prévoir</div>

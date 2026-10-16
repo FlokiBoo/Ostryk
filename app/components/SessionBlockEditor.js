@@ -25,7 +25,7 @@ import {
   X, TextB, TextItalic, LinkSimple, ListBullets, TextTSlash,
   CaretLeft, CaretRight, ArrowsDownUp, Plus, FileText, Flame, Snowflake, Barbell,
   DotsThreeVertical, Info, MagnifyingGlass, Check, Timer, DotsSixVertical,
-  ArrowsClockwise, Heartbeat, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack, CaretDown, ClockCounterClockwise,
+  ArrowsClockwise, Heartbeat, CopySimple, Lightbulb, Target, Eye, EyeSlash, Backpack, CaretDown, ClockCounterClockwise, FilePdf,
 } from '@phosphor-icons/react'
 import { SortableGroup, SortableItem } from '@/app/components/SortableItem'
 import TimerConfigEditor, { defaultTimerConfig } from '@/app/components/TimerConfigEditor'
@@ -33,6 +33,7 @@ import EditeurSectionTexte from '@/app/components/EditeurSectionTexte'
 import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
 import { sectionDeSeance, lignesDeProtocole } from '@/lib/sectionsTexte'
 import { historiqueParExercice, cleExercice } from '@/lib/historiqueExercice'
+import { telechargerSeancePdf } from '@/lib/seancePdf'
 
 // Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
 // petit helper autonome plutôt qu'un import cross-fichier).
@@ -539,6 +540,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [advancedSettingsExerciseId, setAdvancedSettingsExerciseId] = useState(null)
   // Historique d'un exercice chez ce sportif : { nom, entrees } — entrees null pendant le chargement.
   const [historiqueOuvert, setHistoriqueOuvert] = useState(null)
+  const [pdfEnCours, setPdfEnCours] = useState(false)
   const [advancedDraftMuscles, setAdvancedDraftMuscles] = useState([])
   const [advancedDraftVideoUrl, setAdvancedDraftVideoUrl] = useState('')
   const [savingAdvancedSettings, setSavingAdvancedSettings] = useState(false)
@@ -1181,6 +1183,39 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
 
   const closeAdvancedSettings = () => setAdvancedSettingsExerciseId(null)
 
+  // Fiche PDF de la séance (lib/seancePdf.js), relue en base : c'est la version que le sportif
+  // reçoit, pas un brouillon en cours d'édition.
+  const telechargerPdf = async () => {
+    if (pdfEnCours) return
+    if (hasUnsavedChanges() && !window.confirm('Modifications non enregistrées : le PDF reprendra la dernière version sauvegardée. Continuer ?')) return
+    setPdfEnCours(true)
+    try {
+      const [{ data: seance }, { data: exercises }, { data: movs }, { data: athlete }] = await Promise.all([
+        supabase.from('program_sessions').select('title, coach_notes, materiel, circuits, activation, activation_videos, warmup_block, cooldown_block, warmup_content, cooldown_content, programs(title)').eq('id', sessionId).single(),
+        supabase.from('program_exercises').select('id, order_index, name, sets, reps, kg, rest, note, materiel, superset_group, block_type, pace_base, pct_low, pct_high, set_details, cardio_structure').eq('program_session_id', sessionId).order('order_index'),
+        supabase.from('movements').select('id, name'),
+        athleteId ? supabase.from('athletes').select('name').eq('id', athleteId).maybeSingle() : Promise.resolve({ data: null }),
+      ])
+      if (!seance) { alert('Séance introuvable.'); return }
+      const avecExos = { ...seance, exercises: exercises || [] }
+      const mouvements = Object.fromEntries((movs || []).map(m => [m.id, { nom: m.name }]))
+      await telechargerSeancePdf({
+        session: seance,
+        exercises: exercises || [],
+        sections: {
+          echauffement: sectionDeSeance(avecExos, 'echauffement', movs || []),
+          retourAuCalme: sectionDeSeance(avecExos, 'retourAuCalme', movs || []),
+        },
+        mouvements,
+        sousTitre: [athlete?.name, seance.programs?.title].filter(Boolean).join(' · '),
+      })
+    } catch (e) {
+      alert('Erreur pendant la création du PDF : ' + (e?.message || e))
+    } finally {
+      setPdfEnCours(false)
+    }
+  }
+
   // Historique du sportif sur ce mouvement, tous programmes confondus (relié par nom, comme côté
   // sportif — voir lib/historiqueExercice.js). Chargé au clic et filtré sur les exercices du même
   // nom avant de demander séries et notes, pour ne pas buter sur la limite de lignes de Supabase.
@@ -1658,6 +1693,18 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
             style={{ ...input, flex: 1, fontSize: 15, padding: '10px 14px' }}
           />
           {savedFlash && <span style={{ fontSize: 13, color: c.blue, fontWeight: 600 }}>✓ Sauvegardé</span>}
+          <button
+            onClick={telechargerPdf}
+            disabled={pdfEnCours}
+            title="Télécharger la séance en PDF, pour l'envoyer au client ou l'imprimer"
+            style={{
+              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, background: c.bg, color: c.text,
+              border: `1px solid ${c.border}`, borderRadius: 6, padding: '9px 12px', fontSize: 14, fontWeight: 600,
+              cursor: pdfEnCours ? 'default' : 'pointer', opacity: pdfEnCours ? 0.6 : 1,
+            }}
+          >
+            <FilePdf size={17} /> {pdfEnCours ? '…' : 'PDF'}
+          </button>
           <button onClick={handleSave} disabled={saving} style={{
             flexShrink: 0, background: c.blue, color: '#fff', border: 'none', borderRadius: 6,
             padding: '10px 28px', fontSize: 14, fontWeight: 600, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1,
