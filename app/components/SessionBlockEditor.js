@@ -1193,15 +1193,18 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       const [{ data: seance }, { data: exercises }, { data: movs }, { data: athlete }] = await Promise.all([
         supabase.from('program_sessions').select('title, coach_notes, materiel, circuits, activation, activation_videos, warmup_block, cooldown_block, warmup_content, cooldown_content, programs(title)').eq('id', sessionId).single(),
         supabase.from('program_exercises').select('id, order_index, name, sets, reps, kg, rest, note, materiel, superset_group, block_type, pace_base, pct_low, pct_high, set_details, cardio_structure').eq('program_session_id', sessionId).order('order_index'),
-        supabase.from('movements').select('id, name'),
+        supabase.from('movements').select('id, name, video_url, youtube_url'),
         athleteId ? supabase.from('athletes').select('name').eq('id', athleteId).maybeSingle() : Promise.resolve({ data: null }),
       ])
       if (!seance) { alert('Séance introuvable.'); return }
       const avecExos = { ...seance, exercises: exercises || [] }
-      const mouvements = Object.fromEntries((movs || []).map(m => [m.id, { nom: m.name }]))
+      const videoDe = m => m.video_url || m.youtube_url || null
+      const mouvements = Object.fromEntries((movs || []).map(m => [m.id, { nom: m.name, video_url: videoDe(m) }]))
+      // Vidéo d'un exercice : celle du mouvement du même nom, comme dans l'espace sportif.
+      const videoParNom = new Map((movs || []).filter(m => m.name && videoDe(m)).map(m => [m.name.trim().toLowerCase(), videoDe(m)]))
       await telechargerSeancePdf({
         session: seance,
-        exercises: exercises || [],
+        exercises: (exercises || []).map(e => ({ ...e, video_url: videoParNom.get(e.name?.trim().toLowerCase()) || null })),
         sections: {
           echauffement: sectionDeSeance(avecExos, 'echauffement', movs || []),
           retourAuCalme: sectionDeSeance(avecExos, 'retourAuCalme', movs || []),
