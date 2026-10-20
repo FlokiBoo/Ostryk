@@ -452,8 +452,9 @@ function Champ({ exercice, champ, valeur, suffixe, onPas, onSaisie }) {
 }
 
 // Un exercice = une ligne pleine largeur : nom et icônes, puis les champs côte à côte. Les options
-// secondaires (note, mesure ajoutée, historique, remplacement) sont repliées derrière « ⋯ » : c'est ce
-// qui permet à un biset ou un triset de tenir sur l'écran sans défiler.
+// secondaires (mesure ajoutée, remplacement) sont repliées derrière « ⋯ » : c'est ce qui permet à un
+// biset ou un triset de tenir sur l'écran sans défiler. La note du sportif est une par exercice, pas
+// par tour : la même s'affiche à chaque tour.
 function CarteExercice({ exercice, valeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null, maNote = '', onMaNote = null, onAjout = null, onHistorique = null, onRemplacer = null }) {
   const [noteOuverte, setNoteOuverte] = useState(false)
   const [saisieNote, setSaisieNote] = useState(false)
@@ -467,12 +468,14 @@ function CarteExercice({ exercice, valeur, onPas, onSaisie, onTempo, onVideo, no
     fontSize: 13, padding: 0, cursor: 'pointer', flex: 'none', fontFamily: 'inherit',
   }
   const mesuresAjoutables = onAjout ? ['kg', 'sec'].filter(c => exercice.ajoutable[c]) : []
-  const options = (onMaNote && !saisieNote && !maNote) || mesuresAjoutables.length > 0 || onRemplacer
+  const options = mesuresAjoutables.length > 0 || onRemplacer
+  // Plus gros que les autres icônes : ce sont les deux gestes qu'on fait en pleine série.
+  const iconeForte = { ...icone, width: 38, height: 38, fontSize: 18, borderRadius: 10, background: T.sable, color: T.vert }
   return (
     <div style={{ background: T.blanc, borderRadius: 12, padding: '6px 8px 8px 10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {exercice.code ? <span style={{ background: T.texteSec, color: T.blanc, borderRadius: 100, fontSize: 10, padding: '2px 7px', flex: 'none', marginRight: 2 }}>{exercice.code}</span> : null}
-        <span title={exercice.nom} style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exercice.nom}</span>
+        <span title={exercice.nom} style={{ fontSize: 13, lineHeight: 1.3, flex: 1, minWidth: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{exercice.nom}</span>
         {exercice.tempo ? (
           <button type="button" aria-label={`Tempo ${exercice.tempo}, explication`} onClick={() => onTempo(exercice.tempo)} style={{
             background: T.sableClair, border: `1px solid ${T.ocre}33`, borderRadius: 6, height: 26, padding: '0 6px', flex: 'none',
@@ -491,8 +494,16 @@ function CarteExercice({ exercice, valeur, onPas, onSaisie, onTempo, onVideo, no
         {onHistorique ? (
           <button type="button" aria-label={`Historique de ${exercice.nom}`} onClick={() => onHistorique(exercice)} style={icone}>↺</button>
         ) : null}
+        {onMaNote ? (
+          <button type="button" aria-label={`Ta note sur ${exercice.nom}${maNote ? ' (renseignée)' : ''}`} aria-expanded={saisieNote || !!maNote}
+            onClick={() => { if (!maNote) setSaisieNote(o => !o) }} style={{
+              ...iconeForte, ...(saisieNote || maNote ? { background: T.vert, color: T.beige } : {}),
+            }}>
+            ✎
+          </button>
+        ) : null}
         {exercice.video_url ? (
-          <button type="button" aria-label={`Vidéo de ${exercice.nom}`} onClick={() => onVideo(exercice)} style={icone}>▶</button>
+          <button type="button" aria-label={`Vidéo de ${exercice.nom}`} onClick={() => onVideo(exercice)} style={iconeForte}>▶</button>
         ) : null}
         {options ? (
           <button type="button" aria-label={`Plus d'options sur ${exercice.nom}`} aria-expanded={optionsOuvertes} onClick={() => setOptionsOuvertes(o => !o)} style={{
@@ -551,9 +562,6 @@ function CarteExercice({ exercice, valeur, onPas, onSaisie, onTempo, onVideo, no
 
       {options && optionsOuvertes ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-          {onMaNote && !saisieNote && !maNote ? (
-            <button type="button" onClick={() => { setSaisieNote(true); setOptionsOuvertes(false) }} style={pastille}>✎ Note</button>
-          ) : null}
           {mesuresAjoutables.map(c => (
             <button key={c} type="button" onClick={() => onAjout(c)} style={pastille}>
               {exercice.ajoute[c] ? '×' : '+'} {c === 'kg' ? 'Charge' : 'Secondes'}
