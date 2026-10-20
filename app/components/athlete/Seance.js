@@ -451,73 +451,81 @@ function Champ({ exercice, champ, valeur, suffixe, onPas, onSaisie }) {
   )
 }
 
-function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null, maNote = '', onMaNote = null, onAjout = null, onHistorique = null, onRemplacer = null }) {
+// Un exercice = une ligne pleine largeur : nom et icônes, puis les champs côte à côte. Les options
+// secondaires (note, mesure ajoutée, historique, remplacement) sont repliées derrière « ⋯ » : c'est ce
+// qui permet à un biset ou un triset de tenir sur l'écran sans défiler.
+function CarteExercice({ exercice, valeur, onPas, onSaisie, onTempo, onVideo, notePrivee = null, onNotePrivee = null, maNote = '', onMaNote = null, onAjout = null, onHistorique = null, onRemplacer = null }) {
   const [noteOuverte, setNoteOuverte] = useState(false)
   const [saisieNote, setSaisieNote] = useState(false)
+  const [optionsOuvertes, setOptionsOuvertes] = useState(false)
   const pastille = {
     border: `1px solid ${T.bordure}`, background: 'none', color: T.texteSec, borderRadius: 100, fontSize: 11,
     padding: '0 10px', height: 30, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
   }
+  const icone = {
+    border: 'none', background: 'none', color: T.texteSec, borderRadius: 6, width: 30, height: 30,
+    fontSize: 13, padding: 0, cursor: 'pointer', flex: 'none', fontFamily: 'inherit',
+  }
   const mesuresAjoutables = onAjout ? ['kg', 'sec'].filter(c => exercice.ajoutable[c]) : []
+  const options = (onMaNote && !saisieNote && !maNote) || mesuresAjoutables.length > 0 || onRemplacer
   return (
-    <div style={{ flex: pleineLargeur ? '1 1 100%' : '1 1 calc(50% - 4px)', minWidth: 0, boxSizing: 'border-box', background: T.blanc, borderRadius: 14, padding: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {exercice.code ? <span style={{ background: T.texteSec, color: T.blanc, borderRadius: 100, fontSize: 10, padding: '2px 7px', flex: 'none' }}>{exercice.code}</span> : null}
-        {/* minWidth: 0 : sans lui, un nom long impose sa largeur à la carte et casse la grille à deux colonnes. */}
-        <span title={exercice.nom} style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exercice.nom}</span>
+    <div style={{ background: T.blanc, borderRadius: 12, padding: '6px 8px 8px 10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {exercice.code ? <span style={{ background: T.texteSec, color: T.blanc, borderRadius: 100, fontSize: 10, padding: '2px 7px', flex: 'none', marginRight: 2 }}>{exercice.code}</span> : null}
+        <span title={exercice.nom} style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exercice.nom}</span>
+        {exercice.tempo ? (
+          <button type="button" aria-label={`Tempo ${exercice.tempo}, explication`} onClick={() => onTempo(exercice.tempo)} style={{
+            background: T.sableClair, border: `1px solid ${T.ocre}33`, borderRadius: 6, height: 26, padding: '0 6px', flex: 'none',
+            fontFamily: TITRE, fontSize: 12, color: T.ocre, cursor: 'pointer',
+          }}>
+            {exercice.tempo}
+          </button>
+        ) : null}
         {onNotePrivee ? (
           <button type="button" aria-label={`Note privée sur ${exercice.nom}${notePrivee ? ' (renseignée)' : ''}`} onClick={() => onNotePrivee(exercice)} style={{
-            border: 'none', background: notePrivee ? T.vert : 'none', color: notePrivee ? T.beige : T.texteSec, borderRadius: 6,
-            width: 26, height: 24, fontSize: 12, padding: 0, cursor: 'pointer', flex: 'none',
+            ...icone, background: notePrivee ? T.vert : 'none', color: notePrivee ? T.beige : T.texteSec,
           }}>
             ✎
           </button>
         ) : null}
+        {onHistorique ? (
+          <button type="button" aria-label={`Historique de ${exercice.nom}`} onClick={() => onHistorique(exercice)} style={icone}>↺</button>
+        ) : null}
         {exercice.video_url ? (
-          <button type="button" aria-label={`Vidéo de ${exercice.nom}`} onClick={() => onVideo(exercice)} style={{ border: 'none', background: 'none', color: T.texteSec, fontSize: 12, padding: '4px 2px', cursor: 'pointer' }}>
-            ▶
+          <button type="button" aria-label={`Vidéo de ${exercice.nom}`} onClick={() => onVideo(exercice)} style={icone}>▶</button>
+        ) : null}
+        {options ? (
+          <button type="button" aria-label={`Plus d'options sur ${exercice.nom}`} aria-expanded={optionsOuvertes} onClick={() => setOptionsOuvertes(o => !o)} style={{
+            ...icone, background: optionsOuvertes ? T.sable : 'none', fontSize: 15,
+          }}>
+            ⋯
           </button>
         ) : null}
       </div>
 
-      {exercice.tempo ? (
-        <button type="button" onClick={() => onTempo(exercice.tempo)} style={{
-          display: 'flex', alignItems: 'center', gap: 5, marginTop: 8, background: T.sableClair, border: `1px solid ${T.ocre}33`,
-          borderRadius: 8, padding: '5px 8px', width: '100%', cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          <span style={{ fontSize: 10, color: T.texteSec, letterSpacing: '0.04em' }}>TEMPO</span>
-          <span style={{ fontFamily: TITRE, fontSize: 14, color: T.ocre, flex: 1, textAlign: 'left' }}>{exercice.tempo}</span>
-          <span style={{ fontSize: 11, color: T.ocre }}>?</span>
-        </button>
-      ) : null}
-
       {exercice.note ? (
         <button type="button" onClick={() => setNoteOuverte(o => !o)} aria-expanded={noteOuverte} style={{
-          display: 'flex', gap: 7, width: '100%', textAlign: 'left', marginTop: 8, background: T.sable, border: 'none',
-          borderLeft: `3px solid ${T.bordeaux}`, borderRadius: 6, padding: '7px 9px', cursor: 'pointer', fontFamily: 'inherit',
+          display: 'block', width: '100%', textAlign: 'left', marginTop: 2, background: 'none', border: 'none',
+          borderLeft: `2px solid ${T.bordeaux}`, padding: '1px 0 1px 7px', cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: 11, lineHeight: 1.4, color: T.texteCorps, whiteSpace: noteOuverte ? 'pre-wrap' : 'nowrap',
+          ...(noteOuverte ? {} : { overflow: 'hidden', textOverflow: 'ellipsis' }),
         }}>
-          <span style={{ fontSize: 11, color: T.bordeaux, flex: 'none' }}>✎</span>
-          <span style={{
-            fontSize: 11, lineHeight: 1.45, color: T.texteCorps, whiteSpace: 'pre-wrap',
-            ...(noteOuverte ? {} : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }),
-          }}>
-            {exercice.note}
-          </span>
+          {exercice.note}
         </button>
       ) : null}
 
-      <div style={{ display: pleineLargeur ? 'flex' : 'block', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
         {exercice.unite === 'kg' ? (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <Champ exercice={exercice} champ="kg" valeur={valeur.kg} suffixe="kg" onPas={d => onPas('kg', d)} onSaisie={v => onSaisie('kg', v)} />
           </div>
         ) : null}
         {exercice.maintien ? (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <Champ exercice={exercice} champ="sec" valeur={valeur.sec ?? null} suffixe="sec" onPas={d => onPas('sec', d)} onSaisie={v => onSaisie('sec', v)} />
           </div>
         ) : null}
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <Champ exercice={exercice} champ="reps" valeur={valeur.reps} suffixe={exercice.unite_reps} onPas={d => onPas('reps', d)} onSaisie={v => onSaisie('reps', v)} />
         </div>
       </div>
@@ -535,25 +543,22 @@ function CarteExercice({ exercice, valeur, pleineLargeur, onPas, onSaisie, onTem
             if (!texte) setSaisieNote(false)
           }}
           style={{
-            width: '100%', boxSizing: 'border-box', marginTop: 8, border: `1px solid ${T.bordure}`, borderRadius: 8, background: T.fond,
+            width: '100%', boxSizing: 'border-box', marginTop: 6, border: `1px solid ${T.bordure}`, borderRadius: 8, background: T.fond,
             padding: '7px 9px', fontSize: 16, lineHeight: 1.4, color: T.texte, fontFamily: 'inherit', resize: 'none', outline: 'none',
           }}
         />
       ) : null}
 
-      {(onMaNote && !saisieNote && !maNote) || mesuresAjoutables.length > 0 || onHistorique || onRemplacer ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+      {options && optionsOuvertes ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
           {onMaNote && !saisieNote && !maNote ? (
-            <button type="button" onClick={() => setSaisieNote(true)} style={pastille}>✎ Note</button>
+            <button type="button" onClick={() => { setSaisieNote(true); setOptionsOuvertes(false) }} style={pastille}>✎ Note</button>
           ) : null}
           {mesuresAjoutables.map(c => (
             <button key={c} type="button" onClick={() => onAjout(c)} style={pastille}>
               {exercice.ajoute[c] ? '×' : '+'} {c === 'kg' ? 'Charge' : 'Secondes'}
             </button>
           ))}
-          {onHistorique ? (
-            <button type="button" onClick={() => onHistorique(exercice)} style={pastille}>↺ Historique</button>
-          ) : null}
           {onRemplacer ? (
             <button type="button" onClick={() => onRemplacer(exercice)} style={pastille}>⇄ Remplacer</button>
           ) : null}
@@ -1181,7 +1186,6 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
 
   const etat = tours[bloc.id]
   const t = etat.liste[etat.courant]
-  const impair = bloc.exercices.length % 2 === 1
   const valides = toursValides(bloc, exerciseSets)
   const mot = motTour(bloc)
   const Mot = mot.charAt(0).toUpperCase() + mot.slice(1)
@@ -1225,13 +1229,12 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
             {etat.courant < valides ? ' · en modification' : ''}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {bloc.exercices.map((e, i) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {bloc.exercices.map(e => (
             <CarteExercice
               key={e.id}
               exercice={e}
               valeur={t[e.id]}
-              pleineLargeur={impair && i === bloc.exercices.length - 1}
               onTempo={setTempo}
               onVideo={e => setVideo({ nom: e.nom, video_url: e.video_url })}
               notePrivee={notesPrivees[e.id]}
