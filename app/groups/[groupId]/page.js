@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { UsersThree, User, CalendarBlank, PencilSimple, NotePencil, ClipboardText, LinkSimple, Hourglass, SkipForward, CopySimple, TrashSimple } from '@phosphor-icons/react'
+import { UsersThree, User, CalendarBlank, PencilSimple, NotePencil, ClipboardText, LinkSimple, Hourglass, SkipForward, CopySimple, TrashSimple, CheckCircle } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import AthletesSidebar from '@/app/components/AthletesSidebar'
 import { getCoachId } from '@/lib/coach'
@@ -97,7 +97,10 @@ export default function GroupDetailPage({ params }) {
   const [group, setGroup] = useState(null)
   const [members, setMembers] = useState([])
   const [currentProgram, setCurrentProgram] = useState(null)
+  const [finishedPrograms, setFinishedPrograms] = useState([]) // cycles propres au groupe marqués terminés
   const [linkedTemplates, setLinkedTemplates] = useState([])
+  const [expandedFinishedKey, setExpandedFinishedKey] = useState(null) // cycle terminé déplié en bas de page
+  const [finishBusy, setFinishBusy] = useState(null)
   const [runs, setRuns] = useState([])
   const [runStats, setRunStats] = useState({}) // { [runId]: { avgDifficulty, avgPleasure, details: [...] } }
   const [monthlyAttendance, setMonthlyAttendance] = useState({}) // { [athleteId]: count }
@@ -124,6 +127,13 @@ export default function GroupDetailPage({ params }) {
   const month = monthBounds(monthCursor)
   const period = periodMode === 'month' ? month : yearBounds(yearMode)
 
+  // Cycle en cours = le plus récent pas terminé ; les terminés vont, repliés, en bas de page.
+  async function loadGroupPrograms() {
+    const { data: progs } = await supabase.from('programs').select('*, program_sessions(*)').eq('group_id', groupId).eq('is_microcycle', false).is('athlete_id', null).order('created_at', { ascending: false })
+    setCurrentProgram((progs || []).find(p => !p.group_finished_at) || null)
+    setFinishedPrograms((progs || []).filter(p => p.group_finished_at))
+  }
+
   useEffect(() => { load() }, [groupId, periodMode, yearMode, monthCursor])
 
   async function load() {
@@ -139,11 +149,11 @@ export default function GroupDetailPage({ params }) {
       .sort((a, b) => a.name.localeCompare(b.name))
     setMembers(memberList)
 
-    const { data: prog } = await supabase.from('programs').select('*, program_sessions(*)').eq('group_id', groupId).eq('is_microcycle', false).is('athlete_id', null).order('created_at', { ascending: false }).limit(1)
-    setCurrentProgram(prog?.[0] || null)
+    await loadGroupPrograms()
 
+    // `*` plutôt que la liste des colonnes : la page reste lisible tant que finished_at n'existe pas en base.
     const { data: links } = await supabase.from('group_program_templates')
-      .select('program_id, programs(title, program_sessions(id, order_index, title))').eq('group_id', groupId)
+      .select('*, programs(title, program_sessions(id, order_index, title))').eq('group_id', groupId)
     setLinkedTemplates(links || [])
 
     // Séances déjà lancées un jour passé : à exclure du picker "Choisir la séance à débuter",
@@ -373,7 +383,7 @@ export default function GroupDetailPage({ params }) {
   // Partagé entre le programme direct du groupe et les programmes liés (templates) : même aperçu
   // dépliable, seule la cible de navigation (programId) change — sans ça, un programme lié
   // n'affichait qu'un compteur "X séances" et forçait à cliquer "Modifier" pour tout voir.
-  const renderSessionRow = (programId, s, i) => (
+  const renderSessionRow = (programId, s, i, readOnly = false) => (
     <div key={s.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg2)' }}>
         <button onClick={() => toggleSessionExpand(s.id)} title="Aperçu"
@@ -384,14 +394,16 @@ export default function GroupDetailPage({ params }) {
           style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text)', padding: '9px 10px 9px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {s.title || `Séance ${i + 1}`}
         </button>
-        <button onClick={() => duplicateGroupSession(programId, s.id)} disabled={sessionActionBusy === s.id} title="Dupliquer cette séance"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: '9px 6px', flexShrink: 0, display: 'flex' }}>
-          <CopySimple size={14} />
-        </button>
-        <button onClick={() => deleteGroupSession(programId, s.id)} disabled={sessionActionBusy === s.id} title="Supprimer cette séance"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: '9px 10px 9px 6px', flexShrink: 0, display: 'flex' }}>
-          <TrashSimple size={14} />
-        </button>
+        {!readOnly && <>
+          <button onClick={() => duplicateGroupSession(programId, s.id)} disabled={sessionActionBusy === s.id} title="Dupliquer cette séance"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: '9px 6px', flexShrink: 0, display: 'flex' }}>
+            <CopySimple size={14} />
+          </button>
+          <button onClick={() => deleteGroupSession(programId, s.id)} disabled={sessionActionBusy === s.id} title="Supprimer cette séance"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: '9px 10px 9px 6px', flexShrink: 0, display: 'flex' }}>
+            <TrashSimple size={14} />
+          </button>
+        </>}
       </div>
       {expandedSessionId === s.id && (
         <div style={{ padding: '8px 12px 10px', fontSize: 12, color: 'var(--text2)', borderTop: '1px solid var(--border)' }}>
@@ -410,6 +422,25 @@ export default function GroupDetailPage({ params }) {
       )}
     </div>
   )
+
+  // Terminer / rouvrir un cycle : uniquement l'affichage de cette fiche (et le choix « Débuter
+  // coaching »). Un template lié se termine sur son lien, pour ce groupe seulement.
+  const setCycleFinished = async (kind, programId, finished) => {
+    const at = finished ? new Date().toISOString() : null
+    setFinishBusy(programId)
+    const { error } = kind === 'template'
+      ? await supabase.from('group_program_templates').update({ finished_at: at }).eq('group_id', groupId).eq('program_id', programId)
+      : await supabase.from('programs').update({ group_finished_at: at }).eq('id', programId)
+    if (error) { setFinishBusy(null); alert('Erreur : ' + error.message); return }
+    setExpandedFinishedKey(null)
+    if (kind === 'template') {
+      setLinkedTemplates(prev => prev.map(l => l.program_id === programId ? { ...l, finished_at: at } : l))
+    } else {
+      // Relu en base : rouvrir un ancien cycle peut changer lequel est « en cours ».
+      await loadGroupPrograms()
+    }
+    setFinishBusy(null)
+  }
 
   const toggleLeader = async (athleteId, current) => {
     setTogglingLeader(athleteId)
@@ -445,6 +476,13 @@ export default function GroupDetailPage({ params }) {
     if (error) alert('Erreur : ' + error.message)
   }
 
+  const activeTemplates = linkedTemplates.filter(l => !l.finished_at)
+  const finishedCycles = [
+    ...linkedTemplates.filter(l => l.finished_at).map(l => ({ key: `template-${l.program_id}`, kind: 'template', programId: l.program_id, title: l.programs?.title, finishedAt: l.finished_at, sessions: l.programs?.program_sessions || [] })),
+    ...finishedPrograms.map(p => ({ key: `programme-${p.id}`, kind: 'programme', programId: p.id, title: p.title, finishedAt: p.group_finished_at, sessions: p.program_sessions || [] })),
+  ].sort((a, b) => (b.finishedAt || '').localeCompare(a.finishedAt || ''))
+  const finishButtonStyle = { background: 'none', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '6px 10px', fontSize: 12, fontWeight: 700, color: 'var(--text2)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100svh', color: 'var(--text3)' }}>Chargement…</div>
   )
@@ -463,7 +501,7 @@ export default function GroupDetailPage({ params }) {
                 {members.length} membre{members.length !== 1 ? 's' : ''}{members.length > 0 && ` · ${members.map(m => m.name).join(', ')}`}
               </div>
             </div>
-            {(currentProgram || linkedTemplates.length > 0) && (
+            {(currentProgram || activeTemplates.length > 0) && (
               <button onClick={() => setShowStartPicker(true)} style={{ background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 20, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
                 ▶ Débuter coaching
               </button>
@@ -647,9 +685,9 @@ export default function GroupDetailPage({ params }) {
                 <button onClick={() => setCreatingProgram(false)} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '8px 14px', fontSize: 12, cursor: 'pointer', color: 'var(--text3)' }}>Annuler</button>
               </div>
             )}
-            {linkedTemplates.length > 0 && (
+            {activeTemplates.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: currentProgram ? 10 : 0 }}>
-                {linkedTemplates.map(l => (
+                {activeTemplates.map(l => (
                   <div key={l.program_id} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -659,6 +697,9 @@ export default function GroupDetailPage({ params }) {
                         </div>
                       </div>
                       <Link href={`/programs/templates/${l.program_id}`} style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textDecoration: 'none', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}><PencilSimple size={11} /> Modifier</Link>
+                      <button onClick={() => setCycleFinished('template', l.program_id, true)} disabled={finishBusy === l.program_id} title="Marquer ce cycle comme terminé" style={finishButtonStyle}>
+                        {finishBusy === l.program_id ? '…' : <><CheckCircle size={13} /> Terminé</>}
+                      </button>
                       <button onClick={() => unlinkTemplate(l.program_id)} style={{ background: 'none', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '6px 10px', fontSize: 12, fontWeight: 700, color: 'var(--text3)', cursor: 'pointer', flexShrink: 0 }}>
                         Retirer
                       </button>
@@ -680,6 +721,9 @@ export default function GroupDetailPage({ params }) {
                     <div style={{ fontWeight: 700, fontSize: 14 }}>{currentProgram.title}</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)' }}>{(currentProgram.program_sessions || []).length} séance{(currentProgram.program_sessions || []).length !== 1 ? 's' : ''}</div>
                   </div>
+                  <button onClick={() => setCycleFinished('programme', currentProgram.id, true)} disabled={finishBusy === currentProgram.id} title="Marquer ce cycle comme terminé" style={finishButtonStyle}>
+                    {finishBusy === currentProgram.id ? '…' : <><CheckCircle size={13} /> Terminé</>}
+                  </button>
                   <button onClick={() => fanOutToGroup(currentProgram)} disabled={fanningOut === currentProgram.id} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 'var(--r)', padding: '6px 10px', fontSize: 12, fontWeight: 700, color: 'var(--text2)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
                     {fanningOut === currentProgram.id ? '…' : <><UsersThree size={13} /> Assigner au groupe</>}
                   </button>
@@ -718,9 +762,49 @@ export default function GroupDetailPage({ params }) {
                 </div>
               </div>
             ) : (
-              !creatingProgram && linkedTemplates.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>Aucun cycle d&apos;entraînement pour ce groupe</div>
+              !creatingProgram && activeTemplates.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>Aucun cycle d&apos;entraînement pour ce groupe</div>
             )}
           </div>
+
+          {/* Cycles terminés : repliés, dépliables à la flèche */}
+          {finishedCycles.length > 0 && (
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', padding: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <CheckCircle size={13} /> Cycles terminés ({finishedCycles.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {finishedCycles.map(c => {
+                  const open = expandedFinishedKey === c.key
+                  return (
+                    <div key={c.key} style={{ background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
+                      <button onClick={() => setExpandedFinishedKey(open ? null : c.key)} aria-expanded={open} style={{
+                        width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                        padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10,
+                      }}>
+                        <span style={{ color: 'var(--text3)', fontSize: 13, flexShrink: 0 }}>{open ? '▾' : '▸'}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            {c.kind === 'template' && <LinkSimple size={13} />} {c.title || 'Cycle'}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                            {c.sessions.length} séance{c.sessions.length !== 1 ? 's' : ''}{c.finishedAt ? ` · terminé le ${formatDateFr(c.finishedAt.slice(0, 10))}` : ''}
+                          </div>
+                        </div>
+                      </button>
+                      {open && (
+                        <div style={{ borderTop: '1px solid var(--border)', padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {[...c.sessions].sort((a, b) => a.order_index - b.order_index).map((s, i) => renderSessionRow(c.programId, s, i, true))}
+                          <button onClick={() => setCycleFinished(c.kind, c.programId, false)} disabled={finishBusy === c.programId} style={{ ...finishButtonStyle, alignSelf: 'flex-start', marginTop: 4 }}>
+                            {finishBusy === c.programId ? '…' : '↺ Rouvrir ce cycle'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -730,7 +814,7 @@ export default function GroupDetailPage({ params }) {
             <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontWeight: 700, fontSize: 17, marginBottom: 12 }}>▶ Choisir la séance à débuter</div>
             {[
               ...(currentProgram ? [{ key: 'programme', label: 'Cycle', prog: currentProgram }] : []),
-              ...linkedTemplates.map(l => ({ key: `template-${l.program_id}`, label: 'Template', prog: { title: l.programs?.title, program_sessions: l.programs?.program_sessions } })),
+              ...activeTemplates.map(l => ({ key: `template-${l.program_id}`, label: 'Template', prog: { title: l.programs?.title, program_sessions: l.programs?.program_sessions } })),
             ].map(({ key, label, prog }) => {
               if (!prog) return null
               const upcoming = (prog.program_sessions || [])
