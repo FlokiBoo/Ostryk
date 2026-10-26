@@ -1125,7 +1125,7 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
       {historiqueOuvert ? (
         <FeuilleModale onFermer={() => setHistoriqueOuvert(null)}>
           <p style={{ fontFamily: TITRE, fontSize: 16, margin: '0 0 2px' }}>Historique</p>
-          <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 12px' }}>{historiqueOuvert.nom} · tes dernières fois</p>
+          <p style={{ fontSize: 12, color: T.texteSec, margin: '0 0 12px' }}>{historiqueOuvert.nom} · {coach ? 'ses' : 'tes'} dernières fois</p>
           {(historique[cleExercice(historiqueOuvert.nom)] || []).slice(0, 10).map(h => (
             <div key={h.id} style={{ background: T.blanc, borderRadius: 12, padding: '10px 12px', marginBottom: 8 }}>
               <p style={{ fontSize: 11, color: T.texteSec, margin: '0 0 6px' }}>

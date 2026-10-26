@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import FicheSportifCoach from '@/app/components/coach/FicheSportifCoach'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
+import { historiqueParExercice } from '@/lib/historiqueExercice'
 
 // Fiche sportif côté coach. Branche FicheSportifCoach sur les données réelles.
 //
@@ -78,17 +79,23 @@ function debutDeSemaine(decalageSemaines = 0) {
 // Chargement hors composant : le setState ne se fait qu'après l'await, et l'effet peut annuler
 // son résultat si le coach a changé de sportif entre-temps.
 async function chargerFiche(athleteId) {
-    const [{ data: athlete }, { data: programs }, { data: completions }, { data: sets }, { data: objectives }, { data: membres }] = await Promise.all([
+    const [{ data: athlete }, { data: tousProgrammes }, { data: completions }, { data: sets }, { data: logs }, { data: objectives }, { data: membres }] = await Promise.all([
       supabase.from('athletes').select('*').eq('id', athleteId).single(),
+      // Archivés compris : ils ne servent qu'à l'historique des exercices en coaching, comme dans
+      // l'espace sportif. Tout le reste de la fiche ne regarde que les programmes actifs.
       supabase.from('programs').select('*, program_sessions(*, program_exercises(*))')
-        .eq('athlete_id', athleteId).neq('archived', true).order('created_at', { ascending: false }),
+        .eq('athlete_id', athleteId).order('created_at', { ascending: false }),
       supabase.from('program_completions').select('*').eq('athlete_id', athleteId),
       supabase.from('program_exercise_sets').select('*').eq('athlete_id', athleteId),
+      supabase.from('program_exercise_logs').select('*').eq('athlete_id', athleteId),
       supabase.from('athlete_objectives').select('*').eq('athlete_id', athleteId).order('target_date'),
       supabase.from('group_members').select('groups(name)').eq('athlete_id', athleteId),
     ])
 
     if (!athlete) return { erreur: 'Sportif introuvable.' }
+
+    // Même filtre que l'ancien .neq('archived', true) en SQL, qui écartait aussi les NULL.
+    const programs = (tousProgrammes || []).filter(p => p.archived === false)
 
     const programme = (programs || []).find(p => !p.is_workout && !p.is_microcycle && (p.program_sessions || []).length > 1)
       || (programs || [])[0] || null
@@ -141,6 +148,16 @@ async function chargerFiche(athleteId) {
       brut: {
         sessionsParId: Object.fromEntries((programs || []).flatMap(p => p.program_sessions || []).map(s => [s.id, s])),
         setsParExercice, completions: parSession,
+        // Entrées de historiqueParExercice (lib/historiqueExercice), au format de l'espace sportif.
+        historique: {
+          programs: (tousProgrammes || []).map(p => ({
+            ...p,
+            sessions: (p.program_sessions || []).map(s => ({ ...s, exercises: s.program_exercises || [] })),
+          })),
+          exerciseSets: setsParExercice,
+          exerciseLogs: Object.fromEntries((logs || []).map(l => [l.program_exercise_id, l])),
+          completionDates: Object.fromEntries((completions || []).filter(c => c.completed_at).map(c => [c.program_session_id, c.completed_at])),
+        },
       },
       athlete: {
         id: athlete.id,
@@ -220,6 +237,7 @@ export default function FicheSportifPage() {
         athleteNom={data.athlete.nom}
         brute={brute}
         setsInitiaux={data.brut.setsParExercice}
+        historiqueSource={data.brut.historique}
         dejaFaite={!!completion && !completion.skipped}
         onFermer={retourFiche}
         onTerminee={async () => { await rafraichir(); retourFiche() }}
@@ -239,6 +257,7 @@ export default function FicheSportifPage() {
           athleteNom={data.athlete.nom}
           brute={data.brut.sessionsParId[seance.id]}
           setsInitiaux={data.brut.setsParExercice}
+          historiqueSource={data.brut.historique}
           dejaFaite={!!data.brut.completions.get(seance.id) && !data.brut.completions.get(seance.id).skipped}
           onFermer={fermer}
           onTerminee={async () => { await rafraichir(); terminee(seance.id) }}
@@ -255,7 +274,13 @@ export default function FicheSportifPage() {
 
 // Écran de coaching en présentiel : l'écran de séance du sportif (Seance.js) en mode coach, branché
 // directement sur Supabase (le coach est en ligne, face à son sportif — pas de file hors ligne).
-function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite, onFermer, onTerminee }) {
+function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, historiqueSource, dejaFaite, onFermer, onTerminee }) {
+  // Saisies passées du sportif sur chaque mouvement (bouton ↺ de chaque exercice). La séance en
+  // cours est exclue : ses séries vivent dans exerciseSets et sont déjà sous les yeux.
+  const historique = useMemo(
+    () => historiqueParExercice({ ...historiqueSource, sessionExclueId: brute.id }),
+    [historiqueSource, brute.id]
+  )
   const [mouvements, setMouvements] = useState(null)
   // Exercices remplacés pendant ce coaching (id → nouveau nom) : `brute` ne se recharge qu'en fin
   // de séance, l'écran doit suivre tout de suite.
@@ -494,6 +519,7 @@ function CoachingSeance({ athleteId, athleteNom, brute, setsInitiaux, dejaFaite,
       onSaveExerciseSet={saveExerciseSet}
       onEnregistrerNotePrivee={enregistrerNotePrivee}
       onRemplacerExercice={remplacerExercice}
+      historique={historique}
       bibliotheque={mouvements || []}
       onPartagerRecap={partagerRecap}
       onTerminer={terminer}
