@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from "react";
-import { CalendarBlank, CaretDown, CaretUp, ChatCircle, CheckCircle, Clock, NotePencil, Play, Target, TrendUp } from "@phosphor-icons/react";
+import { CalendarBlank, CaretDown, CaretUp, ChatCircle, CheckCircle, Clock, ForkKnife, NotePencil, Play, Target, TrendUp } from "@phosphor-icons/react";
 
 /*
   Fiche sportif côté coach + mode coaching.
@@ -573,6 +573,8 @@ export default function FicheSportifCoach({
   onMessage = () => {},
   // PWA / webview natif : pas de bouton retour système, la fiche doit fournir le sien.
   onRetour = null,
+  // Contenu de l'encart Nutrition (objectifs + 7 derniers jours), fourni par la page.
+  encartNutrition = null,
 }) {
   const [onglet, setOnglet] = useState("recentes");
   const [ouverteId, setOuverteId] = useState(null);
@@ -814,6 +816,13 @@ export default function FicheSportifCoach({
               ))
             )}
           </div>
+
+          {encartNutrition ? (
+            <div style={carte}>
+              <p style={{ ...titreEncart, display: "flex", alignItems: "center", gap: 7 }}><ForkKnife size={15} />Nutrition</p>
+              {encartNutrition}
+            </div>
+          ) : null}
 
           <div style={carte}>
             <p style={{ ...titreEncart, display: "flex", alignItems: "center", gap: 7 }}><TrendUp size={15} />Programme</p>

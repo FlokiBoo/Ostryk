@@ -19,6 +19,7 @@ import WodTab, { hasPendingDayPicker } from '@/app/components/athlete/WodTab'
 import StatsTab from '@/app/components/athlete/StatsTab'
 import TemplatesTab from '@/app/components/athlete/TemplatesTab'
 import AddActionSheet from '@/app/components/athlete/AddActionSheet'
+import NutritionTab from '@/app/components/athlete/NutritionTab'
 import AddActivityWizard from '@/app/components/athlete/AddActivityWizard'
 import ProfilTab from '@/app/components/athlete/ProfilTab'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
@@ -161,6 +162,7 @@ function AthleteView({ params }) {
   }
   const [showAddSheet, setShowAddSheet] = useState(false)
   const [showAddWizard, setShowAddWizard] = useState(false)
+  const [demandeAjoutRepas, setDemandeAjoutRepas] = useState(0)
 
   // Dans l'app native, le contenu doit occuper tout l'écran (phone comme tablette) — le plafond à
   // 480px n'a de sens que pour le lien web (magic link ouvert sur desktop), où il évite un layout
@@ -1513,6 +1515,11 @@ function AthleteView({ params }) {
           <TemplatesTab token={token} programs={programs} setActiveTab={setActiveTab} />
         </div>
       )}
+      {visitedTabs.has('nutrition') && (
+        <div style={{ display: activeTab === 'nutrition' ? 'block' : 'none' }}>
+          <NutritionTab token={token} demandeAjout={demandeAjoutRepas} />
+        </div>
+      )}
       {visitedTabs.has('profil') && (
         <div style={{ display: activeTab === 'profil' ? 'block' : 'none' }}>
           <ProfilTab
@@ -1533,6 +1540,7 @@ function AthleteView({ params }) {
           onClose={() => setShowAddSheet(false)}
           onAddActivity={() => { setShowAddSheet(false); setShowAddWizard(true) }}
           onFreeSession={(mode, timing) => { setShowAddSheet(false); startFreeSession([], mode, timing === 'now' ? 'focus' : 'builder') }}
+          onAddRepas={() => { setShowAddSheet(false); setActiveTab('nutrition'); setDemandeAjoutRepas(n => n + 1) }}
           onAddRecord={() => {
             setShowAddSheet(false)
             setActiveTab('stats')

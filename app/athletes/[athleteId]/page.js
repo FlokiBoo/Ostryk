@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import FicheSportifCoach from '@/app/components/coach/FicheSportifCoach'
+import NutritionEncart from '@/app/components/coach/NutritionEncart'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
 import { historiqueParExercice } from '@/lib/historiqueExercice'
@@ -264,6 +265,7 @@ export default function FicheSportifPage() {
         />
       )}
       onVoirHistorique={() => router.push(`/programs/${athleteId}`)}
+      encartNutrition={<NutritionEncart athleteId={athleteId} />}
       // Le panneau de messagerie est global (ChatWidget dans app/layout.js), ouvert par événement.
       onMessage={() => window.dispatchEvent(new Event('open-chat-widget'))}
       // Rouverte directement au lancement (ResumeLastView), la fiche peut n'avoir aucun historique.

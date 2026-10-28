@@ -1,14 +1,15 @@
 'use client'
 
-import { ChartBar, House, User } from '@phosphor-icons/react'
+import { ChartBar, ForkKnife, House, User } from '@phosphor-icons/react'
 
-// Performances a été fusionné dans Stats : deux onglets à gauche du "+", un à droite. Chaque côté
-// prend la même largeur pour que le "+" reste centré.
+// Deux onglets de chaque côté du "+" (Nutrition a pris la place laissée par Performances, fusionné
+// dans Stats). Chaque côté prend la même largeur pour que le "+" reste centré.
 const TABS = [
   { key: 'wod', label: 'Accueil', Icon: House },
   { key: 'stats', label: 'Stats', Icon: ChartBar },
 ]
 const TABS_RIGHT = [
+  { key: 'nutrition', label: 'Nutrition', Icon: ForkKnife },
   { key: 'profil', label: 'Profil', Icon: User },
 ]
 

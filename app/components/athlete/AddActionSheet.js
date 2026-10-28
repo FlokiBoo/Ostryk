@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePencil, Trophy } from '@phosphor-icons/react'
+import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePencil, Trophy, ForkKnife } from '@phosphor-icons/react'
 
 // "Séance libre" enchaîne deux choix avant de créer la séance :
 // 1. Standard/Cardio — même distinction que côté coach (voir app/programs/.../page.js), pour que
@@ -10,7 +10,7 @@ import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePe
 //    ajoute ses exercices et logue ses performances en direct, à la volée). "Plus tard" ouvre le
 //    même éditeur "blocks" que le coach (SessionBlockEditor) pour construire la séance à l'avance
 //    (exercices, séries/récup ou allure cardio), sans la lancer tout de suite.
-export default function AddActionSheet({ onClose, onAddActivity, onFreeSession, onAddRecord }) {
+export default function AddActionSheet({ onClose, onAddActivity, onFreeSession, onAddRecord, onAddRepas }) {
   const [step, setStep] = useState('root') // 'root' | 'mode' | 'timing'
   const [mode, setMode] = useState(null)
 
@@ -61,6 +61,19 @@ export default function AddActionSheet({ onClose, onAddActivity, onFreeSession, 
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>Ajouter un record</div>
                   <div style={{ fontSize: 12, color: 'var(--text3)' }}>Note une nouvelle perf sur un mouvement suivi</div>
+                </div>
+              </button>
+            )}
+
+            {onAddRepas && (
+              <button onClick={onAddRepas} style={{
+                display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg2)', border: '1px solid var(--border)',
+                borderRadius: 'var(--rl)', padding: '16px', cursor: 'pointer', textAlign: 'left',
+              }}>
+                <span style={{ display: 'flex' }}><ForkKnife size={24} /></span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Noter ce que je mange</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>Recherche, scanne un code-barres ou photographie l&apos;étiquette</div>
                 </div>
               </button>
             )}

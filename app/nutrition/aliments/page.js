@@ -5,6 +5,7 @@ import { Carrot, Trash } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { getCoachId } from '@/lib/coach'
 import AthletesSidebar from '@/app/components/AthletesSidebar'
+import AlimentsAVerifier from '@/app/components/coach/AlimentsAVerifier'
 
 function today() {
   const n = new Date()
@@ -63,7 +64,8 @@ export default function AlimentsPage() {
     setAliments(prev => prev.filter(a => a.id !== id))
   }
 
-  const filtered = aliments.filter(a => a.name.toLowerCase().includes(search.toLowerCase()))
+  // Les aliments à vérifier ont leur propre bloc (AlimentsAVerifier), avec les photos.
+  const filtered = aliments.filter(a => a.statut !== 'a_verifier' && `${a.name} ${a.marque || ''}`.toLowerCase().includes(search.toLowerCase()))
 
   return (
     <div className="coach-layout">
@@ -119,6 +121,11 @@ export default function AlimentsPage() {
           </div>
         )}
 
+        <AlimentsAVerifier
+          onValide={a => setAliments(prev => prev.map(x => (x.id === a.id ? a : x)))}
+          onSupprime={id => setAliments(prev => prev.filter(x => x.id !== id))}
+        />
+
         <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)' }}>
           <input
             placeholder="Rechercher un aliment…"
@@ -135,7 +142,11 @@ export default function AlimentsPage() {
             <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--rl)', overflow: 'hidden', margin: '16px 0' }}>
               {filtered.map((a, i) => (
                 <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
-                  <div style={{ flex: 2, fontWeight: 700, fontSize: 13 }}>{a.name}</div>
+                  <div style={{ flex: 2, fontWeight: 700, fontSize: 13 }}>
+                    {a.name}
+                    {a.marque ? <span style={{ fontWeight: 500, color: 'var(--text3)' }}> · {a.marque}</span> : null}
+                    {a.source === 'off' ? <span title="Produit scanné, valeurs Open Food Facts" style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: 'var(--text3)', border: '1px solid var(--border2)', borderRadius: 4, padding: '1px 4px' }}>scan</span> : null}
+                  </div>
                   <div style={{ flex: 1, fontSize: 12, color: 'var(--text3)' }}>{a.kcal_100g ?? '—'} kcal</div>
                   <div style={{ flex: 1, fontSize: 12, color: 'var(--text3)' }}>P {a.proteines_100g ?? '—'}g</div>
                   <div style={{ flex: 1, fontSize: 12, color: 'var(--text3)' }}>G {a.glucides_100g ?? '—'}g</div>
