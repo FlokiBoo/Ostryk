@@ -1282,7 +1282,11 @@ function ProgramEditorPage({ params }) {
                 — {sideBySideIds.length} séance{sideBySideIds.length > 1 ? 's' : ''} côte à côte
               </span>
             </div>
+            {/* Panneaux centrés par marges auto, pas par justifyContent: 'center' : quand ils
+                débordent, les marges retombent à 0 et le défilement horizontal reste complet, là
+                où justifyContent couperait le début du premier panneau, hors d'atteinte. */}
             <div style={{ flex: 1, display: 'flex', overflowX: 'auto' }}>
+              <div style={{ display: 'flex', margin: '0 auto', height: '100%', borderLeft: '1px solid var(--border)' }}>
               {sideBySideIds.map(id => {
                 const closePanel = () => setSideBySideIds(prev => {
                   const next = (prev || []).filter(x => x !== id)
@@ -1308,6 +1312,7 @@ function ProgramEditorPage({ params }) {
                   </div>
                 )
               })}
+              </div>
             </div>
           </div>
         )}
