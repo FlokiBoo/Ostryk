@@ -56,6 +56,10 @@ const PhotoAngleCapture = forwardRef(function PhotoAngleCapture({ onAngleChange 
   const [pointCount, setPointCount] = useState(0)
   const [angle, setAngle] = useState(null)
   const [note, setNote] = useState('')
+  // 'en_cours' | 'ok' | null. Le téléchargement prend un instant (composition + encodage PNG) sans
+  // rien afficher : on retapait le bouton et l'image partait deux fois (retour terrain).
+  const [telechargement, setTelechargement] = useState(null)
+  const telechargementRef = useRef(false)
 
   useImperativeHandle(ref, () => ({
     getSnapshot() {
@@ -209,9 +213,12 @@ const PhotoAngleCapture = forwardRef(function PhotoAngleCapture({ onAngleChange 
 
   // Compose la photo annotée + un panneau texte (angle + note libre) dans un seul canvas, puis
   // déclenche le téléchargement — pour pouvoir partager la mesure sans capture d'écran manuelle.
-  function downloadImage() {
+  async function downloadImage() {
     const canvas = canvasRef.current
-    if (!canvas || angle == null) return
+    if (!canvas || angle == null || telechargementRef.current) return
+    // Verrou synchrone : deux appuis rapprochés arrivent avant le re-rendu qui grise le bouton.
+    telechargementRef.current = true
+    setTelechargement('en_cours')
 
     const panelWidth = 320
     const padding = 24
@@ -250,17 +257,40 @@ const PhotoAngleCapture = forwardRef(function PhotoAngleCapture({ onAngleChange 
       })
     }
 
-    composite.toBlob(blob => {
+    const nom = `angle-${angle.toFixed(0)}deg.png`
+    let fait = false
+    try {
+      const blob = await new Promise(resolve => composite.toBlob(resolve, 'image/png'))
       if (!blob) return
+      // Sur téléphone (et dans les apps iOS/Android, où un lien de téléchargement ne fait rien),
+      // la feuille de partage du système propose Enregistrer l'image / Envoyer — comme le PDF de
+      // séance (lib/seancePdf.js). Sinon, téléchargement classique.
+      const fichier = new File([blob], nom, { type: 'image/png' })
+      const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+      if (mobile && navigator.canShare?.({ files: [fichier] })) {
+        try {
+          await navigator.share({ files: [fichier] })
+          fait = true
+          return
+        } catch (e) {
+          if (e?.name === 'AbortError') return
+        }
+      }
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `angle-${angle.toFixed(0)}deg.png`
+      a.download = nom
       document.body.appendChild(a)
       a.click()
       a.remove()
-      URL.revokeObjectURL(url)
-    }, 'image/png')
+      // Révoquer tout de suite peut couper le téléchargement avant que le navigateur l'ait lu.
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      fait = true
+    } finally {
+      telechargementRef.current = false
+      setTelechargement(fait ? 'ok' : null)
+      if (fait) setTimeout(() => setTelechargement(t => (t === 'ok' ? null : t)), 2000)
+    }
   }
 
   const hints = [
@@ -361,12 +391,12 @@ const PhotoAngleCapture = forwardRef(function PhotoAngleCapture({ onAngleChange 
             <button onClick={() => fileInputRef.current?.click()} style={{ flex: '1 1 100px', minWidth: 0, padding: '11px 8px', borderRadius: 10, border: '1px solid #3FC1B0', background: 'transparent', color: '#3FC1B0', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
               Nouvelle photo
             </button>
-            <button onClick={downloadImage} disabled={angle == null} title={angle == null ? 'Place les 3 points pour pouvoir télécharger' : ''} style={{
+            <button onClick={downloadImage} disabled={angle == null || telechargement === 'en_cours'} title={angle == null ? 'Place les 3 points pour pouvoir télécharger' : ''} style={{
               flex: '1 1 100px', minWidth: 0, padding: '11px 8px', borderRadius: 10, border: '1px solid #F2A93B', background: 'transparent',
-              color: '#F2A93B', fontSize: 12, fontWeight: 600, cursor: angle == null ? 'default' : 'pointer',
-              opacity: angle == null ? 0.4 : 1, fontFamily: 'inherit',
+              color: '#F2A93B', fontSize: 12, fontWeight: 600, cursor: angle == null || telechargement === 'en_cours' ? 'default' : 'pointer',
+              opacity: angle == null || telechargement === 'en_cours' ? 0.4 : 1, fontFamily: 'inherit',
             }}>
-              ⬇ Télécharger
+              {telechargement === 'en_cours' ? 'Préparation…' : telechargement === 'ok' ? '✓ Image prête' : '⬇ Télécharger'}
             </button>
           </div>
         </>
