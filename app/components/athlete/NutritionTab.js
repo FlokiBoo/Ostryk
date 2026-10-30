@@ -73,6 +73,10 @@ async function lireCodeBarres(fichier) {
   }
 }
 
+export function Badge() {
+  return <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 800, letterSpacing: 0.6, color: '#fff', background: 'var(--bordeaux)', borderRadius: 4, padding: '2px 5px', lineHeight: 1.2 }}>BÊTA</span>
+}
+
 function Jauge({ label, valeur, objectif, unite, couleur }) {
   const ratio = objectif ? Math.min(1, valeur / objectif) : 0
   const depasse = objectif && valeur > objectif * 1.05
@@ -138,6 +142,10 @@ export default function NutritionTab({ token, demandeAjout = 0 }) {
 
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '8px 12px' }}>
+        <Badge />
+        <span style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.4 }}>Le suivi nutrition est en test : un souci ou une idée, écris-le à ton coach.</span>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button aria-label="Jour précédent" onClick={() => setJour(j => decalerJour(j, -1))} style={{ ...boutonClair, padding: 8 }}><CaretLeft size={18} /></button>
         <div style={{ flex: 1, textAlign: 'center', fontFamily: 'var(--font-title)', color: 'var(--title)', fontWeight: 700, fontSize: 18, textTransform: 'capitalize' }}>{libelleJour(jour)}</div>

@@ -9,7 +9,7 @@ const TABS = [
   { key: 'stats', label: 'Stats', Icon: ChartBar },
 ]
 const TABS_RIGHT = [
-  { key: 'nutrition', label: 'Nutrition', Icon: ForkKnife },
+  { key: 'nutrition', label: 'Nutrition', Icon: ForkKnife, beta: true },
   { key: 'profil', label: 'Profil', Icon: User },
 ]
 
@@ -24,6 +24,13 @@ export default function AthleteTabBar({ active, onChange, onAdd, addActive = fal
       }}>
         <span style={{ position: 'relative', lineHeight: 1, opacity: isActive ? 1 : 0.7 }}>
           <t.Icon size={22} weight={isActive ? 'fill' : 'regular'} />
+          {t.beta && (
+            <span style={{
+              position: 'absolute', top: -6, right: -16, background: 'var(--bordeaux)', color: '#fff',
+              borderRadius: 4, fontSize: 7, fontWeight: 800, letterSpacing: 0.4, padding: '1px 3px', lineHeight: 1.2,
+              border: '1px solid var(--bg)',
+            }}>BÊTA</span>
+          )}
           {t.key === 'profil' && unreadMessages > 0 && (
             <span style={{
               position: 'absolute', top: -4, right: -8, background: '#DC2626', color: '#fff',

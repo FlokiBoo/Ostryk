@@ -72,7 +72,10 @@ export default function AddActionSheet({ onClose, onAddActivity, onFreeSession, 
               }}>
                 <span style={{ display: 'flex' }}><ForkKnife size={24} /></span>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>Noter ce que je mange</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Noter ce que je mange
+                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.6, color: '#fff', background: 'var(--bordeaux)', borderRadius: 4, padding: '2px 5px', lineHeight: 1.2 }}>BÊTA</span>
+                  </div>
                   <div style={{ fontSize: 12, color: 'var(--text3)' }}>Recherche, scanne un code-barres ou photographie l&apos;étiquette</div>
                 </div>
               </button>
