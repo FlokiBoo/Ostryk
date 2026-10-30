@@ -285,12 +285,15 @@ function ProgramEditorPage({ params }) {
   const [otherTemplates, setOtherTemplates] = useState([])
   const [duplicatingAsProgram, setDuplicatingAsProgram] = useState(false)
 
+  // Cycle de groupe ou programme d'un client → copie indépendante rangée dans Programmes, comme
+  // modèle réutilisable. Le programme d'un client n'y apparaît jamais tout seul (Programmes ne liste
+  // que les programmes sans sportif) : c'est le seul chemin pour en faire un modèle.
   const duplicateGroupCycleAsProgram = async () => {
     if (!program) return
     setDuplicatingAsProgram(true)
     const coachId = await getCoachId()
     const copy = await cloneTemplateToAthlete({
-      templateProgramId: programId, templateTitle: program.title, templateActivityType: program.activity_type,
+      templateProgramId: programId, templateTitle: isTemplate ? program.title : `${program.title} (modèle)`, templateActivityType: program.activity_type,
       athleteId: null, coachId,
     })
     if (!copy) {
@@ -946,7 +949,16 @@ function ProgramEditorPage({ params }) {
                 }}>
                 <CopySimple size={12} /> {duplicatingAsProgram ? 'Duplication…' : 'Dupliquer en programme'}
               </button>
-            ) : isTemplate && (
+            ) : !isTemplate ? (
+              <button onClick={duplicateGroupCycleAsProgram} disabled={duplicatingAsProgram || !program}
+                title="Créer une copie de ce programme dans Programmes, réutilisable pour d'autres clients"
+                style={{
+                  background: 'none', border: '1px solid var(--border2)', color: 'var(--text2)',
+                  borderRadius: 'var(--r)', padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: duplicatingAsProgram ? 'default' : 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4,
+                }}>
+                <CopySimple size={12} /> {duplicatingAsProgram ? 'Duplication…' : 'Dupliquer en modèle'}
+              </button>
+            ) : (
               <button onClick={() => saveIsTemplate(!program?.is_template)}
                 title={program?.is_template ? 'Retirer de la galerie de templates' : 'Proposer ce programme comme template réutilisable'}
                 style={{
