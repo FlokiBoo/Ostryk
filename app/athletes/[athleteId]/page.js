@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import FicheSportifCoach from '@/app/components/coach/FicheSportifCoach'
-import NutritionEncart from '@/app/components/coach/NutritionEncart'
+import TableauDeBordClient from '@/app/components/coach/TableauDeBordClient'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
 import { historiqueParExercice } from '@/lib/historiqueExercice'
@@ -190,6 +190,14 @@ async function chargerFiche(athleteId) {
         effortMoyen: labelEffort(moyenne) || '—',
       },
       seances,
+      // Tous programmes confondus (pas seulement celui affiché) : ce que le client a fait cette semaine.
+      seancesSeptJours: (completions || [])
+        .filter(c => !c.skipped && c.completed_at && Date.now() - new Date(c.completed_at).getTime() < 7 * 86400000)
+        .sort((a, b) => b.completed_at.localeCompare(a.completed_at))
+        .map(c => {
+          const s = (tousProgrammes || []).flatMap(p => p.program_sessions || []).find(x => x.id === c.program_session_id)
+          return { id: c.id || c.program_session_id, titre: s?.title || 'Séance', date: c.completed_at, duree_min: c.duration_minutes ?? null, effort: labelEffort(c.difficulty) }
+        }),
     } }
 }
 
@@ -265,7 +273,7 @@ export default function FicheSportifPage() {
         />
       )}
       onVoirHistorique={() => router.push(`/programs/${athleteId}`)}
-      encartNutrition={<NutritionEncart athleteId={athleteId} />}
+      tableauDeBord={<TableauDeBordClient athleteId={athleteId} seancesFaites={data.seancesSeptJours} />}
       // Le panneau de messagerie est global (ChatWidget dans app/layout.js), ouvert par événement.
       onMessage={() => window.dispatchEvent(new Event('open-chat-widget'))}
       // Rouverte directement au lancement (ResumeLastView), la fiche peut n'avoir aucun historique.

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePencil, Trophy, ForkKnife } from '@phosphor-icons/react'
+import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePencil, Trophy, ForkKnife, Ruler } from '@phosphor-icons/react'
 
 // "Séance libre" enchaîne deux choix avant de créer la séance :
 // 1. Standard/Cardio — même distinction que côté coach (voir app/programs/.../page.js), pour que
@@ -10,7 +10,7 @@ import { PersonSimpleRun, Lightning, Barbell, Heartbeat, CaretLeft, Play, NotePe
 //    ajoute ses exercices et logue ses performances en direct, à la volée). "Plus tard" ouvre le
 //    même éditeur "blocks" que le coach (SessionBlockEditor) pour construire la séance à l'avance
 //    (exercices, séries/récup ou allure cardio), sans la lancer tout de suite.
-export default function AddActionSheet({ onClose, onAddActivity, onFreeSession, onAddRecord, onAddRepas }) {
+export default function AddActionSheet({ onClose, onAddActivity, onFreeSession, onAddRecord, onAddRepas, onAddMesure }) {
   const [step, setStep] = useState('root') // 'root' | 'mode' | 'timing'
   const [mode, setMode] = useState(null)
 
@@ -77,6 +77,19 @@ export default function AddActionSheet({ onClose, onAddActivity, onFreeSession, 
                     <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.6, color: '#fff', background: 'var(--bordeaux)', borderRadius: 4, padding: '2px 5px', lineHeight: 1.2 }}>BÊTA</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text3)' }}>Recherche, scanne un code-barres ou photographie l&apos;étiquette</div>
+                </div>
+              </button>
+            )}
+
+            {onAddMesure && (
+              <button onClick={onAddMesure} style={{
+                display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg2)', border: '1px solid var(--border)',
+                borderRadius: 'var(--rl)', padding: '16px', cursor: 'pointer', textAlign: 'left',
+              }}>
+                <span style={{ display: 'flex' }}><Ruler size={24} /></span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Noter mon poids, mes mensurations</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>Ton coach suit tes courbes</div>
                 </div>
               </button>
             )}

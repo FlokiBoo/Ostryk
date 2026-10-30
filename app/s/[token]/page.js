@@ -20,6 +20,7 @@ import StatsTab from '@/app/components/athlete/StatsTab'
 import TemplatesTab from '@/app/components/athlete/TemplatesTab'
 import AddActionSheet from '@/app/components/athlete/AddActionSheet'
 import NutritionTab from '@/app/components/athlete/NutritionTab'
+import SuiviCorporelScreen from '@/app/components/athlete/SuiviCorporelScreen'
 import AddActivityWizard from '@/app/components/athlete/AddActivityWizard'
 import ProfilTab from '@/app/components/athlete/ProfilTab'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
@@ -163,6 +164,7 @@ function AthleteView({ params }) {
   const [showAddSheet, setShowAddSheet] = useState(false)
   const [showAddWizard, setShowAddWizard] = useState(false)
   const [demandeAjoutRepas, setDemandeAjoutRepas] = useState(0)
+  const [showSuiviCorporel, setShowSuiviCorporel] = useState(false)
 
   // Dans l'app native, le contenu doit occuper tout l'écran (phone comme tablette) — le plafond à
   // 480px n'a de sens que pour le lien web (magic link ouvert sur desktop), où il évite un layout
@@ -1529,6 +1531,7 @@ function AthleteView({ params }) {
             onBadgeStandardUpdate={v => setAthlete(a => ({ ...a, badge_standard: v }))}
             onHeightUpdate={h => setAthlete(a => ({ ...a, height: h }))}
             onBirthDateUpdate={d => setAthlete(a => ({ ...a, birth_date: d }))}
+            onOpenSuiviCorporel={() => setShowSuiviCorporel(true)}
           />
         </div>
       )}
@@ -1541,6 +1544,7 @@ function AthleteView({ params }) {
           onAddActivity={() => { setShowAddSheet(false); setShowAddWizard(true) }}
           onFreeSession={(mode, timing) => { setShowAddSheet(false); startFreeSession([], mode, timing === 'now' ? 'focus' : 'builder') }}
           onAddRepas={() => { setShowAddSheet(false); setActiveTab('nutrition'); setDemandeAjoutRepas(n => n + 1) }}
+          onAddMesure={() => { setShowAddSheet(false); setShowSuiviCorporel(true) }}
           onAddRecord={() => {
             setShowAddSheet(false)
             setActiveTab('stats')
@@ -1548,6 +1552,9 @@ function AthleteView({ params }) {
             setTimeout(() => document.getElementById('stats-records')?.scrollIntoView({ behavior: 'smooth' }), 300)
           }}
         />
+      )}
+      {showSuiviCorporel && (
+        <SuiviCorporelScreen token={token} onClose={() => setShowSuiviCorporel(false)} onPoids={w => setAthlete(a => ({ ...a, weight: w }))} />
       )}
       {showAddWizard && (
         <AddActivityWizard athleteId={athlete.id} onClose={() => setShowAddWizard(false)} onSaved={() => setActivityRefreshKey(k => k + 1)} />

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { User, PencilSimple, ClipboardText, ChatCircle, ForkKnife, GearSix, CreditCard } from '@phosphor-icons/react'
+import { User, PencilSimple, ClipboardText, ChatCircle, ForkKnife, GearSix, CreditCard, Ruler } from '@phosphor-icons/react'
+import { jourLocal } from '@/lib/nutrition'
 import { supabase } from '@/lib/supabase'
 import ChatThread from '@/app/components/ChatThread'
 import SettingsScreen from './SettingsScreen'
@@ -19,7 +20,7 @@ const editIconStyle = { fontSize: 12, color: 'var(--bordeaux)' }
 // Hub simplifié : identité + stats corporelles + raccourcis "MON ESPACE" + Réglages. Les radars
 // Force/Mobilité qui vivaient ici ont été déplacés vers la page Performances (PerformancesTab),
 // et les champs Sexe / base de comparaison badges vers Réglages (SettingsScreen).
-export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate, onSexUpdate, onBadgeStandardUpdate, onHeightUpdate, onBirthDateUpdate }) {
+export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate, onSexUpdate, onBadgeStandardUpdate, onHeightUpdate, onBirthDateUpdate, onOpenSuiviCorporel }) {
   const [editingField, setEditingField] = useState(null) // 'weight' | 'height' | 'birth_date' | null
   const [fieldVal, setFieldVal] = useState('')
   const [saving, setSaving] = useState(false)
@@ -56,7 +57,14 @@ export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate
     if (!fieldVal || !athlete) return
     setSaving(true)
     const value = editingField === 'birth_date' ? fieldVal : parseFloat(fieldVal)
-    const { error } = await supabase.from('athletes').update({ [editingField]: value }).eq('id', athlete.id)
+    // Le poids passe par le suivi corporel : la route enregistre un point daté (courbe du coach)
+    // et met à jour athletes.weight elle-même.
+    const { error } = editingField === 'weight'
+      ? await fetch(`/api/athlete-view/${token}/mesures`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: jourLocal(), poids_kg: value }),
+      }).then(r => (r.ok ? {} : { error: true })).catch(() => ({ error: true }))
+      : await supabase.from('athletes').update({ [editingField]: value }).eq('id', athlete.id)
     if (!error) {
       if (editingField === 'weight') onWeightUpdate?.(value)
       if (editingField === 'height') onHeightUpdate?.(value)
@@ -138,6 +146,18 @@ export default function ProfilTab({ athlete, token, setActiveTab, onWeightUpdate
               <span style={{ background: 'var(--beige)', color: 'var(--vert-foret)', borderRadius: 'var(--ostryk-pill-radius)', padding: '3px 10px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
                 {SUBSCRIPTION_TIERS[athlete.subscription_tier]?.label || 'Actif'}
               </span>
+              <span style={{ color: 'var(--ostryk-text3)', fontSize: 18 }}>›</span>
+            </button>
+          )}
+
+          {onOpenSuiviCorporel && (
+            <button onClick={onOpenSuiviCorporel} style={{
+              background: 'var(--card-white)', color: 'var(--text)', border: '1px solid var(--ostryk-border)', borderRadius: 'var(--ostryk-card-radius)',
+              padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left',
+            }}>
+              <span style={{ display: 'flex', color: 'var(--vert-foret)' }}><Ruler size={20} weight="light" /></span>
+              <span style={{ flex: 1, fontWeight: 700, fontSize: 14 }}>Mon suivi corporel</span>
+              <span style={{ fontSize: 12, color: 'var(--ostryk-text3)' }}>poids, mensurations</span>
               <span style={{ color: 'var(--ostryk-text3)', fontSize: 18 }}>›</span>
             </button>
           )}
