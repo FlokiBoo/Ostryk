@@ -572,6 +572,8 @@ export default function FicheSportifCoach({
   onVoirHistorique = () => {},
   onMessage = () => {},
   onCreerProgramme = null,
+  // Ouvre l'éditeur du programme en cours (absent s'il n'y en a pas).
+  onOuvrirProgramme = null,
   // PWA / webview natif : pas de bouton retour système, la fiche doit fournir le sien.
   onRetour = null,
   // Tableau de bord (nutrition, séances, poids, mensurations), fourni par la page.
@@ -842,6 +844,11 @@ export default function FicheSportifCoach({
                 Fin estimée le{" "}
                 {new Date(programme.fin_estimee).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}
               </p>
+            ) : null}
+            {onOuvrirProgramme ? (
+              <Bouton onClick={onOuvrirProgramme} style={{ marginTop: 12, width: "100%" }}>
+                <NotePencil size={17} weight="bold" />Ouvrir et modifier le programme
+              </Bouton>
             ) : null}
           </div>
 

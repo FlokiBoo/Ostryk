@@ -277,6 +277,7 @@ export default function FicheSportifPage() {
       )}
       onVoirHistorique={() => router.push(`/programs/${athleteId}`)}
       onCreerProgramme={() => setCreationProgramme(true)}
+      onOuvrirProgramme={data.programme.id ? () => router.push(`/programs/${athleteId}/${data.programme.id}`) : null}
       tableauDeBord={<TableauDeBordClient athleteId={athleteId} seancesFaites={data.seancesSeptJours} />}
       // Le panneau de messagerie est global (ChatWidget dans app/layout.js), ouvert par événement.
       onMessage={() => window.dispatchEvent(new Event('open-chat-widget'))}
