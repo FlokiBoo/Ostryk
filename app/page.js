@@ -10,6 +10,7 @@ import ChatHeaderButton from '@/app/components/ChatHeaderButton'
 import NotificationBell from '@/app/components/NotificationBell'
 import { getCoachId } from '@/lib/coach'
 import LancerCoachingModal from '@/app/components/coach/LancerCoachingModal'
+import ClientsSuivis from '@/app/components/coach/ClientsSuivis'
 import MouvementsAFilmer from '@/app/components/coach/MouvementsAFilmer'
 import { registerPushNotifications } from '@/lib/pushRegistration'
 
@@ -482,6 +483,13 @@ export default function Home() {
                 </div>
               </div>
             </div>
+          )}
+
+          {athletes.length > 0 && (
+            <ClientsSuivis
+              athletes={athletes}
+              onSuiviChange={(id, valeur) => setAthletes(prev => prev.map(a => (a.id === id ? { ...a, suivi_dashboard: valeur } : a)))}
+            />
           )}
 
           {/* Coaching de demain */}
