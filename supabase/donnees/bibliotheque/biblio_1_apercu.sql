@@ -1,7 +1,6 @@
--- Bibliothèque de mouvements ← « Ma Bibliothèque d'exercices » (Google Sheets)
+-- Bibliothèque de mouvements : on repart de zéro avec « Ma Bibliothèque d'exercices ».
 -- ÉTAPE 1 / 2 : APERÇU. Ne modifie rien. À lancer en entier dans le SQL Editor de Supabase.
--- 621 exercices uniques dans la feuille. Résultat : le bilan chiffré, puis le détail
--- nom par nom.
+-- 621 exercices uniques dans la feuille.
 
 with biblio(nom, muscles, video) as (values
   ('Bench Press - Iso Overcoming', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/CEh6EKLnKcE'::text),
@@ -626,51 +625,23 @@ with biblio(nom, muscles, video) as (values
   ('Ergo / Cossack et shoulder tap', 'Adducteurs, Fessiers, Abdominaux', 'https://youtube.com/shorts/l9c0Hr3RXGM'::text),
   ('Lizard transition jump', 'Psoas, Adducteurs, Fessiers', 'https://youtube.com/shorts/xeFplHOOt7s'::text)
 ),
-existants as (
-  select m.id, m.name,
-    exists (select 1 from biblio b where lower(trim(b.nom)) = lower(trim(m.name))) as dans_biblio,
-    -- Mode cardio de l'éditeur (lib/raceEstimates.js, isCardioMovementName) et tests chronométrés :
-    -- volontairement large, en cas de doute on garde.
-    (m.name ~* '^\s*\d' or m.name ~* '\m(run|bike|marathon|cooper|ski erg)\M' or m.name ~* '^\s*(row|ski)\M') as cardio,
-    exists (select 1 from tracked_movements t where t.movement_id = m.id) as records,
-    exists (
-      select 1 from program_sessions ps
-      cross join lateral jsonb_array_elements(
-        (case when jsonb_typeof(ps.warmup_content) = 'array' then ps.warmup_content else '[]'::jsonb end)
-        || (case when jsonb_typeof(ps.cooldown_content) = 'array' then ps.cooldown_content else '[]'::jsonb end)
-      ) l
-      where l->>'mouvementId' = m.id::text
-    ) as echauffements
-  from movements m
-),
-a_supprimer as (
-  select * from existants where not dans_biblio and not cardio and not records and not echauffements
-),
+supprimes as (select m.id, m.name from movements m where not (m.name ~* '^\s*\d' or m.name ~* '\m(run|bike|marathon|cooper|ski erg)\M' or m.name ~* '^\s*(row|ski)\M')),
 perdent_video as (
   select distinct pe.name
   from program_exercises pe
   join program_sessions ps on ps.id = pe.program_session_id
   join programs p on p.id = ps.program_id
   where coalesce(p.archived, false) = false
-    and exists (select 1 from a_supprimer e where lower(trim(e.name)) = lower(trim(pe.name)))
-),
-a_ajouter as (
-  select b.nom from biblio b where not exists (select 1 from movements m where lower(trim(m.name)) = lower(trim(b.nom)))
+    and not exists (select 1 from biblio b where lower(trim(b.nom)) = lower(trim(pe.name)))
+    and exists (select 1 from supprimes s where lower(trim(s.name)) = lower(trim(pe.name)))
 )
-select 0 as ordre, 'BILAN' as rubrique, 'Mouvements actuellement dans Ostryk' as detail, count(*)::text as nombre from existants
-union all select 1, 'BILAN', 'Déjà dans ta feuille (vidéo et muscles remplacés par ceux de la feuille)', count(*)::text from existants where dans_biblio
-union all select 2, 'BILAN', 'À SUPPRIMER', count(*)::text from a_supprimer
-union all select 3, 'BILAN', 'Gardés : cardio (Run/Row/Ski/Bike, tests chronométrés) — vidéo retirée', count(*)::text from existants where not dans_biblio and cardio
-union all select 4, 'BILAN', 'Gardés : liés aux records des sportifs — vidéo retirée', count(*)::text from existants where not dans_biblio and not cardio and records
-union all select 5, 'BILAN', 'Gardés : cités dans un échauffement / retour au calme — vidéo retirée', count(*)::text from existants where not dans_biblio and not cardio and not records and echauffements
-union all select 6, 'BILAN', 'À AJOUTER', count(*)::text from a_ajouter
-union all select 7, 'BILAN', 'Exercices de programmes en cours qui perdront leur vidéo', count(*)::text from perdent_video
-union all select 8, 'BILAN', 'Exercices de ta feuille sans tuto à toi (importés sans vidéo)', count(*)::text from biblio where video is null
-union all select 10, 'SUPPRIMÉ', name, '' from a_supprimer
-union all select 20, 'GARDÉ (cardio)', name, '' from existants where not dans_biblio and cardio
-union all select 21, 'GARDÉ (records)', name, '' from existants where not dans_biblio and not cardio and records
-union all select 22, 'GARDÉ (échauffement)', name, '' from existants where not dans_biblio and not cardio and not records and echauffements
+select 0 as ordre, 'BILAN' as rubrique, 'Mouvements actuellement dans Ostryk' as detail, count(*)::text as nombre from movements
+union all select 1, 'BILAN', 'SUPPRIMÉS (tout sauf le cardio)', count(*)::text from supprimes
+union all select 2, 'BILAN', 'Gardés : cardio, vidéo retirée', count(*)::text from movements m where (m.name ~* '^\s*\d' or m.name ~* '\m(run|bike|marathon|cooper|ski erg)\M' or m.name ~* '^\s*(row|ski)\M')
+union all select 3, 'BILAN', 'IMPORTÉS depuis ta feuille', count(*)::text from biblio
+union all select 4, 'BILAN', 'Records de clients détachés de la bibliothèque (records conservés)', count(*)::text from tracked_movements t where t.movement_id in (select id from supprimes)
+union all select 5, 'BILAN', 'Exercices de programmes en cours qui perdront leur vidéo (nom absent de ta feuille)', count(*)::text from perdent_video
+union all select 10, 'SUPPRIMÉ', name, '' from supprimes
+union all select 20, 'GARDÉ (cardio)', m.name, '' from movements m where (m.name ~* '^\s*\d' or m.name ~* '\m(run|bike|marathon|cooper|ski erg)\M' or m.name ~* '^\s*(row|ski)\M')
 union all select 30, 'PERD SA VIDÉO (programme en cours)', name, '' from perdent_video
-union all select 40, 'AJOUTÉ', nom, '' from a_ajouter
-union all select 50, 'SANS VIDÉO (pas de tuto à toi)', nom, '' from biblio where video is null
 order by ordre, detail;
