@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Hook SessionStart (réglages utilisateur de Maxime) : repère les mouvements créés dans Ostryk qui
-ne sont pas encore dans sa feuille Google « Ma Bibliothèque d'exercices », et le signale à Claude
-en début de session pour qu'il les y ajoute (avec la vidéo si le mouvement en a une).
+"""Hook SessionStart (réglages utilisateur de Maxime) : synchronisation dans les deux sens entre la
+bibliothèque de mouvements d'Ostryk et sa feuille Google « Ma Bibliothèque d'exercices ».
+  - Ostryk → feuille : repère les mouvements créés dans Ostryk absents de la feuille et demande à
+    Claude de les y ajouter (avec la vidéo si le mouvement en a une).
+  - Feuille → Ostryk : le script ne peut pas lire la feuille (pas d'accès Google) ; il demande à
+    Claude de comparer la date de modification de la feuille à feuille_verifiee_le.txt, et de ne la
+    relire que si elle a changé. Claude ne peut pas écrire dans la base : il prépare le SQL
+    (ajouts_sql.py) que Maxime colle lui-même dans Supabase.
 
 Connus = les noms de supabase/donnees/bibliotheque/biblio.txt (la feuille à l'import du
 2026-11-01), + synchronises.txt (ajoutés à la feuille depuis), + hors_feuille_connus.txt (cardio
 volontairement absents de la feuille). Lecture via l'API REST avec la clé publique anon : la table
 movements est lisible publiquement, aucune clé d'administration n'est utilisée.
 
-Silencieux s'il n'y a rien de nouveau ou si le réseau / .env.local manque : un hook de démarrage
-ne doit jamais bloquer ni bruiter une session sans rapport avec Ostryk.
+Toujours une courte consigne (vérifier la date de la feuille) ; la liste Ostryk → feuille seulement
+s'il y a du nouveau. Silencieux si le réseau ou .env.local manque : un hook de démarrage ne doit
+jamais bloquer une session.
 """
 import json
 import urllib.request
@@ -59,9 +65,22 @@ def main():
         return
 
     nouveaux = [m for m in mouvements if norm(m.get('name')) not in deja]
-    if not nouveaux:
-        return
+    blocs = [consigne_feuille()]
+    if nouveaux:
+        blocs.insert(0, consigne_ostryk(nouveaux))
+    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': '\n\n'.join(blocs)}}, ensure_ascii=False))
 
+
+def consigne_feuille():
+    verifiee = (DOSSIER / 'feuille_verifiee_le.txt').read_text().strip()
+    return f"""[Synchronisation bibliothèque Ostryk — feuille → Ostryk]
+Avant ou en plus de la demande de Maxime : regarde la date de modification (modifiedTime) de sa feuille « Ma Bibliothèque d'exercices » (Google Drive, fichier {FEUILLE_ID} ; recherche Drive : title contains 'Ma Bibliothèque' — un title = exact échoue à cause de l'apostrophe). Dernière vérification : {verifiee}.
+- Si elle n'a pas changé depuis : ne fais rien et n'en parle pas.
+- Si elle a changé : relis tous ses onglets et repère les exercices absents de la bibliothèque Ostryk (lisible via l'API REST avec la clé publique anon de {DEPOT / '.env.local'} ; comparaison des noms sans casse ni espaces en trop ; l'onglet « AJOUTS OSTRYK » vient déjà d'Ostryk). Pour chacun, écris une ligne au format de {DOSSIER / 'biblio.txt'} (ONGLET|nom|codes muscles|vidéo ; codes et format vidéo dans {DOSSIER / 'ajouts_sql.py'}) : vidéo = UNIQUEMENT la colonne TUTO de Maxime (jamais Instagram ni un autre youtubeur ; « - » s'il n'y en a pas, le mouvement ira dans « Mouvements à filmer »), muscles attribués par toi. Génère le SQL avec `python3 -I {DOSSIER / 'ajouts_sql.py'} <fichier>` et donne-le à Maxime à coller dans le SQL Editor de Supabase (tu n'as pas d'accès en écriture à la base). Quand il confirme, vérifie via l'API que les mouvements sont bien là, puis ajoute ces lignes à biblio.txt.
+- Dans les deux cas, écris la date de modification lue dans {DOSSIER / 'feuille_verifiee_le.txt'}."""
+
+
+def consigne_ostryk(nouveaux):
     lignes = '\n'.join(
         f"- {m['name']} | vidéo : {m.get('youtube_url') or 'aucune'} | muscles : {m.get('muscles') or '—'} | créé le {(m.get('created_at') or '')[:10]}"
         for m in nouveaux
@@ -75,7 +94,7 @@ Avant ou en plus de la demande de Maxime, ajoute-les à cette feuille avec les o
 2. Une ligne par mouvement ; TUTO = la vidéo si elle existe, sinon vide (le mouvement apparaît déjà dans « Mouvements à filmer » du tableau de bord).
 3. Puis ajoute leurs noms, un par ligne, à {DOSSIER / 'synchronises.txt'} pour ne pas les reproposer.
 4. Dis-le à Maxime en une phrase (combien, lesquels)."""
-    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': contexte}}, ensure_ascii=False))
+    return contexte
 
 
 if __name__ == '__main__':
