@@ -488,7 +488,7 @@ export default function Home() {
           {athletes.length > 0 && (
             <ClientsSuivis
               athletes={athletes}
-              onSuiviChange={(id, valeur) => setAthletes(prev => prev.map(a => (a.id === id ? { ...a, suivi_dashboard: valeur } : a)))}
+              onSuiviChange={(id, valeur) => setAthletes(prev => prev.map(a => (a.id === id ? { ...a, is_1to1_client: valeur } : a)))}
             />
           )}
 

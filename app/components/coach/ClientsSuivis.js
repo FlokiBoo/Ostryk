@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { PushPin, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 
-// Tableau de bord coach : les clients que le coach a choisi de suivre (athletes.suivi_dashboard),
-// chacun avec la dernière séance faite AVEC le coach :
+// Tableau de bord coach : les clients suivis, c'est-à-dire les clients en suivi 1:1
+// (athletes.is_1to1_client — même case que « Marquer en suivi 1:1 » de la page Sportifs : pour le
+// coach, suivre un client et l'avoir en 1:1 sont une seule et même chose). Chacun avec la dernière
+// séance faite AVEC le coach :
 //   - coaching individuel : une séance validée dont au moins une série a été saisie par le coach
 //     (program_exercise_sets.entered_by_role = 'coach', posé par l'écran de coaching) ;
 //   - coaching de groupe : une séance de groupe où le client était présent (group_session_attendance).
@@ -62,10 +64,16 @@ async function dernieresSeancesCoachees(ids) {
   return out
 }
 
+const parNom = (a, b) => (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base' })
+
 export default function ClientsSuivis({ athletes, onSuiviChange }) {
-  const suivis = athletes.filter(a => a.suivi_dashboard)
+  // Le profil sportif du coach lui-même (is_coach) n'est pas un client.
+  const clients = athletes.filter(a => !a.is_coach)
+  const suivis = clients.filter(a => a.is_1to1_client).sort(parNom)
   const [dernieres, setDernieres] = useState(null)
   const [choix, setChoix] = useState(false)
+  const [tri, setTri] = useState('az') // 'az' | 'za'
+  const [recherche, setRecherche] = useState('')
   const cle = suivis.map(a => a.id).join(',')
 
   useEffect(() => {
@@ -75,17 +83,20 @@ export default function ClientsSuivis({ athletes, onSuiviChange }) {
   }, [cle])
 
   const basculer = async (a) => {
-    const valeur = !a.suivi_dashboard
+    const valeur = !a.is_1to1_client
     onSuiviChange(a.id, valeur)
-    const { error } = await supabase.from('athletes').update({ suivi_dashboard: valeur }).eq('id', a.id)
+    const { error } = await supabase.from('athletes').update({ is_1to1_client: valeur }).eq('id', a.id)
     if (error) { onSuiviChange(a.id, !valeur); alert('Erreur : ' + error.message) }
   }
+
+  const q = recherche.trim().toLowerCase()
+  const liste = clients.filter(a => !q || (a.name || '').toLowerCase().includes(q)).sort((a, b) => (tri === 'az' ? parNom(a, b) : parNom(b, a)))
 
   return (
     <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ display: 'flex', color: 'var(--green)' }}><PushPin size={16} /></span>
-        <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>Mes clients suivis</div>
+        <div style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>Mes clients suivis · 1:1</div>
         <button onClick={() => setChoix(true)} style={{
           background: 'var(--green-light)', color: 'var(--green)', border: 'none',
           borderRadius: 20, padding: '5px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -121,13 +132,28 @@ export default function ClientsSuivis({ athletes, onSuiviChange }) {
               <div style={{ flex: 1, fontFamily: 'var(--font-title)', color: 'var(--title)', fontWeight: 700, fontSize: 17 }}>Clients suivis</div>
               <button onClick={() => setChoix(false)} aria-label="Fermer" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', display: 'flex' }}><X size={20} /></button>
             </div>
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>Un client coché passe en suivi 1:1.</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Rechercher un client"
+                style={{ flex: 1, minWidth: 0, padding: '8px 10px', border: '1px solid var(--border2)', borderRadius: 'var(--r)', fontSize: 14, background: 'var(--bg)', color: 'var(--text)', fontFamily: 'inherit', outline: 'none' }} />
+              <div role="group" aria-label="Ordre" style={{ display: 'flex', border: '1px solid var(--border2)', borderRadius: 'var(--r)', overflow: 'hidden', flexShrink: 0 }}>
+                {[['az', 'A → Z'], ['za', 'Z → A']].map(([cle, label]) => (
+                  <button key={cle} onClick={() => setTri(cle)} aria-pressed={tri === cle} style={{
+                    background: tri === cle ? 'var(--green-light)' : 'var(--bg)', color: tri === cle ? 'var(--green)' : 'var(--text3)',
+                    border: 'none', padding: '0 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  }}>{label}</button>
+                ))}
+              </div>
+            </div>
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {athletes.map(a => (
+              {liste.map(a => (
                 <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px', borderRadius: 'var(--r)', cursor: 'pointer', fontSize: 14 }}>
-                  <input type="checkbox" checked={!!a.suivi_dashboard} onChange={() => basculer(a)} style={{ width: 18, height: 18, accentColor: 'var(--green)' }} />
-                  {a.name}
+                  <input type="checkbox" checked={!!a.is_1to1_client} onChange={() => basculer(a)} style={{ width: 18, height: 18, accentColor: 'var(--green)' }} />
+                  <span style={{ flex: 1 }}>{a.name}</span>
+                  {a.is_1to1_client ? <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--bordeaux)', border: '1px solid var(--bordeaux)', borderRadius: 4, padding: '1px 5px' }}>1:1</span> : null}
                 </label>
               ))}
+              {liste.length === 0 ? <div style={{ fontSize: 13, color: 'var(--text3)', padding: 6 }}>Aucun client trouvé.</div> : null}
             </div>
           </div>
         </div>

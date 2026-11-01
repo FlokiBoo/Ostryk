@@ -45,7 +45,8 @@ décrivent les **changements** sans décrire l'état de départ.
 | `20261022090000_cycle_groupe_termine.sql` | — | ☐ |
 | `20261028090000_suivi_nutrition.sql` | Nutrition | ☑ 2026-10-30 |
 | `20261030090000_suivi_corporel.sql` | Suivi corporel | ☑ 2026-10-31 |
-| `20261101090000_clients_suivis.sql` | Clients suivis | ☐ |
+| `20261101090000_clients_suivis.sql` | Clients suivis | ☑ 2026-11-01 |
+| `20261101150000_suivis_vers_1to1.sql` | Suivi = 1:1 | ☐ |
 
 Tous ces fichiers sont **additifs** : ils ajoutent des colonnes nullables, des contraintes qui ne
 mordent que sur des valeurs hors bornes, et une policy qui élargit l'accès. Aucun ne supprime, ne
