@@ -1,0 +1,632 @@
+PAT|Bench Press - Iso Overcoming|P,Tr,E|y:CEh6EKLnKcE
+PAT|Band pull appart|T,E|y:a8nNqp2K_lM
+PAT|Romanian Deadlift - Iso Overcoming|IJ,F,L|y:XtFzW2QwCX4
+PAT|Chest supported row - Forme A|GD,T,B|y:qDtVPsYJVjA
+PAT|Chest supported row - Forme I|GD,T,B|y:hcOIEE3wrvw
+PAT|Développé couché Haltères - Forme I|P,Tr,E|y:Aroikk7YLv0
+PAT|Développé couché Haltères - Forme A|P,Tr,E|y:b5UcTefJIzI
+PAT|Développé couché incliné - Forme T|P,E,Tr|y:JlWiyB_0_jo
+PAT|Fente Statique Focus Fessiers|F,Q,IJ|y:JKCE7XgXqLo
+PAT|Fente Latérale Contralatérale|F,AD,Q|y:CZY9yaFitNw
+PAT|FFE Split Squat Modifié|Q,F|y:1iFrqY7t620
+PAT|Leg Press - Iso Overcoming|Q,F|y:vSmNZY8WaX4
+PAT|Hip Thrust|F,IJ|y:SuiVkw1YKIY
+PAT|Lat Pullldown - Forme T|GD,B|y:xECfj2gVgI4
+PAT|Lat Pulldown Unilatéral - Forme I|GD,B|y:EDs1DCFTX5M
+PAT|Bridge DB Press|P,Tr,F|y:mLKAzoYjIP0
+PAT|Pec Fly Décliné|P,E|y:rBxuFyN7RgU
+PAT|Pompe - Forme A|P,Tr,E,A|y:aLFyv5LoAeI
+PAT|Pompe - Forme I|P,Tr,E,A|y:KLJ7ct0fhak
+PAT|Fente Latérale - 90°|F,AD,Q|y:2CWxKvq9Tjs
+PAT|Ring Rows - Forme A|GD,T,B|y:qra2pHOJO8I
+PAT|Ring Rows - Forme I|GD,T,B|y:FY9jEbO73Zo
+PAT|Deadlift KB|IJ,F,L|y:XQmHC9HvtfY
+PAT|Deadlift|IJ,F,L,Q|y:KfP9xpp_RhU
+PAT|Sumo Deadlift|F,AD,IJ,Q|y:VhC_GwEOKMs
+PAT|Tirage Horizontal - Forme A|GD,T,B|y:LcaSfDAv0hc
+PAT|Viking Press - Forme I|E,Tr|y:Dcyg28BuFSY
+PAT|Deadhang - Excentrique|AB,GD|y:lLwDSiXXP94
+PAT|Barbell Floor Press|P,Tr|y:qR9qclzV_ZU
+PAT|Board Press|P,Tr|y:FSsed99dT_0
+PAT|Split Stance Row - Unilatéral|GD,T,B|y:aL8gH4Wx6IA
+PAT|Chin ups avec poignet libre|GD,B|y:yhZDhVItDHk
+PAT|DB Bench Press - Position T|P,Tr,E|y:2BxpEh6AaYQ
+PAT|Deadlift Off Blocks|IJ,F,L|y:Da_lvtpZmhA
+PAT|DB Bench Press - Position A|P,Tr,E|y:sSgMZhYhuDw
+PAT|Développé Militaire Incliné|E,P,Tr|y:wtEWNERP4Rs
+PAT|DB Bench Press - Position i|P,Tr,E|y:O0tLWw17zlQ
+PAT|Safety Bar Fente Statique|Q,F|y:cBHNKhcrbGo
+PAT|Split Squat Modifié Avec Talon Élevé|Q,F|y:ee9JfZlJ5Ak
+PAT|Deadstart 75° Développé Militaire Incliné Barre – Forme A|E,P,Tr|y:qK1AIWzb-2k
+PAT|Half Kneeling KB Press|E,Tr,A|y:n_AIS_zp_k8
+PAT|Overhead Press Haltère|E,Tr|y:I_gdRapdQS8
+PAT|Pompe sur Haltères|P,Tr,E|y:5LsudfHJtU4
+PAT|Split Squat Modifié|Q,F|y:d1ILKI5qJsY
+PAT|Développé Couché Oscillatoire|P,Tr,E|y:Cvd8Z2b215s
+PAT|Scapulae Pull Up|GD,T|y:OHw69DPW1DQ
+PAT|Développé Couché Iso Overcoming|P,Tr,E|y:ItNsyMe7HOY
+PAT|Deep Push Ups Yielding|P,Tr,E|y:kiRTuIeTsmM
+PAT|Dips Yielding Iso's|P,Tr,E|y:isGrxxNmA_M
+PAT|Overhead Press - Forme I|E,Tr|y:8b7Z75IGoTE
+PAT|Pull up EQI|GD,B|y:PBfq_W1iK_o
+PAT|Handstand Hold|E,Tr,A|y:h4eZ_YOuBpo
+PAT|Pull Up Oscillatoire|GD,B|y:oyozUNmGnzs
+PAT|Overcoming Iso Split Squat|Q,F|y:9NU3d2G3ZnQ
+PAT|45° Back Extension - Unilatéral|L,F,IJ|y:bRqH_3in9fY
+PAT|45° Back Extension - Bilatéral|L,F,IJ|y:XZwxVbYyBgA
+PAT|Curtsy Lunge - Dumbell|F,Q,AD|y:1yLARxH3nTo
+PAT|Curtsy Lunge - Barbell Back Rack|F,Q,AD|y:wDjHvOeN9Dk
+PAT|B Stance Hip Thrust|F,IJ|y:Gt4WHDLg7wU
+PAT|Fentes Arrière - Barre|F,Q|y:ngUldo0nCuk
+PAT|Romanian Deadlift - Haltères|IJ,F,L|y:EfhAZXYCueQ
+PAT|Romanian Deadlift - Barre|IJ,F,L|y:d4TjkTuPD8M
+PAT|Step Ups|Q,F|y:GFe289HJ6H0
+PAT|Fentes Latérales Statique - Haltère|F,AD,Q|y:v0ktL4QRGs4
+PAT|Fentes Arrière - Haltères|F,Q|y:QYUwuHHDQmw
+PAT|Développé couché - Forme A|P,Tr,E|y:jQPk-Y_feZs
+PAT|Développé couché - Forme T|P,Tr,E|y:2gROQMRgXVA
+PAT|Long Lunge Hold|F,Q,PS|y:vr3AN9kyeLA
+PAT|Deadlift Iso Overcoming|IJ,F,L|y:YzVnWZ7B7TI
+PAT|Rounded Back Extension|L,F,IJ|y:csEbjxxddq4
+PAT|Tirage Diagonal Unilatéral - Forme I|GD,T,B|y:VIgUoQ__9DA
+PAT|Split Squat Hold|Q,F|y:ohfYpjJ8yCA
+PAT|Rounded Back Extension Unilatéral|L,F,IJ|y:4B1JDyjeeKM
+PAT|Tirage Horizontal Unilatéral - Forme I|GD,T,B|y:qMLggx94QpI
+PAT|Lat Pulldown Bilatéral Forme I|GD,B|y:BkqFXHffvHE
+PAT|Single Leg Hip Thrust Poids de corps|F,IJ|y:e7zOfbl9w7s
+PAT|Tirage Diagonal Bilatéral - Forme A|GD,T,B|y:wG5ePwB9O7U
+PAT|Tirage Diagonal - Forme T|GD,T,B|y:_gdMpSiwwiU
+PAT|Tirage Diagonal Unilatéral - Forme A|GD,T,B|y:fUvydTsM6O4
+PAT|Développé Militaire Assis - Forme T|E,Tr|y:yJ1_qUgnZAU
+PAT|Tirage Horizontal Bilatéral - Forme T|GD,T,B|y:hCQCEgPYge0
+PAT|B Stance Deadlift|IJ,F,L|y:SkaxP8onC94
+PAT|3 Point Row - Forme A|GD,T,B|y:24zTW8UikkI
+PAT|Fente Bulgare - Haltères|Q,F|y:yt0-PW1KSlo
+PAT|Split Squat Modifié - Barre|Q,F|y:sPdJT8QxvtE
+PAT|Chin Up Overcoming|GD,B|y:nsuezBJooxk
+PAT|Overhead Press - Barre|E,Tr|y:Jw7ESmxoZrA
+PAT|Tirage Horizontal Unilatéral - Forme A|GD,T,B|y:W_1CZShC280
+PAT|Inverted Rows EQI|GD,T,B|y:EzYUkqOMx-s
+PAT|Tractions|GD,B|y:sBXN3OQXmM4
+PAT|Dips|P,Tr,E|y:2aRqAp67W6o
+PAT|Pec Fly Incliné Poulie|P,E|y:7q-5qkE1SZs
+PAT|Pec Fly Neutre Poulie|P,E|y:oG8OQZ4D5xM
+PAT|Straight Arm Lat Pulldown Bilatéral|GD|y:dcZfwnIvRwY
+PAT|Straight Arm Lat Pulldown Unilatéral|GD|y:MrRoQoQ0Zn8
+PAT|Tirage Horizontal Bilatéral - Forme I|GD,T,B|y:_qtAA53bzOs
+PAT|Overhead Press - Overcoming|E,Tr|y:E_PIVeqm5j0
+PAT|Landmine Press|E,P,Tr|y:tAP3ftU9T28
+PAT|Front Lever|GD,A|y:HrVlWmE4uIk
+PAT|Overhead Press - Oscillatoire|E,Tr|y:cmDsOKs17E0
+PAT|Fente Oscillatoire|Q,F|y:v0ZJvkcj5Ro
+PAT|Fente Overcoming|Q,F|y:jrrw-sYInXc
+PAT|Trapbar Deadlift|Q,F,IJ|y:q7hl39XSSWo
+PAT|Overhead Press - Elastique|E,Tr|y:ujbe0vUcs2Q
+PAT|Fente Latérale - Dynamique|F,AD,Q|y:GU7QLufckgI
+PAT|Banded Press|E,Tr|y:gDe_IfCZGPY
+PAT|Tirage Horizontale Élastique - Forme A|GD,T,B|y:mOjh0WI_l6U
+PAT|Fente Arrière Assistée|F,Q|y:54qFfp0oxkI
+PAT|Bulgarian Split Squat Yielding Iso|Q,F|y:57i7LcdrjGo
+PAT|Speed Pull Ups|GD,B|y:RL93PuyBLSE
+PAT|Skater Squat|Q,F|y:CjizCbuA298
+PAT|Pike Push Up|E,Tr|y:UpJQCZQkeZs
+PAT|Tirage Horizontal Alterné - Split Stance|GD,T,B|y:z6M-t5-5mZk
+PAT|Offset Bench Press|P,Tr,O|y:Ix7fcRyO4tY
+PAT|Speed Bench Press Barbell|P,Tr,E|y:zzhvaT0Lqe0
+PAT|Drop Kneel Push Up|P,Tr|y:qfA7BbdAUyw
+PAT|Speed Deadlift|IJ,F,L|y:v7XaaW-CHHc
+PAT|Inverted Rows - Forme A|GD,T,B|y:m7iu_0WeteU
+PAT|Pistol Squat|Q,F|y:Rn9I2qPH_es
+PAT|Pseudo Planche Push Ups|P,E,Tr,A|y:igL27PZtN3I
+PAT|Inertia / Deadstart Bench Press|P,Tr,E|y:IcJdR82HavI
+PAT|Landmine Curtsy Lunge|F,Q,AD|y:3LFLdyzIKpc
+PAT|Développé Militaire Unilatéral Élastique - Forme A|E,Tr|y:havAIMeUykw
+PAT|Single Leg Deadlift - Élastique|IJ,F|y:ALEZi_izYKk
+PAT|Staggered Stance Deadlift - Élastique|IJ,F|y:m554Wb8OV5s
+PAT|Tirage Diagonal Unilatéral Élastique - Forme I|GD,T,B|y:9eNnY72UkOg
+PAT|Fente Avant - Élastique|Q,F|y:7rkCkE76j7s
+PAT|Tirage Horizontal Unilatéral Élastique - Forme A|GD,T,B|y:SazTohZKJlM
+PAT|Tirage Vertical Unilatéral Élastique - Forme T|GD,B|y:7Eil3fxoi38
+PAT|Tirage Horizontal Unilatéral Élastique - Forme I|GD,T,B|y:LAggYs2ehvc
+PAT|Fente Arrière Élastique|F,Q|y:1qJICSetg2I
+PAT|Staggered Stance Hip Thrust|F,IJ|y:whUUE9sEKwU
+PAT|Dynamic Lateral Lunge|F,AD,Q|y:x1e-wJ7Ajx8
+PAT|Overhead Press Oscillatoire - Haltères|E,Tr|y:ogqhjfOV2Kw
+PAT|Speed Landmine Press|E,P,Tr|y:csHpJSSfUfI
+PAT|Speed Lunge|Q,F|y:aTiyEyciUGs
+PAT|Inertia Lunge|Q,F|y:G-SPjZT2P0M
+PAT|Tirages Alternés|GD,T,B|y:EWtVf1WYQRA
+PAT|Push Alterné|P,Tr,E|y:ktT_meGzvu0
+PAT|Fente Avant/Arrière|Q,F|y:XLzv8zWkSaM
+PAT|Fente Latérale Dynamique|F,AD,Q|y:2PBxJNE0C4s
+PAT|Fente Arrière avec Barre (Back Rack)|F,Q|y:Gg46tjDX3DQ
+PAT|Power Push Up|P,Tr,E|y:bqTr7P7try0
+PAT|Fente Arrière Élevée Haltères|F,Q|y:ENugz8WKY7w
+PAT|Deadstart Power Push Up|P,Tr,E|y:yBfPIAwPM6Y
+PAT|Pistol Squat Assisté|Q,F|y:fGnmzp_rX1A
+PAT|Staggered Deadlift Biais RI|IJ,F|y:k2S18agQep0
+PAT|Kneel Push Presse - Landmine|E,P,Tr|y:d875v8kIYpU
+PAT|Fente Diagonale|F,Q,AD|y:Bg1ygOX05gk
+PAT|Power Chin Up|GD,B|y:DCYoJ97cwS8
+PAT|Single Leg Deadlift Assisté & Controlatéral|IJ,F|y:1vmttvl1MSU
+PAT|Bent Over Row Overcoming|GD,T,B|y:zGsWIEPtM7s
+PAT|Pendlay Row|GD,T,B|y:fl8UAVQvUHQ
+PAT|Barbell Z Press|E,Tr,A|y:6jKh5Hvw6VU
+PAT|Suitcase Deadlift Haltères|IJ,F,O,AB|y:3eGcX3URyBg
+PAT|Snatch Grip Deadlift|IJ,F,L,T|y:l3kWBGF7Kqw
+PAT|Lat Pullldown Unilatéral - Forme T|GD,B|y:wwj7nCeJy90
+PAT|Chest Supported Rows Iso Alterné - Forme A|GD,T,B|y:5fSeSdFankw
+PAT|Good Morning - Barre|IJ,F,L|y:9gW5TUupLNo
+PAT|Good Morning Semi Sumo - Barre|IJ,F,L,AD|y:s3aF8BlD7jY
+PAT|Tractions Overcoming|GD,B|y:UGKdg7kNAO4
+PAT|Ring Push Ups - Forme A|P,Tr,E|y:xz08wDzwFac
+PAT|Side Jump Push Ups|P,Tr,E|y:rK2mTXLtocI
+PAT|Ring Rows - Forme A|GD,T,B|y:8e0FgTDO5Rc
+PAT|Fente In & Out - Barbell|F,Q,AD|y:WoaeF7cCuGk
+PAT|Push Press - Barre|E,Tr,Q|y:hOb_wmEq9UM
+PAT|Single Leg Deadlift Excentrique - Barre|IJ,F|y:28bqhvu4xsQ
+PAT|One Arm Chin Up Excentrique|GD,B|y:JT_kcsHa5g0
+PAT|Développé Couché Unilatéral - Excentrique|P,Tr,O|y:Q_wxXqSVlb0
+PAT|Tirage Vertical Unilat -  Forme A|GD,B|y:kQyzxih_9YE
+PAT|Fente Latérale Dynamique - Haltères|F,AD,Q|y:jv8b0f7FiHY
+PAT|Fente Avant - Haltères|Q,F|y:WKbYkxEN5Lo
+PAT|Tirage Horizontal Forme I - Excentrique|GD,T,B|y:G_DZ-Gs8QBM
+PAT|Fente Bulgare - Back Rack|Q,F|y:2P8-hmhytbI
+PAT|Landmine Single Leg Deadlift - Contralatéral|IJ,F|y:DWSDfiL41FI
+PAT|Speed Bulgarian Split Squat - Back Rack|Q,F|y:BWe_TnBC_Us
+PAT|Traction - Excentrique|GD,B|y:VIR-wVGINCk
+PAT|Fente Latérale Dynamique - Landmine|F,AD,Q|y:2dVF5OsjHrE
+PAT|Fente Arrière - Front Rack|F,Q,A|y:gj-RxvxVL40
+PAT|Speed Pendlay Row|GD,T,B|y:uR2JxHRzmY4
+PAT|Speed Reverse Lunge - Front Rack|F,Q|y:cWbi72Wpcj8
+PAT|Walking Zombie Lunges|Q,F|y:msRGlreiH6U
+PAT|3 Point Row - Catch|GD,T,B|y:QfZCS9YJe0A
+PAT|3 Point Row - Forme I|GD,T,B|y:-1WufIjRYE8
+PAT|Développé Couché Alterné Position Bridge|P,Tr,F|y:ZCr99SmgZa4
+PAT|Développé Couché Iso Alterné - Haltères|P,Tr,E|y:QVNNG1_bzvY
+PAT|Diamond Push Ups|Tr,P|y:7gMTcXz9N_A
+PAT|Pec Fly Décliné - Haltères|P,E|y:1odAu5EBCoI
+PAT|Chin Ups|GD,B|y:024a4lHIj_M
+PAT|Close Grip Push Ups - Focus Triceps|Tr,P|y:jDfq98lzUi4
+PAT|Bent Over Rows Alterné|GD,T,B|y:8Rvh0eDZdpE
+PAT|B Stance Deadlift - Pelvic Reach|IJ,F|y:LbfOFnR1Zow
+PAT|Développé Couché Incliné - Barre|P,E,Tr|y:GQSw1fqT4Yw
+PAT|Fente Arrière Pied Avant Elevé - Back Rack|F,Q|y:Gm3Fkxn6mQc
+PAT|Ring Power Rows|GD,T,B|y:pxxtw0BZ778
+PAT|Pec Fly - Iso Overcoming|P,E|y:5hsSGdsMGhg
+PAT|Single Leg Calf Raise - Iso Overcoming|M|y:WVjL6YDSLjE
+PAT|Single Leg Wall Push - Iso Overcoming|Q,F,M|y:IUGuxzMxfSw
+PAT|Muscle Up|GD,B,Tr,P|y:YyxvBhHnNGw
+PAT|3 Point Row - Catch|GD,T,B|y:JYxrDh9gDHY
+PAT|Fente Bulgare Contralatéral - Haltère|Q,F|y:uGvp3aUdu6I
+PAT|Half Kneel Landmine Press - Forme I|E,P,Tr|y:J9BU03UsNqk
+PAT|Bent Over Row - Barre|GD,T,B|y:fjiFE9blEZI
+PAT|Bent Over Row - Haltères|GD,T,B|y:ZegEX17NnP4
+PAT|Box Step Up - Back rack|Q,F|y:nIEejwRsPTs
+PAT|Curtsy Lunge - Cable|F,Q,AD|y:EynqAhUmo5c
+PAT|Half Kneel BD/KB Press|E,Tr,A|y:BMlIGxRs78o
+PAT|Overhead Press Haltères - Oscillatoire|E,Tr|y:43XqoL_FVNU
+PAT|Single Leg Bridge DB Bench Press - Unilat|P,Tr,F|y:lNJjY4_qt3o
+PAT|Fente Multidirectionnelle|Q,F,AD|y:vvD1H3pZtrY
+PAT|Toe Squat|Q,PI,M|y:u5FckHp-tg4
+PAT|Tirage Diagonal Bilatéral Forme I - Élastique|GD,T,B|y:5mhMl-1I1EA
+PAT|Tirage Vertical Bilatéral Forme A - Élastique|GD,B|y:D1JQ3CfswHQ
+PAT|Tirage Vertical Bilatéral Forme I - Élastique|GD,B|y:5gx9pSzZUJQ
+PAT|Speed Banded Lat Pulldown|GD,B|y:EhWGyKKmZTM
+PAT|Tirage Diagonal Bilatéral Forme A - Élastique|GD,T,B|y:ENkK4MYqtiU
+PAT|Pompe Avec Rotation|P,Tr,O|y:rANdT-nNXBY
+PAT|Cobra/Hindu Push Up|P,E,Tr|y:AUkzeSfXhGA
+PAT|Single Arm Push Up|P,Tr,O|y:XAIvM7C6lZo
+PAT|Deadlift - Élastique|IJ,F,L|y:fXQ8VvKzKUk
+PAT|Fente Latérale Dynamique Back Rack|F,AD,Q|y:9geKCmq33Bc
+PAT|Dips Chaises|Tr,P|y:26rOp7kIN4s
+PAT|Fente Avant - Back Rack|Q,F|y:wzEG1fT418c
+PAT|Elevated Push Up|P,Tr,E|y:HFmWOnL-uBA
+PAT|Pompe Déclinée|P,E,Tr|y:5FrFWFvDvBw
+PAT|Inverted Rows - Forme I|GD,T,B|y:-9FL5Lnjaac
+PAT|KB / DB Thrusters|Q,F,E,Tr|y:iDU3HmLRssY
+PAT|Ring & Trx Row Unilatéral|GD,T,B,O|y:Pao2A8L1MPU
+PAT|DB Squat|Q,F|y:706Y4rTlb1Y
+PAT|DB Cyclist Squat|Q|y:Ic0M1CgATnE
+PAT|Pompes Avec Twist|P,Tr,O|y:KVO1m7h99tg
+PAT|Développé Couché - Prise Serrée|Tr,P|y:42XRV9AmYCQ
+PAT|Fentes Avant ATL Goblet|Q,F|y:T8nqeFn5Ah4
+PAT|Side Step Squat|Q,F,AD|y:BTjZ8alu8CI
+PAT|Fente Latérale Wall Push - Iso Overcoming|F,AD,Q|y:hMmAUW14al4
+PAT|Fente Latérale Élevée|F,AD,Q|y:Jk1F8zG7qMs
+PAT|Explosive 3 Point Row|GD,T,B|y:S9oA_euCFHo
+PAT|Demi Squat with Pause – Résistance Accommodante|Q,F|y:bcISFT7KxoM
+PAT|Straight Arm Lat Pull Down – Élastique|GD|y:mxXUYlkwqhM
+PAT|Band Pull Apart Overhand - Iso Hold|T,E|y:sJfcmJxQHqY
+PAT|Band Pull Apart Underhand - Iso Hold|T,E|y:2_zcq4SlTVc
+PAT|Deep Lunges|Q,F,PS|y:vA7tyM6St1c
+PAT|Tractions – Prise Large Forme T|GD,B|y:MTtrBPCorRM
+PAT|Tirage Vertical Lat Pulldown – Forme T|GD,B|y:_bizZn1Q0Yo
+PAT|Offset MB Push Up With Shoulder Tap|P,Tr,A,O|y:Ulv8hFRTAh4
+PAT|Landmine Power Press|E,P,Tr|y:xxErSb4K8ag
+PAT|45° Développé Couché Haltères  - Forme A|P,E,Tr|y:XaKryJLu_ZQ
+PAT|Toes Elevated Romanian Deadlift - Haltères|IJ,F,M|y:wR4csaT6spk
+PAT|Superman Twist|L,O,F|y:pu4UlhYXgek
+PAT|KB Sumo Deadlift High Pull|F,IJ,T,E|y:T10s6BK0oWE
+PAT|KB Goblet Fente Avant|Q,F|y:DDdJYby7LLo
+PAT|Speed 3 Point Row|GD,T,B|y:83E09a_JkV4
+PAT|Single KB Clean & Push Press|F,IJ,E,Tr|y:Z-gvaElHlNM
+PAT|Fente Arrière Alternée – Haltères|F,Q|y:xDw5HSpldyM
+PAT|Tirage Vertical Lat Pulldown - Forme A|GD,B|y:xCP-WB4MRTU
+PAT|Single Leg Deadlift with Row|IJ,F,GD|y:CZa7Ck0iwuQ
+PAT|Back Squat - Oscillatoire|Q,F|y:GXpluCTHk5Y
+PAT|Single Leg Sprinter Squat - Iso Overcoming|Q,F|y:feaHmS2NXiw
+PAT|KB Bent Over Row - Drop & Catch|GD,T,B|s:3PFmzm9fENk
+PAT|Spanish Squat|Q|s:Qhdj1g55tgQ
+PAT|ATG Split Squat|Q,F,PS|y:JE16ZN7Iqr0
+PAT|Deadstart Push Ups|P,Tr,E|y:CNBTey5QTQU
+PAT|Comment réussir sa PREMIÈRE TRACTION STRICTE !|GD,B|y:kZjl_O0HAQw
+PAT|Incline Chest Supported Row|GD,T,B|y:ZKkZuxqv8bc
+PAT|Banded Chin Ups|GD,B|y:NeSdSyhl8Uo
+PAT|Banded Pull Ups|GD,B|y:YzodJKb_Lak
+PAT|Ring row|GD,T,B|y:-XVDx_9JlMQ
+PAT|Hip Extension - Banc|F,IJ,L|y:nSVPgw9WJWc
+PAT|Sandbag Front Squat|Q,F,A|y:oO00hnzbTqU
+PAT|Double DB Front Squat|Q,F|y:cniL2BHCA1c
+PAT|Scapula Ring Row|T,GD|y:UetKPY0Lzic
+PAT|Hip Thrust - Machine|F,IJ|s:RTRhi5XhNok
+PAT|Dips|P,Tr,E|s:bBnKPwmMMoM
+PAT|Static Lunge - Suitcase|Q,F,O|s:5r6mmEcKy0A
+PAT|Petterson Step Up|Q|s:Jlpf0CZFu40
+PAT|Test Press - Strict Press Db ou Barre|E,Tr|s:yDVkM0daUmU
+PAT|Test Squat - Goblet ou Box ou Squat|Q,F|s:tfBamCBJuz0
+PAT|Test Hinge - Romanian Deadlift DB ou Barre|IJ,F,L|s:vL5A84phohc
+PAT|Test Comportement Squat|Q,F|s:ri6Xwls4F-Q
+PAT|Test comportement Hinge|IJ,F,L|s:NU5xERbfxhQ
+PAT|Test Sandbag Carry|A,B,AB|s:EBHGUahRP_4
+PAT|Air Squat Pause|Q,F|s:7ICTMDSzWkY
+PAT|Air Squats|Q,F|s:bNh5ERMa3ls
+PAT|Walking Lunges - Farmer|Q,F,AB|s:CQFFUKbyqO8
+PAT|Back Squat Deadstart|Q,F|s:3p3DSqc-ads
+PAT|Deadstart Bench Press|P,Tr,E|s:7kr62nGpyAw
+PAT|Single Leg Wall Push Iso Overcoming|Q,F,M|s:z7Q1mji1XdA
+PAT|Static Lunge - DB|Q,F|s:f7kDGvMem4s
+PAT|Snatch Balance + Overhead Squat|Q,F,E,T|s:eI5F4DEeuSk
+PAT|Snatch Mid Pull Overcoming|F,IJ,T|s:U_IbT9VLZAQ
+PAT|Banded Snatch Pull|F,IJ,T|s:vEXChHZ9GZE
+PAT|Goblet Lunges|Q,F|s:uP_HNfONbbE
+PAT|Banded Snatch Hang High Pull|F,IJ,T,E|s:9EbubG9T6WA
+PAT|Single leg hip thrust|F,IJ|s:ebwVdh0icW0
+PAT|Apprendre le pivot de hanche, RDL avec élastique|IJ,F|s:SA6KdpLBj8I
+PAT|Chaise au mur iso|Q|s:qQEE3hpLdSQ
+PAT|Banded Pull Appart|T,E|s:ZLPs_oi_ugA
+PAT|Fentes avant arrière|Q,F|s:6_e5QbbqvBk
+PAT|Negative pull up lesté|GD,B|s:2HPBzjurVA8
+PAT|Gorilla Row|GD,T,B|s:Oe8Su_mFuNw
+PAT|Negative Chin Ups|GD,B|s:R-RnmK9CxMA
+PAT|Negative pull up|GD,B|s:nlIGRdJyEyU
+PAT|Fentes arrières alternées|F,Q|s:j-aBqdMyUJA
+PAT|Squat avec élastique|Q,F|s:aULZZ1pGlXE
+PAT|Press back élastique|P,Tr,E|s:T0l-zrckW7k
+PAT|Pompes Diamants i A|Tr,P|s:hZFLIM33-a0
+PAT|Air Squat|Q,F|s:edvFyGvCvnw
+PAT|Tirage Serviette|GD,T,B,AB|s:aI8gskZpSvA
+PAT|Mix grip scapula pull up + Deadhang|GD,T,AB|s:nxVFRLhCmyU
+PAT|Chin up pause en haut et descente contrôlée|GD,B|s:OwU_SfBhuUQ
+PAT|Scapula Chin Ups + Deadhang|GD,T,AB|s:7NclFloiLdI
+PAT|Scapula Pull ups + Deadhang|GD,T,AB|s:h7uxEz6SCKI
+PAT|Chin up pause en haut et descente contrôlée (montée assistée)|GD,B|s:eBFjT56rJQY
+PAT|Dips assisté|P,Tr,E|s:YNlcXRMuwy0
+PAT|Tirage dos buste penché|GD,T,B|s:VkQhN3vGtOc
+PAT|Fentes sur place|Q,F|s:JWi99NSYL1I
+PAT|Push ups i A T et adaptations|P,Tr,E|s:96yvrF5tsXY
+PAT|Traction 4 pauses (scapulaire pull ups, barre au front, milieu, en bas)|GD,B,T|s:KK4rV2uMMfs
+PAT|Strict press Mid Range A i T|E,Tr|s:t4vjISYLnUY
+PAT|Snatch passage|F,IJ,Q,E,T|s:Yb7n5ZHj-1A
+PAT|Split jerk Balance|E,Tr,Q|s:ldPLxzNfHDI
+PAT|Split jerk behind the neck|E,Tr,Q|s:T9nKIAXAN3Q
+PAT|Tall clean|T,Q,F|s:12C3Dy6VC3g
+PAT|Traction pieds sur box|GD,B|s:yUQoCScbQes
+PAT|Traction assis|GD,B|s:pBwcgQDA8p8
+PAT|Traction australienne|GD,T,B|s:AyO6_X7rqvo
+PAT|Traction genoux au sol|GD,B|s:erVqjCSgCwc
+PAT|Dolphin push ups|E,Tr,A|s:hiWMnD_fYX4
+PAT|Cyclist Squat|Q|s:GOUSKhEU3RA
+PAT|Developpé Incliné Mid Range A i T|P,E,Tr|s:9nUVbjk5MSQ
+PAT|Développé Incliné A i T|P,E,Tr|s:NPbdrT3ijG8
+PAT|Strict Press A i T|E,Tr|s:dqNiUxIXeOA
+PAT|Ring Dips|P,Tr,E|s:Avtcf4sR_hs
+PAT|Arch Scapula Pull Ups|GD,T|s:jXgYV735iJ8
+PAT|Chest to ring|GD,B|s:5mnJvmUzSKw
+PAT|2KB Front Rack Strict Press|E,Tr|s:7lUSB6SZ2WM
+PAT|Back Extension Dos Long|L,F,IJ|s:OFh8JkfhJjU
+PAT|2KB Farmer Walking Lunges|Q,F,AB|s:y6i8lt-Sln0
+PAT|Deadlift|IJ,F,L,Q|s:uSZCLTh_-4I
+PAT|2DB Front Squat|Q,F|s:xIsefrv9nJ8
+PAT|Lateral Squat|F,AD,Q|s:46QHlO-NKDw
+PAT|Zercher Clean|F,IJ,B,Q|s:qTrYu2jITHM
+PAT|Ring Row Focus Biceps|B,GD|s:i6cziysGRnY
+PAT|BTN Push Press|E,Tr,Q|s:X1riTpfxFJg
+PAT|Goblet Squat Focus Fessiers|F,Q|s:s-NaWVwJxFY
+PAT|Deep Press|E,Tr|s:NU42DKCC6C0
+PAT|Pull Up - Iso Overcoming|GD,B|s:XJpMSxWPtB8
+PAT|Banded Crandle Bar Muscle Up|GD,Tr,A|-
+PAT|Box Assisted Bar Muscle Up|GD,Tr,P|-
+PAT|Level To kip to Stand|GD,A|-
+ISO|Calf Raise - Bent Leg|M|y:0b1T3t8Bp5o
+ISO|Single Leg Glute Bridge|F,IJ|y:tsCpbK0jNus
+ISO|Biceps Curl - Opener|B|y:FUJRtGcvOxM
+ISO|Couch Stretch|PS,Q|y:eLyD2BVcABQ
+ISO|Piriformis Push Ups|F|y:Xic7E5i5lzY
+ISO|Seated Good Morning|F,IJ,L|y:j9yoeji-q-M
+ISO|Adducteur ISO overcoming|AD|y:QdAfiT1u3rg
+ISO|Triceps extension buste penché|Tr|y:JPSWxSysYec
+ISO|Triceps opener 3 phases|Tr|y:fHRPFAoTJMI
+ISO|Legs curls sur rameur|IJ|y:E0NJyYodTHQ
+ISO|Legs Curl sur rouleau|IJ|y:WwqEyMMURlY
+ISO|Renforcement biceps bras tendus|B|y:hkGp7HH0VQk
+ISO|Kneeling Hamstrings|IJ|y:nEe7dikUVxA
+ISO|Hamstring Bridge|IJ,F|y:coJy98YgPAo
+ISO|Tibialis Raise - Rotation|TA|s:8sTRM-3sq6s
+ISO|Calf Raise - Straight Leg|M|s:ueyhj7lPENE
+ISO|Complex Bent Leg + Tibialis Raise + Calf Raise - Straight Leg|M,TA|s:Nif2_2aC4qQ
+ISO|Glute Bridge|F|s:G5ylQegp06U
+ISO|Triceps Extension - Double Rope|Tr|s:hS3EkWesnnQ
+ISO|Tibialis Raises|TA|s:KBo1huMPnqA
+ISO|Single leg Calf raise on wall - Overcoming|M|s:ZxZX1MT24Ng
+ISO|Lateral Raise - Head Supported|E|s:hDnyrHUHVpA
+ISO|Élévations mollets pause en haut|M|s:eE34b19XOb8
+ISO|Extension triceps élastique|Tr|s:pjO0x-Y8iWo
+ISO|Glutes Bridge|F|s:eNvCRCB-VHM
+ISO|Biceps curl élastique pronation, supination, marteau|B,AB|s:FiyxvMMC47I
+ISO|Élévation latérale élastique|E|s:XkOYA5S8ahI
+ISO|Extension triceps buste penché|Tr|s:h5xLaL2eZcg
+ISO|Élévation frontale élastique|E|s:3uNGSleU2fI
+ISO|Ischios glissés serviette|IJ|s:2C6wQ1tDA0U
+ISO|Katana Triceps|Tr|s:CadeNzbaA48
+ISO|Triceps Opener 3 Phases|Tr|s:_BbynPsiCjk
+ISO|Triceps opener 2 phases|Tr|s:WLE8r0gJC_I
+ISO|Biceps opener|B|s:FFqNgnxIYx0
+ISO|Biceps curl Échec mécanique|B|s:DsmPxcyBmCw
+ISO|Élévation Mollet|M|s:2fvjmMvPLzc
+ISO|Élévation tibial|TA|s:V_inskESlcg
+ISO|Biceps curl marteau|B,AB|s:2R9wB1BCjzo
+ISO|Pec hold 2DB|P|s:faXjlySJ47A
+ISO|Triceps + ovh opener|Tr,E|s:sxQuhreke1c
+ISO|Pecs opener|P|s:QwBzQWzi_m8
+ISO|Rings Biceps Curl|B|s:RzjLVA4t74E
+ISO|Y raise|T,E|s:KWW0ZEk0fko
+ISO|Floor Triceps Opener|Tr|s:Le-PESqByps
+ISO|Biceps Banc Incliné Amplitude Complète|B|s:wLJLB-de04g
+ISO|Pec Hold|P|s:hwklHLcullU
+ISO|Spanish Squat|Q|s:Qhdj1g55tgQ
+ISO|Glute Bridge - Dynamique|F|s:ogxwZJIudBE
+ISO|Bodyweight Tricep Extension - Floor|Tr|-
+ABS|Bear Crawl - Front & Back|A,O,E|y:3IzN9sw_1ck
+ABS|Seated Leg Lift - Pike|A,PS|y:5G_j-xUIVr0
+ABS|Hollow Body Hold|A|y:1ko4paYuvw8
+ABS|Hollow Crawl|A,E|y:HpTGkfhxn18
+ABS|Arch hold + Arch Rock + Arch Hold|L,F|y:BMuxTUGlp4A
+ABS|Cuillère glissée|A|y:zkbBMCAZ3b0
+ABS|Flying Goku pulse|L,F|y:9ypUvlLSbOM
+ABS|Planche 4 faces Hold|A,O,E|y:XEagb9tV5wQ
+ABS|Arch Pulse|L,F|y:zOoEQ9OZEHM
+ABS|Hollow Pulse|A|y:LK2I_mB-n3c
+ABS|Hollow lateral|O,A|y:r-boNXAFgwo
+ABS|Core Assis - allongé|A,PS|y:c0eOe_jhsWA
+ABS|Plank Crawl|A,E|y:yrh7epUcX9U
+ABS|Hollow position Legs LiftS|A,PS|y:27riB0aTJ1s
+ABS|Arch Dos au sol|L,F|y:ke3RYCW1LOw
+ABS|Planche 4 faces|A,O,E|y:aR7DkRVZqhg
+ABS|Flying Goku|L,F|y:78xWukdrJqg
+ABS|Knee raises on floor lv 1 & 2|A,PS|y:FoAo247hQ64
+ABS|Obliques Opener|O|y:AfrewQTPLTA
+ABS|Lateral Plank - Hold|O|s:2o_f_M2Hykg
+ABS|QL Extension - Seated|O,L|s:tuaKWcwLIJ4
+ABS|Bear Plank Kick Through|A,O,E|s:dXA8pXOwKDE
+ABS|Bear crawl to Shoulder tap|A,O,E|s:iYkSygbsIT8
+ABS|Arch suspendu|L,F,GD|s:0pO077ugLiA
+ABS|Hollow suspendu|A,GD|s:o3dvrO3FW20
+ABS|Superman pulse + superman hold|L,F|s:ARIhqmMxIEE
+ABS|Upper hollow pulse + upper hollow hold|A|s:mBaQSwjw8q8
+ABS|Shoulder tap|A,O,E|s:G8r2JtRE69c
+ABS|Elbow plank + wide plank|A|s:cMnVjqMVcV4
+ABS|Tuck sit hold|A,PS|s:Rc9watAeV_8
+ABS|Tuck knees up + tuck sit hold|A,PS|s:0xPnn25q-6g
+ABS|Planche 4 faces statique|A,O,E|s:fLayWV-UPIU
+ABS|Toes to rings and transition low rings|A,PS,GD|s:w0rzW9DlpGE
+ABS|Toes to ring and transition flat feet|A,PS,GD|s:IHYO-Jqk0os
+ABS|V Up|A,PS|s:AGuID2BHWc0
+ABS|One Arm Plank|A,O|s:1EgI9JFD1qo
+ABS|Statut de la Liberté (Core)|O,E|s:ejklZj3bXtA
+ABS|Arch Crawl on Wall|L,E|s:K9RP9I3jb6E
+ABS|Obliques sur banc incliné|O|s:Ju1ho2SSYI8
+ABS|Complex seated Legs Raises|A,PS|s:qIxJglKM7p0
+PLY|Plate jump jambes tendues|M|y:UyinbrimeZA
+PLY|Squat Jump - Deep Plyo|Q,F,M|s:_W3RwMLuOpY
+PLY|Pogo Bilatéral - Sagital - 80 BPM|M|s:BUkJvs6IyQg
+PLY|Pogo Bilatéral - Frontal - 80 BPM|M|s:7iAMy70NzqQ
+PLY|Pogo Bilatéral - Sagital - 100 BPM|M|s:NpKxPqQjVZY
+PLY|Pogo Bilatéral - Frontal - 100 BPM|M|s:VrXm3vIReeE
+PLY|Pogo Bilatéral - 80 BPM|M|s:JYSIVP7hDPU
+PLY|Pogo Bilatéral - 100 BPM|M|s:ByM_QQi0JDA
+PLY|Pogo Bilatéral - Sagital - 120 BPM|M|s:o0Bwqu0_0rc
+PLY|Pogo Bilatéral - Frontal - 120 BPM|M|s:zyMmd8o-zs8
+PLY|Pogo Bilatéral - 120 BPM|M|s:eptwRDnFWTA
+PLY|Snap Down - Plates|Q,F,M|s:3tBOKJOk7Ig
+PLY|Drop Push Ups - Elevated|P,Tr,E|s:vmb-rjL6_5U
+PLY|Single Leg Drop Frontal|Q,F,M|s:lXMYWk8tM1g
+PLY|Single Leg Drop Sagittal|Q,F,M|s:x9_Do2OoPTY
+PLY|Drop Push Ups|P,Tr,E|s:NHBSE2TjQls
+PLY|Pogo pieds avant arrière|M|s:CUwZKzoVjUI
+PLY|Pogo pieds croisés|M|s:pXnrHquk_DM
+PLY|Pogo high jump|M|s:tDzvelfbQjU
+PLY|Pogo latéraux|M|s:RPdU0B3wfHs
+PLY|Pingouin Jump Double Clap|M|s:R_caw5d23u4
+PLY|Pingouin jump Single Clap|M|s:sy5v7kiYzdo
+PLY|Plio / pingouin single & double cap a 90bpm|M|s:hxFuDqIO7F0
+PLY|Plio / pingouin single & double Clap 110 BPM|M|s:mrdhQW9H-rk
+PLY|Plio / pingouin single cap 130 bpm|M|s:CahscMKzN2w
+PLY|Pogo une jambe latéral|M|s:ImW4_Mf06As
+PLY|Pogo une jambe|M|s:POPyCWDguzc
+PLY|Pogo pieds décalés en avant / en arrière|M|s:NHZSaKkLkCU
+PLY|Ski Jump|Q,F,M,AD|s:9T5hcttBzIQ
+PLY|Pogo avant arrière|M|s:yzKU6RA1zWY
+SAU|Box Jump jambes tendues|M,Q|s:EJO3IBGt9Wc
+SAU|Seated box jump medium|Q,F|s:edJesphjD3k
+SAU|Seated box jump basse|Q,F|s:4n8xB15rAMo
+SAU|Sauts dynamiques pieds libres|Q,F,M|s:a7DFkCKcxV4
+SAU|Tuck Jump|Q,F,M,PS|s:lncpl-ZtK-c
+SAU|KB Bent Over Row - Drop & Catch|GD,T,B|s:3PFmzm9fENk
+SPR|Les deux techniques pour le Sled Pull Hyrox|GD,B,IJ,F|y:1YRcogbZnXo
+SPR|L'astuce ULTIME pour le SLED PUSH !|Q,F,M|y:8uRK7w41JB8
+SPR|Bent over Sled Pull|GD,B,IJ|y:3pOA_K5KZCI
+SPR|Burpees over bloc|Q,F,P|y:dFUl7-He1iA
+SPR|Burpees over bloc large|Q,F,P|y:G5ZcaNrhq6k
+SPR|Farmer Carry - Double KB|AB,T,A|s:RQKPfGbJw0I
+SPR|Sandbag Zercher Walk|A,B,Q|s:McAv6nwkbTU
+SPR|Sled Drag|Q,F,IJ|s:2IKz76gXc4c
+SPR|Burpees Tuck Jump|Q,F,P|s:8dud8dKJbaY
+SPR|Burpees|Q,F,P|s:zDIHhQdCCVg
+SPR|Single Under|M|s:ISvFPynNw9c
+SPR|Double under|M|s:n8t8ZtlCxG0
+SPR|A Skip latéral|PS,M,AD|s:y9gx_rmPPdo
+SPR|Skil Ski Erg|GD,Tr,A|s:eQUezVDAcnE
+SPR|Wall Ball|Q,F,E|s:f3H781duLLI
+SPR|Farmer Carry|AB,T,A|s:Y_-IusezhX0
+SPR|Front Rack Carry|A,E|s:9wgYFfCiqRI
+SPR|OVH Walk|E,T,A|s:Xv2R4hsQykc
+MOB|Swimmer Asymétrique|E|y:KAtH4stkA6U
+MOB|Swimmer|E|y:pohsmbFN_64
+MOB|Hanche RI / RE - Lift Off|F,PS|y:-jz4_KVsGDM
+MOB|Couch Stretch|PS,Q|y:eLyD2BVcABQ
+MOB|Shoulder External Rotation|E|y:H8_8NYj137I
+MOB|P&R Hanche Rotation Interne|F,AD|y:sRMRw8U1R30
+MOB|Pails&Rails Talon d'Achille|M|y:x-yUdI6X_3Y
+MOB|Rotation Interne Excentrique - Épaule|E|y:4ymi4dvQQ8k
+MOB|Pails&Rails Rotation Externe en Flexion - Épaule|E|y:vCj_n0o4R1c
+MOB|Pails&Rails Rotation Externe Hanche en 90/90|F|y:lbXsHZU6mwc
+MOB|Adducteur Pails&Rails butterfly|AD|y:1PMn4nWXQWg
+MOB|Pails&Rails Rotation Interne hanche sur box|F,AD|y:f12JbFdVCQQ
+MOB|Hanche : Rotation interne en flexion / Rotation Externe levée isométrique|F,AD|y:6Q1ghVnt-Ms
+MOB|90/90 Transfert|F,AD|y:dJe5hqcYswY
+MOB|Pails&Rails Rotation Interne d'épaule|E|y:uiyxezFkTas
+MOB|Pails&Rails Rotation Externe d'épaule|E|y:uZTOfGAKEp0
+MOB|Prône Swimmers|E,T|y:aSGMctUjPDg
+MOB|Butterfly Contracter relâcher pour adducteurs|AD|y:gypJPL_sOu0
+MOB|Rotation interne hanche debout|F,AD|y:cvzud-OaWIM
+MOB|Dissociation orteils|PI|y:d9IoeEmX4ug
+MOB|Short foot drill|PI|y:9QZhRlqBk9Y
+MOB|PRH Rotation Interne de hanche|F,AD|y:fcIL2aIz0UY
+MOB|PRH Rotation externe Hanche|F|y:0akT23tv_hg
+MOB|Pail & Rail Rotation Externe de hanche|F|y:cF5Xzp-E7BA
+MOB|Pail Rail Rotation interne de Hanche + mouvement rotation externe|F,AD|y:pO3uc32Iu_Q
+MOB|Pail and Rail Adducteurs|AD|y:ovy1JllTUFM
+MOB|Prisoner Lift Off - Standing|F,PS|s:-L47BYTjiuI
+MOB|Jefferson Curl - On Plate|L,IJ|s:pydSy5bxTrI
+MOB|Prone Scorpion Alternated|L,PS,O|s:lmfxhFufJRU
+MOB|Side Lunge - Hip & Adductor Opener|AD,F|s:jKbeVZuqInU
+MOB|Lunge Stretch Front & Back|PS,IJ|s:o9Xfzs3AYi0
+MOB|Side Lunge - Thoracic Opener|AD,O|s:S8BUtPcbgQI
+MOB|Toe touch 3 angles|IJ,L|s:J8_5AwA6NdE
+MOB|Cat Cow|L,A|s:3SSAx9NDp_I
+MOB|Test cheville dorsiflexion|M|s:v7QPf9xO0Tk
+MOB|Test colonne vertébrale Jefferson curl|L,IJ|s:NnDIV8iCnH8
+MOB|Test colonne vertébrale Cat Camel|L,A|s:TFrerCzr5dI
+MOB|Test flexion de hanche - jambe fléchie|F,PS|s:ml_BNCztcVE
+MOB|Test hanche rotation externe|F|s:p8GcNFZddtg
+MOB|Test hanche rotation interne|F,AD|s:oXmGuXpgKfo
+MOB|Test épaule extension|E|s:6IeZJCwgWto
+MOB|Test épaule flexion|E,GD|s:RYOsqp--beg
+MOB|Test épaule rotation interne|E|s:P2NcBeyNNr0
+MOB|Test épaule rotation externe|E|s:DCp11vIraLI
+MOB|Wall back Extension|L,T|s:ErNS3MM45SA
+MOB|Épaule RE Excentrique|E|s:9bHOwLqeWMg
+MOB|Rétraction scapulaire - levée isométrique|T|s:8J2uLubaI1U
+MOB|Dépression scapulaire - levée isométrique|T,GD|s:g0kYqvTKMHc
+MOB|Protraction Scapulaire - levée isométrique|E,P|s:pjZa_r7eIBo
+MOB|Rotation interne d'épaule maintien isométrique|E|s:Hg-n1kPYVrk
+MOB|Rétraction scapulaire|T|s:b0UjTldze4I
+MOB|Protraction scapulaire|E,P|s:ShaMdkJgbm0
+MOB|Rotation Externe Épaule levée isométrique|E|s:2_YtW1Z-X7w
+MOB|Dépression des omoplates|T,GD|s:esZZPzKlye4
+MOB|t-Spine rotation on floor|O,L|s:eYsHK7U0MtA
+MOB|Prisoner lift off|F,PS|s:Cv48iWhMoVM
+MOB|Rotation cubaine|E|s:q4LNCSX9zak
+MOB|Lizard stretch reach with thoracic rotation|PS,AD,O|s:dqiRs311DMY
+MOB|Straight Leg Raises|PS,Q|s:fi-QGZg80Jc
+MOB|Hanche 90/90 élévation rotation|F,AD|s:LJdxDYw4ZhM
+MOB|Jefferson curl|L,IJ|s:_i9WYMnHU5Y
+MOB|Épaules mouvement interne externe au sol|E|s:hqT3srLtDPs
+MOB|Rotation Rotule|Q|s:gYOwUW1R6M8
+MOB|Étirement dos / ischios / mollets|L,IJ,M|s:p9etwSa8sis
+MOB|Étirement dos / ischios|L,IJ|s:6ZHygrSlgxU
+MOB|Étirement adducteurs|AD|s:JZBoTGVV7B4
+MOB|Étirement au sol ramener le genou (bas du dos, ischios, fessiers)|L,IJ,F|s:GbbtCQQNgCk
+MOB|Fin d'amplitude hanche interne / externe|F,AD|s:Bp_8-CVaI7M
+MOB|Renforcement rotation externe d'épaule dans toute l'amplitude|E|s:xZkknoooP88
+MOB|Position de l'enfant|L,GD|s:CfD-xE_LNhw
+MOB|Étirement mollet|M|s:8iDwfCllLcc
+MOB|Étirement quadriceps debout|Q|s:jBUv6WVcgfo
+MOB|Étirement au sol mollets/ischios/dos|M,IJ,L|s:x58Xq8Iz888
+MOB|Hovers Hanche Interne|F,AD|s:Dh8IaL65M14
+MOB|PRL Rotation Externe d'épaule|E|s:dnXd9UjMu0A
+MOB|Cercle en fin d'amplitude rotation interne de hanche|F,AD|s:VG6jUEAjvpk
+MOB|Fin d'amplitude épaule rotation interne / externe|E|s:HaWcaz2jk00
+MOB|Suppination pronation elbow|AB|s:QOSHjOOdUj8
+MOB|KB body full rotation shoulder stability|E,A|s:JpnY4w3CVXs
+MOB|Prône i|T,E|s:8Q0sR0yvFdw
+MOB|Prone T|T,E|s:uXUHOXD4A-U
+MOB|Test flexion d'épaule|E,GD|s:bWYBFa1y4tI
+MOB|Test rotation externe épaule|E|s:gvJy0Vg7dhw
+MOB|Test extension d'épaule|E|s:oBCsCGwCEto
+MOB|Test abduction verticale|E|s:iX-bxuvIg9o
+MOB|Test abduction épaule interne / externe|E|s:SLTeHzujXDg
+MOB|Test Rotation interne épaule|E|s:TFYlZX82b2w
+MOB|Banded external rotation and press|E,Tr|s:_f8ZW6tloS4
+MOB|Seated db external rotation|E|s:q_3kK0xk1JA
+MOB|Rotation interne au mur|E|s:nsUom3HODIU
+MOB|Rotation interne / externe active|E|s:3ldnqMH2nd0
+PRE|Back Rack March|PS,A,Q|s:WFqp23IoRL0
+PRE|Backward Walk|Q,M|y:Lry-fukBv6Q
+PRE|Backward Walk|Q,M|y:grIpmfJ_kng
+PRE|Deadhang|AB,GD|y:lLwDSiXXP94
+PRE|Deadhang aux anneaux|AB,GD|s:UHRXnlA-Ce0
+PRE|Échauffement complet Squat|Q,F,AD|y:deqtPAL0JOw
+PRE|Front & Backward Walk|Q,M|y:0zcb7pkqJHI
+PRE|Jumping jack|M,E|s:Rd_XZ2YwMIg
+PRE|Marche pointe de pieds|M,PI|s:MQkFYGyDu_4
+PRE|Mouvements Dynamiques|Q,F,E|s:sDVy5j9O5U8
+PRE|Poursuite Occulaire - Inifini|C|s:u6WMqIhzPxQ
+PRE|Priming Fessiers|F|s:EK0yigMlSPI
+PRE|Priming Ischios Allongés|IJ|s:VUATaMeKay0
+PRE|Priming Pec Raccourci|P|s:NK-7YKBDILs
+PRE|Priming Pecs|P|s:bbeS9JAns_E
+PRE|Priming Triceps|Tr|s:SPgYhDBQ4ZA
+PRE|Priming Triceps Overhead|Tr|s:OQLElbcEBdc
+PRE|RAC colonne assis|L,O|s:AMosXxRbXVs
+PRE|RAC colonne assis avec balle|L,O|s:Jv8onoqQHro
+PRE|RAC colonne debout|L,O|s:h7aiCeGgJEg
+PRE|RAC Colonne debout avec balle|L,O|s:SOTXvW3B5rU
+PRE|RAC Cou Épaules Coudes Poignets|C,E,AB|y:sfwjsu5MnT0
+PRE|Rac coudes|AB|s:QCR0yHJNIuc
+PRE|Rac dos|L,O|s:mRrsAom_BuQ
+PRE|RAC Full Body|E,F,L|y:zLF6UcKSNfA
+PRE|Rac Hanches|F,AD,PS|s:CN4ot0DbhJQ
+PRE|Rac poignet|AB|s:9g6kHoM16xQ
+PRE|RAC Scapula|T,E|y:NfI8thONV5U
+PRE|Respiration 3D|A|y:BP2RGkaEJXY
+PRE|Retour au calme jambes au mur + respiration nasale et ventrale|A|s:Dzw04jnbrc0
+PRE|Rotation tête 1 pied|C,PI|s:ee0h2KlnmFU
+PRE|Rotation tête deux pieds|C|s:PkU8kuMc8Jc
+PRE|Saccade Occulaire|C|s:fuXaHJajrWQ
+PRE|Swimmer|E|y:pohsmbFN_64
+PRE|Toucher nez 1 pied|PI|s:zuR6_jYjZTs
+PRE|Toucher Nez 2 pieds|PI|s:pdFVU9POQn0
+PRE|RAC épaules|E|s:uFLKpKIZlZk
+PRE|RAC chevilles|M,PI|s:13YQJ0iWozw
+PRE|RAC genoux|Q,IJ|s:xCA398f3oXY
+PRE|Rac scapulaire|T,E|s:QnxbEu9H79o
+PRE|RAC Cou|C|s:IZUg7Me0ZLs
+PRE|Rac Cheville|M,PI|s:qWLOPduD5VY
+PRE|Activation RDL|IJ,F|s:dy-ZedMhb-Y
+PRE|RAC Cat Cow|L,A|s:EYBcgO800Rk
+PRE|Toes Worm Walk|IJ,A,E|s:o1Ex3VYEmbI
+PRE|Single leg Calf raise on wall - Overcoming|M|s:ZxZX1MT24Ng
+PRE|Ergo / Cossack et shoulder tap|AD,F,A|s:l9c0Hr3RXGM
+PRE|Lizard transition jump|PS,AD,F|s:xeFplHOOt7s
