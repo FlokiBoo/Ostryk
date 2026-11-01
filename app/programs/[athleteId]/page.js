@@ -46,8 +46,7 @@ function ProgramsPageInner({ params }) {
   const [allAthletes, setAllAthletes] = useState([])
   const [newTitle, setNewTitle] = useState('')
   const [newAthleteIds, setNewAthleteIds] = useState([athleteId])
-  // ?nouveau=1 : arrivée depuis le bouton « Créer un programme » de la fiche client.
-  const [showForm, setShowForm] = useState(() => searchParams.get('nouveau') === '1')
+  const [showForm, setShowForm] = useState(false)
   const [creating, setCreating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [assignModal, setAssignModal] = useState(null) // program being assigned

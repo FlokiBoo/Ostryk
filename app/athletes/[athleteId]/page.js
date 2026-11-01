@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import FicheSportifCoach from '@/app/components/coach/FicheSportifCoach'
 import TableauDeBordClient from '@/app/components/coach/TableauDeBordClient'
+import CreerProgrammeClient from '@/app/components/coach/CreerProgrammeClient'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
 import { historiqueParExercice } from '@/lib/historiqueExercice'
@@ -208,6 +209,7 @@ export default function FicheSportifPage() {
   const coachingDirect = useSearchParams().get('coaching')
   const [data, setData] = useState(null)
   const [erreur, setErreur] = useState(null)
+  const [creationProgramme, setCreationProgramme] = useState(false)
 
   const rafraichir = useCallback(async () => {
     const res = await chargerFiche(athleteId)
@@ -255,6 +257,7 @@ export default function FicheSportifPage() {
   }
 
   return (
+    <>
     <FicheSportifCoach
       athlete={data.athlete}
       programme={data.programme}
@@ -273,13 +276,22 @@ export default function FicheSportifPage() {
         />
       )}
       onVoirHistorique={() => router.push(`/programs/${athleteId}`)}
-      onCreerProgramme={() => router.push(`/programs/${athleteId}?nouveau=1`)}
+      onCreerProgramme={() => setCreationProgramme(true)}
       tableauDeBord={<TableauDeBordClient athleteId={athleteId} seancesFaites={data.seancesSeptJours} />}
       // Le panneau de messagerie est global (ChatWidget dans app/layout.js), ouvert par événement.
       onMessage={() => window.dispatchEvent(new Event('open-chat-widget'))}
       // Rouverte directement au lancement (ResumeLastView), la fiche peut n'avoir aucun historique.
       onRetour={() => (window.history.length > 1 ? router.back() : router.push('/athletes'))}
     />
+    {creationProgramme ? (
+      <CreerProgrammeClient
+        athleteId={athleteId}
+        athleteNom={data.athlete.nom}
+        onFermer={() => setCreationProgramme(false)}
+        onCree={(programId) => router.push(`/programs/${athleteId}/${programId}`)}
+      />
+    ) : null}
+    </>
   )
 }
 
