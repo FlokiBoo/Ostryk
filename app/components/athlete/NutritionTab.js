@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Barcode, Camera, CaretLeft, CaretRight, MagnifyingGlass, Plus, Trash, X } from '@phosphor-icons/react'
+import { Barcode, Calculator, Camera, CaretLeft, CaretRight, MagnifyingGlass, Plus, Trash, X } from '@phosphor-icons/react'
+import CalculateurApport from './CalculateurApport'
 import { REPAS, jourLocal, repasDuMoment, totaux, valeursPourQuantite } from '@/lib/nutrition'
 
-// Onglet Nutrition du sportif : sa journée repas par repas, ses totaux face aux objectifs du coach,
+// Onglet Nutrition du sportif : sa journée repas par repas, ses totaux face à ses objectifs (fixés
+// par le coach, ou par le sportif avec « Calculer mon apport », voir CalculateurApport),
 // et l'ajout d'un aliment — recherche (aliments partagés + CIQUAL), scan du code-barres (Open Food
 // Facts), ou, pour un produit inconnu, deux photos (nom puis valeurs) lues par Claude. L'aliment
 // créé ainsi sert à tout le monde ; le coach le vérifie ensuite dans Nutrition › Aliments.
@@ -104,6 +106,7 @@ export default function NutritionTab({ token, demandeAjout = 0 }) {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [ajout, setAjout] = useState(null) // repas pour lequel la feuille d'ajout est ouverte
+  const [calculateur, setCalculateur] = useState(false)
 
   // Ajusté pendant le rendu plutôt que dans un effet (même règle que le lint react-hooks) : 0 au
   // départ, pour que la toute première demande, celle qui monte l'onglet, ouvre aussi l'ajout.
@@ -168,8 +171,11 @@ export default function NutritionTab({ token, demandeAjout = 0 }) {
           <Jauge label="Lipides" valeur={t.lipides} objectif={objectifs.lipides} unite="g" couleur="#6B7F96" />
         </div>
         {!objectifs.kcal && !objectifs.proteines ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 12 }}>Ton coach n&apos;a pas encore fixé d&apos;objectifs : tu vois tes totaux de la journée.</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 12 }}>Pas encore d&apos;objectifs : calcule ton apport pour suivre ta journée face à tes besoins.</div>
         ) : null}
+        <button onClick={() => setCalculateur(true)} style={{ ...boutonClair, width: '100%', marginTop: 12, padding: '10px 14px', fontSize: 13 }}>
+          <Calculator size={16} /> {objectifs.kcal ? 'Modifier mes objectifs' : 'Calculer mon apport'}
+        </button>
       </div>
 
       {erreur ? <div style={{ ...carte, color: 'var(--bordeaux)', fontSize: 13 }}>{erreur}</div> : null}
@@ -198,6 +204,14 @@ export default function NutritionTab({ token, demandeAjout = 0 }) {
         )
       })}
       {chargement ? <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center' }}>Chargement…</div> : null}
+
+      {calculateur ? (
+        <CalculateurApport
+          token={token}
+          onFermer={() => setCalculateur(false)}
+          onEnregistre={o => { setObjectifs(o); setCalculateur(false) }}
+        />
+      ) : null}
 
       {ajout ? (
         <FeuilleAjout
