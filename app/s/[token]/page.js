@@ -1022,9 +1022,9 @@ function AthleteView({ params }) {
           title: 'Ton coach a validé une séance pour toi',
           body: sess.title || null,
         })
-      } else if (athlete.coach_id) {
-        // Coach prévenu (cloche + push) côté serveur, et seulement pour un client en suivi 1:1 :
-        // la RLS refuse l'insertion depuis la session du sportif.
+      } else {
+        // Côté serveur : coach prévenu (cloche + push, seulement pour un client en suivi 1:1 — la RLS
+        // refuse l'insertion depuis la session du sportif) et activité Strava du jour rattachée.
         fetch(`/api/athlete-view/${token}/session-completed`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sessId }),
         }).catch(() => {})

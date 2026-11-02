@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { sendPushToAthlete } from '@/lib/push'
+import { rattacherStravaALaSeance } from '@/lib/strava'
 
 // Un client en suivi 1:1 vient de terminer une séance : le coach est prévenu dans sa cloche et par
 // push sur son téléphone. Côté serveur car la RLS de `notifications` refuse l'insertion depuis la
@@ -30,9 +31,16 @@ export async function POST(request, { params }) {
     { cookies: { getAll() { return cookieStore.getAll() }, setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } } }
   )
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user || athlete.auth_user_id !== user.id) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  // Le sportif lui-même, ou son coach (profil perso du coach, ouvert avec sa session de coach).
+  const estLeSportif = !!user && athlete.auth_user_id === user.id
+  const estSonCoach = !!user && !estLeSportif && athlete.coach_id === user.id
+  if (!estLeSportif && !estSonCoach) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  if (!athlete.is_1to1_client || athlete.is_coach || !athlete.coach_id) return NextResponse.json({ notified: false })
+  // Activité Strava du même entraînement arrivée avant la validation : rattachée à la séance
+  // (pour tous les sportifs, coach compris — avant le filtre « suivi 1:1 » des notifications).
+  await rattacherStravaALaSeance(athlete.id, sessionId).catch(() => {})
+
+  if (!estLeSportif || !athlete.is_1to1_client || athlete.is_coach || !athlete.coach_id) return NextResponse.json({ notified: false })
 
   // La séance doit vraiment être validée, pour ce sportif.
   const { data: completion } = await supabaseAdmin.from('program_completions')
