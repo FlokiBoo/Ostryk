@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { X } from '@phosphor-icons/react'
-import { ACTIVITY_LEVELS, GOALS, computeCalorieTarget } from '@/lib/mealPlanner'
+import { NIVEAUX_ACTIVITE, OBJECTIFS, besoinCalorique } from '@/lib/calculApport'
 
-// Calculateur d'apport du sportif (onglet Nutrition) : besoin calorique par Mifflin-St Jeor (même
-// calcul que le générateur de plan repas), puis répartition par défaut — protéines 1,8 g/kg,
+// Calculateur d'apport du sportif (onglet Nutrition) : besoin calorique calé sur le calculateur de
+// Julien Venesson (voir lib/calculApport.js), puis répartition par défaut — protéines 1,8 g/kg,
 // lipides 1,2 g/kg, les glucides complètent les calories. Tout reste modifiable : changer les
 // calories, les protéines ou les lipides recalcule les glucides ; changer les glucides recalcule
 // les calories. Enregistré comme objectifs journaliers (les jauges de l'onglet).
@@ -37,6 +37,7 @@ function Champ({ label, id, children }) {
 export default function CalculateurApport({ token, onFermer, onEnregistre }) {
   const [charge, setCharge] = useState(false)
   const [profil, setProfil] = useState({ sexe: 'H', age: '', poids: '', taille: '', activite: 'modere', objectif: 'maintenir' })
+  const [besoin, setBesoin] = useState(null) // { metabolisme, maintien, min, max, cible } du dernier calcul
   const [macros, setMacros] = useState({ kcal: '', proteines: '', lipides: '', glucides: '' })
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState(null)
@@ -45,7 +46,9 @@ export default function CalculateurApport({ token, onFermer, onEnregistre }) {
   const calculer = (p) => {
     const poids = nombre(p.poids), taille = nombre(p.taille), age = nombre(p.age)
     if (!poids || !taille || !age) return null
-    const { target } = computeCalorieTarget({ sex: p.sexe, weight: poids, height: taille, age, activityKey: p.activite, goalKey: p.objectif })
+    const b = besoinCalorique({ sexe: p.sexe, poids, taille, age, activite: p.activite, objectif: p.objectif })
+    setBesoin(b)
+    const target = b.cible
     const proteines = Math.round(poids * PROTEINES_PAR_KG)
     const lipides = Math.round(poids * LIPIDES_PAR_KG)
     return { kcal: String(target), proteines: String(proteines), lipides: String(lipides), glucides: String(glucidesRestants(target, proteines, lipides)) }
@@ -68,8 +71,9 @@ export default function CalculateurApport({ token, onFermer, onEnregistre }) {
         setProfil(p)
         // Objectifs déjà enregistrés : on les montre tels quels ; sinon, le calcul par défaut.
         const o = j.objectifs || {}
+        const m = calculer(p)
         if (o.kcal) setMacros({ kcal: String(o.kcal), proteines: String(o.proteines ?? ''), lipides: String(o.lipides ?? ''), glucides: String(o.glucides ?? '') })
-        else { const m = calculer(p); if (m) setMacros(m) }
+        else if (m) setMacros(m)
       })
       .catch(() => actif && setErreur('Pas de connexion. Réessaie dans un instant.'))
       .finally(() => actif && setCharge(true))
@@ -147,16 +151,21 @@ export default function CalculateurApport({ token, onFermer, onEnregistre }) {
               </div>
               <Champ label="Activité" id="apport-activite">
                 <select id="apport-activite" value={profil.activite} onChange={e => majProfil('activite', e.target.value)} style={champ}>
-                  {ACTIVITY_LEVELS.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
+                  {NIVEAUX_ACTIVITE.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
                 </select>
               </Champ>
               <Champ label="Objectif" id="apport-objectif">
                 <select id="apport-objectif" value={profil.objectif} onChange={e => majProfil('objectif', e.target.value)} style={champ}>
-                  {GOALS.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+                  {OBJECTIFS.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
                 </select>
               </Champ>
               {!poids || !nombre(profil.taille) || !nombre(profil.age) ? (
                 <div style={{ fontSize: 12, color: 'var(--text3)' }}>Renseigne ton âge, ton poids et ta taille pour lancer le calcul.</div>
+              ) : besoin ? (
+                <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, background: 'var(--bg2)', borderRadius: 'var(--r)', padding: '8px 10px' }}>
+                  Métabolisme de base : <strong>{besoin.metabolisme} kcal</strong> · Maintien : <strong>{besoin.maintien} kcal</strong>
+                  {besoin.min !== besoin.max ? <><br />Fourchette conseillée : <strong>{besoin.min} à {besoin.max} kcal</strong> (milieu retenu ci-dessous)</> : null}
+                </div>
               ) : null}
             </div>
 
