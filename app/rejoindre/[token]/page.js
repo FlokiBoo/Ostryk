@@ -6,10 +6,16 @@ import { Eye, EyeSlash } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import PasswordChecklist from '@/app/components/PasswordChecklist'
 import { isPasswordValid } from '@/lib/passwordPolicy'
+import { ANDROID_APP_URL } from '@/lib/appAndroid'
 
 // Page du lien d'invitation personnel (voir app/api/rejoindre/[token]/route.js) : le client choisit
 // son mot de passe, le compte est rattaché à la fiche que le coach a déjà créée, puis il entre
 // directement dans son espace.
+//
+// Version Android (?app=android) : même formulaire, mais une fois le compte créé on ne l'ouvre pas
+// dans le navigateur — on l'envoie installer l'app et s'y connecter avec son email et son mot de
+// passe. L'app (coque Capacitor) ne sait pas s'ouvrir sur une page précise depuis un lien sans
+// nouvelle version native, d'où ce passage par le navigateur.
 
 const etiquette = { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px' }
 
@@ -43,6 +49,10 @@ export default function RejoindrePage() {
   const [cgu, setCgu] = useState(false)
   const [envoi, setEnvoi] = useState(false)
   const [erreur, setErreur] = useState('')
+  // Lu au premier rendu : sans risque d'écart d'hydratation, le premier rendu affiche « Chargement… »
+  // dans les deux cas.
+  const [android] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('app') === 'android')
+  const [fini, setFini] = useState(false) // compte créé depuis le lien Android
 
   useEffect(() => {
     let actif = true
@@ -83,6 +93,9 @@ export default function RejoindrePage() {
       setErreur(json.error || 'Activation impossible, réessaie.')
       return
     }
+    // Lien Android : pas de session ni d'appareil enregistré dans le navigateur (ça prendrait une
+    // des places d'appareil) — le client va se connecter dans l'app.
+    if (android) { setEnvoi(false); setFini(true); return }
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
     if (error) { router.push('/login'); return }
     // Ce téléphone est validé d'office : le client vient d'ouvrir SON lien personnel et de choisir
@@ -104,6 +117,25 @@ export default function RejoindrePage() {
 
         {infos === null ? (
           <p style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>Chargement…</p>
+        ) : android && (fini || infos.active) ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'var(--font-title)', fontSize: 20, color: 'var(--bordeaux)' }}>
+                {fini ? 'Compte créé !' : `${infos.prenom ? `${infos.prenom}, ton` : 'Ton'} compte est déjà activé`}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 6, lineHeight: 1.5 }}>
+                Installe l’app Ostryk, ouvre-la et connecte-toi avec ton email{fini ? <> (<strong>{email.trim().toLowerCase()}</strong>)</> : null} et ton mot de passe.
+              </div>
+            </div>
+            <a href={ANDROID_APP_URL} style={{
+              display: 'block', textAlign: 'center', textDecoration: 'none', background: 'var(--green)', color: '#fff', borderRadius: 'var(--r)', padding: 14, fontSize: 15, fontWeight: 700,
+            }}>
+              Télécharger l’app Android
+            </a>
+            <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', lineHeight: 1.45 }}>
+              À la première connexion, l’app peut te demander un code envoyé par email pour valider ton téléphone.
+            </div>
+          </div>
         ) : infos.invalide ? (
           <>
             <p style={{ fontSize: 15, color: 'var(--text)', textAlign: 'center', margin: '0 0 8px' }}>Ce lien d’invitation n’est pas valide.</p>
