@@ -10,7 +10,7 @@ import { buildKnownRaces } from '@/lib/raceEstimates'
 import { WEEK_DAYS } from '@/lib/weekDays'
 import { setUnsavedChanges, guardNavigation } from '@/lib/unsavedChanges'
 import { SortableGroup, SortableItem, DragHandle } from '@/app/components/SortableItem'
-import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core'
+import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, closestCenter, pointerWithin } from '@dnd-kit/core'
 import { getCoachId } from '@/lib/coach'
 import { cloneTemplateToAthlete } from '@/lib/programTemplates'
 import ActivityTypeSelect from '@/app/components/ActivityTypeSelect'
@@ -54,12 +54,18 @@ function DayCell({ children, isOver, setNodeRef, borderLeft }) {
 // poignée ⊕) plutôt qu'une puce entièrement "draggable" — même principe que SortableItem/DragHandle
 // ailleurs dans l'app : seule la poignée porte les listeners de glisser, le reste (case à cocher,
 // titre cliquable) reste utilisable normalement sans ambiguïté clic/glisser.
-function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact, doneAt }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: s.id })
+//
+// La puce est aussi une zone de dépôt (`chip:<id>`) : lâcher une séance dessus la place juste
+// au-dessus — c'est ce qui permet de choisir l'ordre de deux séances le même jour. Pendant le
+// glisser, c'est le DragOverlay de WeekGrid qui suit le pointeur (avec le nombre de séances
+// emportées) ; les puces d'origine restent en place, estompées.
+function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact, doneAt, dimmed }) {
+  const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: s.id })
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `chip:${s.id}` })
+  const setNodeRef = (node) => { setDragRef(node); setDropRef(node) }
   const style = {
-    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 50 : undefined,
+    opacity: dimmed ? 0.35 : 1,
+    boxShadow: isOver && !dimmed ? '0 -3px 0 0 var(--bordeaux)' : undefined,
   }
   const color = selected ? '#fff' : 'var(--green)'
   return (
@@ -89,7 +95,7 @@ function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact
         style={{ background: 'none', border: 'none', padding: 3, display: 'flex', color: 'inherit', cursor: 'pointer', flexShrink: 0, opacity: 0.85 }}>
         <CopySimple size={compact ? 12 : 14} />
       </button>
-      <span {...listeners} {...attributes} title="Maintenir puis glisser pour déplacer vers un autre jour"
+      <span {...listeners} {...attributes} title="Maintenir puis glisser : sur un autre jour pour déplacer, sur une autre séance pour la placer au-dessus"
         style={{ cursor: 'grab', touchAction: 'none', display: 'flex', flexShrink: 0, opacity: 0.85, padding: 3 }}>
         <ArrowsOutCardinal size={compact ? 12 : 14} />
       </span>
@@ -97,7 +103,7 @@ function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact
   )
 }
 
-function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds, doneDates, onToggleSelect, onOpenSession, onAddAt, onAddFromWorkout, onDuplicateSession }) {
+function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds, doneDates, onToggleSelect, onOpenSession, onAddAt, onAddFromWorkout, onDuplicateSession, movingIds }) {
   const { isOver, setNodeRef } = useDroppable({ id: `${week}-${d.key}` })
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   return (
@@ -107,7 +113,7 @@ function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{d.short}</span>
       </div>
       {cellSessions.map(s => (
-        <SessionChip key={s.id} s={s} selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} />
+        <SessionChip key={s.id} s={s} selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} dimmed={movingIds.includes(s.id)} />
       ))}
       <div style={{ position: 'relative' }}>
         <button onClick={() => setAddMenuOpen(v => !v)} style={{
@@ -150,31 +156,68 @@ function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds
   )
 }
 
-function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSession, onMoveSession, onDuplicateSession, selectedIds, doneDates, onToggleSelect }) {
+// Tri d'affichage et d'enregistrement : order_index d'abord, id ensuite pour départager les
+// doublons d'order_index (séances créées avec order_index = sessions.length après une suppression).
+const byOrder = (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0) || String(a.id).localeCompare(String(b.id))
+
+// Détection du dépôt : la puce sous le pointeur l'emporte sur la case (pour « placer au-dessus »).
+// Hors de toute zone, on retombe sur la case la plus proche comme avant.
+function detectDrop(args) {
+  const hits = pointerWithin(args)
+  if (hits.length) {
+    const chip = hits.find(h => String(h.id).startsWith('chip:'))
+    return chip ? [chip] : hits
+  }
+  return closestCenter({ ...args, droppableContainers: args.droppableContainers.filter(c => !String(c.id).startsWith('chip:')) })
+}
+
+function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSession, onApplyLayout, onDuplicateSession, selectedIds, doneDates, onToggleSelect }) {
   const byCell = {}
-  sessions.forEach(s => {
+  ;[...sessions].sort(byOrder).forEach(s => {
     if (s.week_number == null || s.day_of_week == null) return
     const key = `${s.week_number}-${s.day_of_week}`
     ;(byCell[key] = byCell[key] || []).push(s)
   })
-  const unscheduled = sessions.filter(s => s.week_number == null || s.day_of_week == null)
+  const unscheduled = sessions.filter(s => s.week_number == null || s.day_of_week == null).sort(byOrder)
 
   const weeks = Array.from({ length: durationWeeks }, (_, wi) => wi + 1)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 6 } }))
+  const [movingIds, setMovingIds] = useState([])
+  // Lu par handleDragEnd (le lot fixé au début du glisser).
+  const movingIdsRef = useRef([])
 
-  const handleDragEnd = (event) => {
-    const { active, over } = event
+  // Si la séance saisie fait partie d'une sélection multiple, tout le lot part avec elle.
+  const lotFor = (activeId) => (selectedIds.has(activeId) && selectedIds.size > 1 ? [...selectedIds] : [activeId])
+
+  const handleDragStart = ({ active }) => {
+    const ids = lotFor(active.id)
+    movingIdsRef.current = ids
+    setMovingIds(ids)
+  }
+
+  const handleDragCancel = () => { movingIdsRef.current = []; setMovingIds([]) }
+
+  const handleDragEnd = ({ active, over }) => {
+    const idsToMove = movingIdsRef.current.length ? movingIdsRef.current : [active.id]
+    handleDragCancel()
     if (!over) return
-    const [weekStr, dayStr] = String(over.id).split('-')
-    const week = parseInt(weekStr, 10)
-    const day = parseInt(dayStr, 10)
+
+    // Cible : une case (« semaine-jour ») ou une puce (« chip:<id> », on se place au-dessus d'elle).
+    let week, day, beforeId = null
+    if (String(over.id).startsWith('chip:')) {
+      beforeId = String(over.id).slice(5)
+      // Lâchée sur elle-même (ou sur une autre séance du lot) : rien ne bouge.
+      if (idsToMove.includes(beforeId)) return
+      const target = sessions.find(x => x.id === beforeId)
+      if (!target || target.week_number == null || target.day_of_week == null) return
+      week = target.week_number; day = target.day_of_week
+    } else {
+      const [weekStr, dayStr] = String(over.id).split('-')
+      week = parseInt(weekStr, 10); day = parseInt(dayStr, 10)
+    }
 
     const dragged = sessions.find(x => x.id === active.id)
-    // Si la séance glissée fait partie d'une sélection multiple, on déplace tout le lot d'un coup
-    // plutôt que la seule séance sous le pointeur.
-    const idsToMove = selectedIds.has(active.id) && selectedIds.size > 1 ? [...selectedIds] : [active.id]
-
     // Décalage (en jours) entre la position d'origine de la séance saisie et la case cible, appliqué
     // aux autres séances du lot pour garder leur organisation relative (ex. Jour 1/Jour 2 -> Jour 4/
     // Jour 5 si on lâche Jour 2 sur Jour 5), plutôt que de toutes les empiler sur la même case.
@@ -182,26 +225,59 @@ function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSe
     const delta = hasOrigin ? ((week - 1) * 7 + day) - ((dragged.week_number - 1) * 7 + dragged.day_of_week) : 0
     const maxAbsDay = durationWeeks * 7 - 1
 
-    idsToMove.forEach(id => {
-      const s = sessions.find(x => x.id === id)
-      if (!s) return
-      let targetWeek, targetDay
+    const moving = new Set(idsToMove)
+    const placed = new Map() // id -> { week_number, day_of_week }
+    sessions.forEach(s => {
+      if (!moving.has(s.id)) { placed.set(s.id, { week_number: s.week_number, day_of_week: s.day_of_week }); return }
       if (!hasOrigin || s.week_number == null || s.day_of_week == null) {
-        // Pas de position d'origine à décaler (séance non planifiée, ou séance saisie elle-même non
-        // planifiée) : atterrit exactement sur la case visée.
-        targetWeek = week; targetDay = day
+        placed.set(s.id, { week_number: week, day_of_week: day })
       } else {
         const abs = Math.min(maxAbsDay, Math.max(0, (s.week_number - 1) * 7 + s.day_of_week + delta))
-        targetWeek = Math.floor(abs / 7) + 1
-        targetDay = abs % 7
+        placed.set(s.id, { week_number: Math.floor(abs / 7) + 1, day_of_week: abs % 7 })
       }
-      if (s.week_number !== targetWeek || s.day_of_week !== targetDay) onMoveSession(id, targetWeek, targetDay)
     })
+
+    // Ordre dans chaque case : les séances restées en place gardent leur ordre ; celles qui
+    // arrivent vont juste au-dessus de la puce visée, ou à la fin de la case si on a lâché sur la
+    // case elle-même (c'est aussi comme ça qu'on renvoie une séance en bas de sa journée).
+    const cells = new Map()
+    const cellKey = (p) => (p.week_number == null || p.day_of_week == null ? 'none' : `${p.week_number}-${p.day_of_week}`)
+    ;[...sessions].sort(byOrder).forEach(s => {
+      const k = cellKey(placed.get(s.id))
+      if (!cells.has(k)) cells.set(k, { stay: [], arrive: [] })
+      cells.get(k)[moving.has(s.id) ? 'arrive' : 'stay'].push(s.id)
+    })
+    const targetKey = `${week}-${day}`
+    const ordered = []
+    const keys = [...cells.keys()].filter(k => k !== 'none').sort((a, b) => {
+      const [wa, da] = a.split('-').map(Number); const [wb, db] = b.split('-').map(Number)
+      return (wa * 7 + da) - (wb * 7 + db)
+    })
+    if (cells.has('none')) keys.push('none')
+    keys.forEach(k => {
+      const { stay, arrive } = cells.get(k)
+      const at = k === targetKey && beforeId ? stay.indexOf(beforeId) : -1
+      if (at === -1) ordered.push(...stay, ...arrive)
+      else ordered.push(...stay.slice(0, at), ...arrive, ...stay.slice(at))
+    })
+
+    // order_index renuméroté sur tout le programme dans l'ordre du calendrier : c'est lui qui fixe
+    // l'ordre d'affichage, ici comme dans l'espace du sportif. On n'envoie que ce qui change.
+    const changes = []
+    ordered.forEach((id, i) => {
+      const s = sessions.find(x => x.id === id)
+      const p = placed.get(id)
+      const moved = s.week_number !== p.week_number || s.day_of_week !== p.day_of_week
+      if (moved || s.order_index !== i) changes.push({ id, week_number: p.week_number, day_of_week: p.day_of_week, order_index: i, moved })
+    })
+    if (changes.length) onApplyLayout(changes)
   }
+
+  const overlaySession = movingIds.length ? sessions.find(x => x.id === movingIds[0]) : null
 
   return (
     <div style={{ margin: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={detectDrop} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
         <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', overflow: 'hidden' }}>
           {weeks.map((week, wi) => (
             <div key={week} style={{
@@ -213,7 +289,7 @@ function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSe
                 return (
                   <WeekDayCell key={d.key} week={week} d={d} dayNumber={dayNumber}
                     cellSessions={byCell[`${week}-${d.key}`] || []} isFirstCol={di === 0}
-                    selectedIds={selectedIds} doneDates={doneDates} onToggleSelect={onToggleSelect}
+                    selectedIds={selectedIds} doneDates={doneDates} onToggleSelect={onToggleSelect} movingIds={movingIds}
                     onOpenSession={onOpenSession} onAddAt={onAddAt} onAddFromWorkout={onAddFromWorkout} onDuplicateSession={onDuplicateSession} />
                 )
               })}
@@ -225,10 +301,25 @@ function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSe
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '4px 2px' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)' }}>Non planifiées :</span>
             {unscheduled.map(s => (
-              <SessionChip key={s.id} s={s} compact selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} />
+              <SessionChip key={s.id} s={s} compact selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} dimmed={movingIds.includes(s.id)} />
             ))}
           </div>
         )}
+
+        <DragOverlay dropAnimation={null}>
+          {overlaySession ? (
+            <div style={{
+              position: 'relative', display: 'flex', alignItems: 'center', gap: 6, cursor: 'grabbing',
+              background: 'var(--green)', color: '#fff', border: '1px solid var(--green)', borderRadius: 'var(--r)',
+              padding: '8px 10px', fontSize: 13, fontWeight: 700, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 220,
+            }}>
+              <ArrowsOutCardinal size={14} style={{ flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {movingIds.length > 1 ? `${movingIds.length} séances` : (overlaySession.title || 'Séance')}
+              </span>
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </div>
   )
@@ -486,14 +577,22 @@ function ProgramEditorPage({ params }) {
   // Déplacement par glisser-déposer dans la grille Jour 1→N : contrairement à updateSession (qui
   // ne fait que marquer "modifié" en attendant le clic sur Sauvegarder), ici on écrit tout de suite
   // en base — l'utilisateur s'attend à ce qu'un glisser-déposer soit persisté immédiatement.
-  const moveSessionToDay = async (id, weekNumber, dayOfWeek) => {
+  // Reçoit en une fois tout ce qu'un glisser-déposer change (jour et/ou ordre, voir WeekGrid) : un
+  // seul setSessions, puis une écriture par séance touchée — des lignes différentes, donc l'ordre
+  // d'arrivée des requêtes n'a pas d'importance.
+  const applyLayout = async (changes) => {
     const needsSync = isTemplate && followers.length > 0
-    setSessions(prev => prev.map(s => s.id === id
-      ? { ...s, week_number: weekNumber, day_of_week: dayOfWeek, ...(needsSync ? { needs_sync: true } : {}) }
-      : s))
-    await supabase.from('program_sessions')
-      .update({ week_number: weekNumber, day_of_week: dayOfWeek, ...(needsSync ? { needs_sync: true } : {}) })
-      .eq('id', id)
+    const byId = new Map(changes.map(c => [c.id, c]))
+    setSessions(prev => prev.map(s => {
+      const c = byId.get(s.id)
+      if (!c) return s
+      return { ...s, week_number: c.week_number, day_of_week: c.day_of_week, order_index: c.order_index, ...(needsSync && c.moved ? { needs_sync: true } : {}) }
+    }))
+    const results = await Promise.all(changes.map(c => supabase.from('program_sessions')
+      .update({ week_number: c.week_number, day_of_week: c.day_of_week, order_index: c.order_index, ...(needsSync && c.moved ? { needs_sync: true } : {}) })
+      .eq('id', c.id)))
+    const failed = results.find(r => r.error)
+    if (failed) alert('Erreur lors de l\'enregistrement du déplacement : ' + failed.error.message)
   }
 
   const toggleSessionSelected = (id) => {
@@ -505,15 +604,32 @@ function ProgramEditorPage({ params }) {
     })
   }
 
+  // Les copies sont faites l'une après l'autre (pas en parallèle) pour garder des order_index
+  // distincts et dans l'ordre du calendrier. Une copie qui échoue n'arrête pas les suivantes.
   const duplicateSelectedSessions = async () => {
+    if (duplicatingSelected) return
     setDuplicatingSelected(true)
-    let nextIdx = sessions.length
-    for (const id of selectedSessionIds) {
-      await duplicateSession(id, nextIdx, { skipOpen: true })
-      nextIdx++
+    const ids = sessions.filter(s => selectedSessionIds.has(s.id)).sort(byOrder).map(s => s.id)
+    let nextIdx = Math.max(-1, ...sessions.map(s => s.order_index ?? 0)) + 1
+    const echecs = []
+    try {
+      for (const id of ids) {
+        const ok = await duplicateSession(id, nextIdx, { skipOpen: true, silent: true })
+        if (ok) nextIdx++
+        else echecs.push(sessions.find(s => s.id === id)?.title || 'Séance')
+      }
+    } finally {
+      setSelectedSessionIds(new Set())
+      setDuplicatingSelected(false)
     }
-    setSelectedSessionIds(new Set())
-    setDuplicatingSelected(false)
+    if (echecs.length) alert(`${echecs.length} séance${echecs.length > 1 ? 's' : ''} n'${echecs.length > 1 ? 'ont' : 'a'} pas pu être dupliquée${echecs.length > 1 ? 's' : ''} : ${echecs.join(', ')}`)
+  }
+
+  // Icône « dupliquer » d'une puce : si la séance fait partie d'une sélection multiple, c'est toute
+  // la sélection qui est dupliquée (comme le bouton de la barre de sélection).
+  const duplicateFromChip = (id) => {
+    if (selectedSessionIds.has(id) && selectedSessionIds.size > 1) return duplicateSelectedSessions()
+    return duplicateSession(id, null, { skipOpen: true })
   }
 
   const runSync = async () => {
@@ -676,64 +792,61 @@ function ProgramEditorPage({ params }) {
   // (blocks), pas l'ancien éditeur — cohérent avec la création via addSessionAt ci-dessus.
   const goToSessionPage = (id) => router.push(`/programs/${athleteId}/${programId}/session/${id}`)
 
+  // Copie faite depuis la base (séance + exercices relus en entier), pas depuis l'état de la page :
+  // l'état ne garde pas toutes les colonnes et les transforme (champs vides en ''), ce qui faisait
+  // perdre à la copie block_type, set_details & co, et un exercice sans nom faisait planter la
+  // boucle de duplication multiple dès la première séance. Renvoie true si la copie a réussi.
   const duplicateSession = async (id, forcedIdx = null, opts = {}) => {
-    const s = sessions.find(sess => sess.id === id)
-    if (!s) return
+    const fail = (msg) => { if (!opts.silent) alert(msg); return false }
+    const { data: src, error: readErr } = await supabase.from('program_sessions')
+      .select('*, program_exercises(*)').eq('id', id).single()
+    if (readErr || !src) return fail('Erreur duplication : ' + (readErr?.message || 'séance introuvable'))
 
+    // Ce qui décrit la séance d'origine elle-même (identité, lien au template, suivi) ne se copie
+    // pas. Le jour et la semaine, si : la copie apparaît à côté de l'originale, à glisser ailleurs.
+    const {
+      id: _id, created_at: _c, updated_at: _u, program_exercises: srcExos,
+      source_session_id: _src, needs_sync: _ns, customized_at: _cu, is_coached: _co,
+      ...fields
+    } = src
     const { data: newSession, error: sessErr } = await supabase.from('program_sessions')
       .insert({
-        program_id: programId, order_index: forcedIdx !== null ? forcedIdx : sessions.length,
-        title: s.title ? `${s.title} (copie)` : '',
-        activation: s.activation || null, coach_notes: s.coach_notes || null,
-        activation_videos: s.activation_videos || [], session_type: s.session_type || null,
-        recurring_daily_target: s.recurring_daily_target ?? null,
-        materiel: s.materiel || null,
-        // Circuits + warmup/cooldown/timer de séance : oubliés par le passé (voir
-        // addSessionFromWorkout ci-dessus pour le pattern correct), ce qui faisait disparaître le
-        // circuit d'une séance dupliquée sans toucher à ses exercices.
-        circuits: s.circuits || [], warmup_block: s.warmup_block || null, cooldown_block: s.cooldown_block || null,
-        warmup_content: s.warmup_content || null, cooldown_content: s.cooldown_content || null,
-        activity_mode: s.activity_mode || 'standard', timer_config: s.timer_config || null,
-        // Garde le même jour que l'originale (au lieu de retomber "non planifiée") : dans la
-        // grille Jour 1→N, dupliquer une séance sert surtout à en poser une copie juste à côté,
-        // que le coach glisse ensuite ailleurs si besoin.
-        week_number: s.week_number, day_of_week: s.day_of_week,
+        ...fields,
+        program_id: programId,
+        order_index: forcedIdx !== null ? forcedIdx : Math.max(-1, ...sessions.map(s => s.order_index ?? 0)) + 1,
+        title: src.title ? `${src.title} (copie)` : '',
       })
       .select().single()
-    if (sessErr || !newSession) { alert('Erreur duplication : ' + sessErr?.message); return }
+    if (sessErr || !newSession) return fail('Erreur duplication : ' + sessErr?.message)
 
-    const toInsert = s.exercises.filter(e => e.name.trim()).map((e, j) => ({
-      program_session_id: newSession.id, order_index: j, name: e.name.trim(),
-      sets: e.sets !== '' ? parseInt(e.sets) : null,
-      reps: e.reps || null,
-      kg: e.kg !== '' && !isNaN(parseFloat(e.kg)) ? parseFloat(e.kg) : null,
-      rest: e.rest || null,
-      note: e.note || null,
-      materiel: e.materiel || null,
-      video_url: e.video_url || null,
-      superset_group: e.superset_group || null,
-      focus_muscles: e.focus_muscles || null,
-      pace_base: e.pace_base || null,
-      pct_low: e.pct_low !== '' && e.pct_low != null ? parseFloat(e.pct_low) : null,
-      pct_high: e.pct_high !== '' && e.pct_high != null ? parseFloat(e.pct_high) : null,
-      timer_config: e.timer_config || null,
-    }))
-
+    const toInsert = [...(srcExos || [])].sort((a, b) => a.order_index - b.order_index)
+      .map(({ id: _eid, created_at: _ec, updated_at: _eu, program_session_id: _ps, ...e }) => ({ ...e, program_session_id: newSession.id }))
     let insertedExos = []
     if (toInsert.length) {
       const { data: inserted, error: insErr } = await supabase.from('program_exercises').insert(toInsert).select()
-      if (insErr) { alert('Erreur duplication des exercices : ' + insErr.message); return }
+      if (insErr) {
+        // Pas de séance vide laissée derrière une copie ratée.
+        await supabase.from('program_sessions').delete().eq('id', newSession.id)
+        return fail('Erreur duplication des exercices : ' + insErr.message)
+      }
       insertedExos = inserted || []
     }
 
     const newS = {
       ...newSession,
+      activation_videos: newSession.activation_videos || [],
+      circuits: newSession.circuits || [],
       exercises: insertedExos.length
-        ? insertedExos.map(e => ({ ...e, _key: e.id }))
+        ? [...insertedExos].sort((a, b) => a.order_index - b.order_index).map(e => ({
+          ...e, _key: e.id, sets: e.sets ?? '', reps: e.reps ?? '', kg: e.kg ?? '', rest: e.rest ?? '', note: e.note ?? '',
+          materiel: e.materiel ?? '', video_url: e.video_url || '', superset_group: e.superset_group || null,
+          pct_low: e.pct_low ?? '', pct_high: e.pct_high ?? '',
+        }))
         : [emptyExo(0)],
     }
     setSessions(prev => [...prev, newS])
     if (!opts.skipOpen) router.push(`/programs/${athleteId}/${programId}/session/${newSession.id}`)
+    return true
   }
 
   const saveTitle = async () => {
@@ -1230,8 +1343,8 @@ function ProgramEditorPage({ params }) {
           onAddAt={addSessionAt}
           onAddFromWorkout={openWorkoutPicker}
           onOpenSession={goToSessionPage}
-          onMoveSession={moveSessionToDay}
-          onDuplicateSession={(id) => duplicateSession(id, null, { skipOpen: true })}
+          onApplyLayout={applyLayout}
+          onDuplicateSession={duplicateFromChip}
           selectedIds={selectedSessionIds}
           doneDates={doneDates}
           onToggleSelect={toggleSessionSelected}
