@@ -6,6 +6,7 @@ const TYPES = [
   { key: 'EMOM', label: 'EMOM' },
   { key: 'AMRAP', label: 'AMRAP' },
   { key: 'TABATA', label: 'TABATA' },
+  { key: 'FOR_TIME', label: 'FOR TIME' },
   { key: 'CUSTOM', label: 'Perso' },
 ]
 
@@ -13,6 +14,7 @@ export function defaultTimerConfig(type = 'EMOM') {
   if (type === 'EMOM') return { type: 'EMOM', roundSec: 60, rounds: 10 }
   if (type === 'AMRAP') return { type: 'AMRAP', totalSec: 720 }
   if (type === 'TABATA') return { type: 'TABATA', workSec: 20, restSec: 10, rounds: 8 }
+  if (type === 'FOR_TIME') return { type: 'FOR_TIME', capSec: 0 }
   return { type: 'CUSTOM', steps: [{ type: 'ON', sec: 30 }], rounds: 1, restBetweenSec: 0 }
 }
 
@@ -25,10 +27,10 @@ export default function TimerConfigEditor({ value, onChange }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {TYPES.map(t => (
           <button key={t.key} type="button" onClick={() => setType(t.key)} style={{
-            flex: 1, padding: '9px 6px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+            flex: '1 1 0', minWidth: 64, padding: '9px 6px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700,
             border: `1px solid ${cfg.type === t.key ? 'var(--green)' : 'var(--border2)'}`,
             background: cfg.type === t.key ? 'var(--green-light)' : 'var(--bg)',
             color: cfg.type === t.key ? 'var(--green)' : 'var(--text3)',
@@ -47,6 +49,13 @@ export default function TimerConfigEditor({ value, onChange }) {
 
       {cfg.type === 'AMRAP' && (
         <HMSField label="Durée totale" seconds={cfg.totalSec} onChange={v => set({ totalSec: v })} min={1} />
+      )}
+
+      {cfg.type === 'FOR_TIME' && (
+        <div>
+          <HMSField label="Time cap (0 = sans limite)" seconds={cfg.capSec} onChange={v => set({ capSec: v })} min={0} />
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>Le chrono monte ; mets-le en pause quand c&apos;est fini.</div>
+        </div>
       )}
 
       {cfg.type === 'TABATA' && (

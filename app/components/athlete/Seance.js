@@ -8,6 +8,7 @@ import { parseMusclesFromText, randomCitation, BodySVG } from '@/app/components/
 import { COLOR_BY_GROUP } from '@/app/components/MuscleAnatomyDiagram'
 import { shareCardImage } from '@/lib/shareCard'
 import { programmerFinRepos, annulerFinRepos } from '@/lib/reposNotification'
+import { MinuteurProvider, useMinuteur } from './MinuteurSeance'
 import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVideo'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
 
@@ -827,6 +828,7 @@ function FinClient({ session, nbExercices, volume, muscles, terminaison, onTermi
 }
 
 function Page({ titre, etapes, index, faits, fin, onNaviguer, onFermer, bandeauCoach = null, children }) {
+  const minuteur = useMinuteur()
   return (
     <div style={{ background: T.beige, minHeight: '100svh', color: T.texte, paddingBottom: 'calc(18px + env(safe-area-inset-bottom, 0px))' }}>
       {bandeauCoach ? (
@@ -846,7 +848,16 @@ function Page({ titre, etapes, index, faits, fin, onNaviguer, onFermer, bandeauC
           <span style={{ flex: 1, textAlign: 'center', fontFamily: TITRE, fontSize: 13, color: T.bordeaux, letterSpacing: '0.06em', textTransform: 'uppercase', lineHeight: 1.35 }}>
             {titre}
           </span>
-          <span style={{ width: 44, flex: 'none' }} />
+          {minuteur && !minuteur.ouvert ? (
+            <button type="button" aria-label="Minuteur (AMRAP, EMOM, Tabata, For Time)" onClick={minuteur.ouvrir} style={{
+              background: T.blanc, border: `1px solid ${T.bordure}`, borderRadius: '50%', width: 44, height: 44, cursor: 'pointer',
+              flex: 'none', fontSize: 20, color: T.vert, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              ⏱
+            </button>
+          ) : (
+            <span style={{ width: 44, flex: 'none' }} />
+          )}
         </div>
 
         <nav aria-label="Étapes de la séance" style={{ display: 'flex', gap: 7, justifyContent: 'center', marginBottom: 5, flexWrap: 'wrap', padding: '0 14px' }}>
@@ -917,7 +928,7 @@ function fusionnerBloc(bloc, depuisBase, memo) {
   récapitulatif partageable (onPartagerRecap). Les séries, elles, passent par les mêmes
   onEnsureExerciseSets / onSaveExerciseSet : c'est l'appelant qui les marque entered_by_role = 'coach'.
 */
-export default function Seance({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null, notesExercices = {}, onEnregistrerNote = null, historique = {}, onRemplacerExercice = null, bibliotheque = [] }) {
+function SeanceEcran({ session, athleteId, mouvementsSections = {}, exerciseSets, onEnsureExerciseSets, onSaveExerciseSet, onTerminer, onEnregistrer = null, onQuitter, mode = 'client', athleteNom = '', onEnregistrerNotePrivee = null, onPartagerRecap = null, notesExercices = {}, onEnregistrerNote = null, historique = {}, onRemplacerExercice = null, bibliotheque = [] }) {
   const coach = mode === 'coach'
   useKeepAwake()
   const [memo] = useState(() => lireEtat(athleteId, session.id))
@@ -1317,5 +1328,15 @@ export default function Seance({ session, athleteId, mouvementsSections = {}, ex
         {derniereEtape ? 'Terminer la séance' : 'Exercice suivant →'}
       </button>
     </>
+  )
+}
+
+// Le minuteur enveloppe tout l'écran de séance : il reste ouvert (et son chrono continue) quand on
+// change d'exercice ou qu'on arrive à l'écran de fin.
+export default function Seance(props) {
+  return (
+    <MinuteurProvider>
+      <SeanceEcran {...props} />
+    </MinuteurProvider>
   )
 }

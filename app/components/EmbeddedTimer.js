@@ -25,7 +25,9 @@ function buildCustomSegments(steps, rounds, restBetweenSec) {
 // de réglage) — pensé pour être embarqué dans SplitTimerSession, jamais démonté pendant qu'il
 // tourne (sinon le chrono perdrait son état), donc pas de position fixed ici : c'est au parent de
 // gérer la mise en page.
-export default function EmbeddedTimer({ config, label }) {
+// decompteDepart : secondes de « Prêt » avant le départ (téléphone posé à distance).
+// compact : une seule ligne (panneau réduit en bandeau), sans démonter le chrono.
+export default function EmbeddedTimer({ config, label, decompteDepart = 0, compact = false }) {
   const [running, setRunning] = useState(true)
   const [, forceTick] = useState(0)
   const elapsedBaseRef = useRef(0)
@@ -66,7 +68,13 @@ export default function EmbeddedTimer({ config, label }) {
   }
 
   const compute = () => {
-    const elapsed = getElapsed()
+    const elapsed = getElapsed() - decompteDepart
+    if (elapsed < 0) return { finished: false, remaining: -elapsed, phaseLabel: 'Prêt', phaseKey: 'pret', isWork: false }
+    if (config.type === 'FOR_TIME') {
+      // Chrono montant ; time cap facultatif (0 = sans limite), bips sur ses 5 dernières secondes.
+      if (config.capSec && elapsed >= config.capSec) return { finished: true, remaining: 0, display: config.capSec, phaseLabel: 'Time cap' }
+      return { finished: false, display: elapsed, remaining: config.capSec ? config.capSec - elapsed : Infinity, phaseLabel: config.capSec ? `Time cap ${fmt(config.capSec)}` : 'Sans time cap', phaseKey: 'fortime' }
+    }
     if (config.type === 'EMOM') {
       const total = config.roundSec * config.rounds
       if (elapsed >= total) return { finished: true, remaining: 0, phaseLabel: 'Terminé' }
@@ -129,7 +137,25 @@ export default function EmbeddedTimer({ config, label }) {
     prevPhaseKeyRef.current = state.phaseKey
   }, [state.phaseKey, state.isWork, running])
 
-  const accent = (config.type === 'TABATA' || config.type === 'CUSTOM') && state.isWork === false ? '#1D4ED8' : 'var(--green)'
+  const accent = state.phaseKey === 'pret' ? 'var(--text3)'
+    : (config.type === 'TABATA' || config.type === 'CUSTOM') && state.isWork === false ? '#1D4ED8' : 'var(--green)'
+  const affiche = fmt(state.display ?? state.remaining)
+  const nomType = config.type === 'CUSTOM' ? 'PERSO' : config.type === 'FOR_TIME' ? 'FOR TIME' : config.type
+
+  if (compact) {
+    return (
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', background: 'var(--bg2)' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{nomType}</span>
+        <span style={{ fontSize: 12, color: 'var(--text3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state.phaseLabel}</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 26, fontWeight: 700, color: accent }}>{affiche}</span>
+        {!state.finished && (
+          <button onClick={toggle} aria-label={running ? 'Pause' : 'Reprendre'} style={{ width: 36, height: 36, borderRadius: 18, border: 'none', background: 'var(--green)', color: '#fff', fontSize: 14, cursor: 'pointer' }}>
+            {running ? '⏸' : '▶'}
+          </button>
+        )}
+      </div>
+    )
+  }
 
   // cqmin (le plus petit des deux côtés du panneau qui contient ce timer, voir SplitTimerSession)
   // plutôt que du vh/vw : grossit avec le panneau lui-même — plein écran, ou téléphone tourné en
@@ -137,10 +163,12 @@ export default function EmbeddedTimer({ config, label }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16, gap: 8, background: 'var(--bg2)' }}>
       {label && <div style={{ fontSize: 'clamp(12px, 2.4cqmin, 20px)', fontWeight: 700, color: 'var(--text3)' }}>{label}</div>}
-      <div style={{ fontSize: 'clamp(13px, 2.6cqmin, 22px)', color: accent, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{config.type === 'CUSTOM' ? 'PERSO' : config.type}</div>
+      <div style={{ fontSize: 'clamp(13px, 2.6cqmin, 22px)', color: accent, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{nomType}</div>
       <div style={{ fontSize: 'clamp(15px, 3.2cqmin, 30px)', color: 'var(--text3)', fontWeight: 600 }}>{state.phaseLabel}</div>
-      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 'clamp(48px, 22cqmin, 240px)', fontWeight: 700, color: accent, margin: '4px 0', lineHeight: 1 }}>
-        {fmt(state.remaining)}
+      {/* min(cqw, cqh) plutôt que cqmin seul : en paysage plein écran, la largeur disponible permet
+          des chiffres bien plus grands, lisibles de loin. */}
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 'clamp(48px, min(26cqw, 46cqh), 360px)', fontWeight: 700, color: accent, margin: '4px 0', lineHeight: 1 }}>
+        {affiche}
       </div>
       <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 'min(90cqw, 480px)' }}>
         {!state.finished && (
