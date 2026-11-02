@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from "react";
-import { CalendarBlank, CaretDown, CaretUp, ChatCircle, CheckCircle, Clock, NotePencil, Play, Plus, Target, TrendUp } from "@phosphor-icons/react";
+import { CalendarBlank, CaretDown, CaretUp, ChatCircle, CheckCircle, Clock, LinkSimple, NotePencil, Play, Plus, Target, TrendUp } from "@phosphor-icons/react";
 
 /*
   Fiche sportif côté coach + mode coaching.
@@ -572,6 +572,8 @@ export default function FicheSportifCoach({
   onVoirHistorique = () => {},
   onMessage = () => {},
   onCreerProgramme = null,
+  // Client sans compte : bouton « Inviter » (liens personnels internet / Android), voir LiensInvitation.
+  onInviter = null,
   // Ouvre l'éditeur du programme en cours (absent s'il n'y en a pas).
   onOuvrirProgramme = null,
   // PWA / webview natif : pas de bouton retour système, la fiche doit fournir le sien.
@@ -696,6 +698,9 @@ export default function FicheSportifCoach({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {onCreerProgramme ? (
             <Bouton principal onClick={onCreerProgramme}><Plus size={17} weight="bold" />Créer un programme</Bouton>
+          ) : null}
+          {onInviter ? (
+            <Bouton onClick={onInviter}><LinkSimple size={17} weight="bold" />Inviter</Bouton>
           ) : null}
           <Bouton onClick={onMessage}><ChatCircle size={17} weight="bold" />Message</Bouton>
         </div>

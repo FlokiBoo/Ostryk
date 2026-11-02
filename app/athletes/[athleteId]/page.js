@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import FicheSportifCoach from '@/app/components/coach/FicheSportifCoach'
 import TableauDeBordClient from '@/app/components/coach/TableauDeBordClient'
 import CreerProgrammeClient from '@/app/components/coach/CreerProgrammeClient'
+import LiensInvitation from '@/app/components/coach/LiensInvitation'
 import Seance, { sessionProgressKey } from '@/app/components/athlete/Seance'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
 import { historiqueParExercice } from '@/lib/historiqueExercice'
@@ -165,6 +166,8 @@ async function chargerFiche(athleteId) {
         id: athlete.id,
         nom: athlete.name || 'Sportif',
         is_1to1_client: !!athlete.is_1to1_client,
+        token: athlete.token || null,
+        compteActive: !!athlete.auth_user_id,
         groupes: (membres || []).map(m => m.groups?.name).filter(Boolean),
         objectifs: (objectives || []).filter(o => !o.completed_at).map(o => ({ id: o.id, titre: o.text, date: o.target_date })),
       },
@@ -210,6 +213,7 @@ export default function FicheSportifPage() {
   const [data, setData] = useState(null)
   const [erreur, setErreur] = useState(null)
   const [creationProgramme, setCreationProgramme] = useState(false)
+  const [invitation, setInvitation] = useState(false)
 
   const rafraichir = useCallback(async () => {
     const res = await chargerFiche(athleteId)
@@ -277,6 +281,7 @@ export default function FicheSportifPage() {
       )}
       onVoirHistorique={() => router.push(`/programs/${athleteId}`)}
       onCreerProgramme={() => setCreationProgramme(true)}
+      onInviter={!data.athlete.compteActive && data.athlete.token ? () => setInvitation(true) : null}
       onOuvrirProgramme={data.programme.id ? () => router.push(`/programs/${athleteId}/${data.programme.id}`) : null}
       tableauDeBord={<TableauDeBordClient athleteId={athleteId} seancesFaites={data.seancesSeptJours} />}
       // Le panneau de messagerie est global (ChatWidget dans app/layout.js), ouvert par événement.
@@ -284,6 +289,17 @@ export default function FicheSportifPage() {
       // Rouverte directement au lancement (ResumeLastView), la fiche peut n'avoir aucun historique.
       onRetour={() => (window.history.length > 1 ? router.back() : router.push('/athletes'))}
     />
+    {invitation ? (
+      <div onClick={() => setInvitation(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div onClick={e => e.stopPropagation()} role="dialog" aria-label="Inviter le client" style={{ width: '100%', maxWidth: 420, maxHeight: '90svh', overflowY: 'auto', background: 'var(--bg)', borderRadius: 'var(--rl)', padding: 18, boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Inviter {data.athlete.nom.split(' ')[0]}</div>
+            <button type="button" onClick={() => setInvitation(false)} aria-label="Fermer" style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, color: 'var(--text3)', cursor: 'pointer', padding: 4 }}>×</button>
+          </div>
+          <LiensInvitation token={data.athlete.token} prenom={data.athlete.nom.split(' ')[0]} />
+        </div>
+      </div>
+    ) : null}
     {creationProgramme ? (
       <CreerProgrammeClient
         athleteId={athleteId}

@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { User, ChartLineUp, Ruler, Bone, Key, EnvelopeSimple, PencilSimple, Warning, CheckCircle, LinkSimple, Copy } from '@phosphor-icons/react'
+import { User, ChartLineUp, Ruler, Bone, Key, EnvelopeSimple, PencilSimple, Warning, CheckCircle, LinkSimple } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import TrackedMovementsBlock from './TrackedMovementsBlock'
+import LiensInvitation from './coach/LiensInvitation'
 import GoniometerView from './GoniometerView'
 import { unlockAudio } from '@/lib/audioBeep'
 import { unlockSpeech } from '@/lib/speak'
@@ -59,7 +60,6 @@ function InfosSection({ athlete, onUpdate }) {
   })
   const [saving, setSaving] = useState(false)
   const [inviting, setInviting] = useState(false)
-  const [lienCopie, setLienCopie] = useState(false)
   const [inviteMsg, setInviteMsg] = useState('')
 
   const inputStyle = {
@@ -133,40 +133,7 @@ function InfosSection({ athlete, onUpdate }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
                 <LinkSimple size={15} /> Lien d&apos;invitation personnel
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.45 }}>
-                N&apos;expire pas et relie le compte à cette fiche. {athlete.name.split(' ')[0]} vérifie ses infos et choisit son mot de passe.
-              </div>
-              {[
-                { cle: 'web', titre: 'Internet — iPhone et ordinateur', suffixe: '', detail: 'Arrive directement dans son espace sur le site.' },
-                { cle: 'android', titre: 'App Android', suffixe: '?app=android', detail: 'Crée son compte, puis est envoyé vers l’app pour s’y connecter.' },
-              ].map(({ cle, titre, suffixe, detail }) => {
-                const origine = typeof window !== 'undefined' ? window.location.origin : 'https://www.ostryk.fr'
-                const lien = `${origine}/rejoindre/${athlete.token}${suffixe}`
-                return (
-                  <div key={cle} style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>{titre}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{detail}</div>
-                    <div style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text2)', background: 'var(--bg2)', borderRadius: 6, padding: '8px 10px', wordBreak: 'break-all' }}>
-                      {lien}
-                    </div>
-                    <button type="button" onClick={async () => {
-                      const texte = cle === 'android'
-                        ? `Salut ${athlete.name.split(' ')[0]}, voici ton lien pour créer ton compte Ostryk et installer l'app Android : ${lien}`
-                        : `Salut ${athlete.name.split(' ')[0]}, voici ton lien pour créer ton compte Ostryk : ${lien}`
-                      // Sur téléphone, la feuille de partage (SMS, WhatsApp…) ; sinon copie dans le presse-papiers.
-                      if (navigator.share) {
-                        try { await navigator.share({ text: texte }); return } catch { /* partage annulé : on copie */ }
-                      }
-                      try { await navigator.clipboard.writeText(lien); setLienCopie(cle); setTimeout(() => setLienCopie(false), 2000) } catch { /* presse-papiers refusé */ }
-                    }} style={{
-                      background: lienCopie === cle ? '#166534' : 'var(--bordeaux)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: 11,
-                      fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    }}>
-                      {lienCopie === cle ? <><CheckCircle size={15} /> Lien copié</> : <><Copy size={15} /> Copier / partager</>}
-                    </button>
-                  </div>
-                )
-              })}
+              <LiensInvitation token={athlete.token} prenom={athlete.name.split(' ')[0]} />
             </div>
           )
         )}
