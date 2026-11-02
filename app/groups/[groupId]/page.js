@@ -3,13 +3,14 @@
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { UsersThree, User, CalendarBlank, PencilSimple, NotePencil, ClipboardText, LinkSimple, Hourglass, SkipForward, CopySimple, TrashSimple, CheckCircle } from '@phosphor-icons/react'
+import { UsersThree, User, CalendarBlank, PencilSimple, NotePencil, ClipboardText, LinkSimple, Hourglass, SkipForward, CopySimple, TrashSimple, CheckCircle, Columns } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import AthletesSidebar from '@/app/components/AthletesSidebar'
 import { getCoachId } from '@/lib/coach'
 import { notifyAssigned } from '@/lib/notify'
 import { cloneTemplateToAthlete } from '@/lib/programTemplates'
 import { copieExercice } from '@/lib/copieExercice'
+import SessionBlockEditor from '@/app/components/SessionBlockEditor'
 
 function today() {
   const n = new Date()
@@ -114,6 +115,11 @@ export default function GroupDetailPage({ params }) {
   const [expandedSessionId, setExpandedSessionId] = useState(null)
   const [sessionExercises, setSessionExercises] = useState({}) // { [sessionId]: [...] }, chargé à la demande
   const [sessionActionBusy, setSessionActionBusy] = useState(null) // id de la séance en cours de duplication/suppression
+  // Vue côte à côte (même principe que app/programs/[athleteId]/[programId]/page.js) : on coche
+  // des séances, puis on les ouvre en panneaux SessionBlockEditor. Tableau et pas Set pour garder
+  // l'ordre de sélection, qui devient l'ordre des panneaux.
+  const [sideSelection, setSideSelection] = useState([])
+  const [sideBySideIds, setSideBySideIds] = useState(null)
   const [periodMode, setPeriodMode] = useState('month') // 'month' | 'year'
   const [yearMode, setYearMode] = useState('scolaire') // 'scolaire' | 'civile'
   const [monthCursor, setMonthCursor] = useState(new Date())
@@ -364,6 +370,21 @@ export default function GroupDetailPage({ params }) {
     setSessionActionBusy(null)
   }
 
+  const toggleSideSelection = (sessionId) => setSideSelection(prev =>
+    prev.includes(sessionId) ? prev.filter(id => id !== sessionId) : [...prev, sessionId])
+
+  // Fermer la vue : relire titres et aperçus, modifiés dans les panneaux.
+  const closeSideBySide = async () => {
+    setSideBySideIds(null)
+    setSideSelection([])
+    setSessionExercises({})
+    setExpandedSessionId(null)
+    await loadGroupPrograms()
+    const { data: links } = await supabase.from('group_program_templates')
+      .select('*, programs(title, program_sessions(id, order_index, title))').eq('group_id', groupId)
+    setLinkedTemplates(links || [])
+  }
+
   const toggleSessionExpand = async (sessionId) => {
     if (expandedSessionId === sessionId) { setExpandedSessionId(null); return }
     setExpandedSessionId(sessionId)
@@ -386,6 +407,10 @@ export default function GroupDetailPage({ params }) {
         <button onClick={() => router.push(`/programs/templates/${programId}/session/${s.id}`)}
           style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text)', padding: '9px 10px 9px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {s.title || `Séance ${i + 1}`}
+        </button>
+        <button onClick={() => toggleSideSelection(s.id)} title={sideSelection.includes(s.id) ? 'Retirer de la vue côte à côte' : 'Sélectionner pour ouvrir côte à côte'}
+          style={{ background: sideSelection.includes(s.id) ? 'var(--text)' : 'none', border: 'none', borderRadius: 6, cursor: 'pointer', color: sideSelection.includes(s.id) ? 'var(--bg)' : 'var(--text3)', padding: '4px 5px', margin: '5px 0', flexShrink: 0, display: 'flex' }}>
+          <Columns size={14} />
         </button>
         {!readOnly && <>
           <button onClick={() => duplicateGroupSession(programId, s.id)} disabled={sessionActionBusy === s.id} title="Dupliquer cette séance"
@@ -800,6 +825,48 @@ export default function GroupDetailPage({ params }) {
           )}
         </div>
       </div>
+
+      {sideSelection.length > 0 && !sideBySideIds && (
+        <div style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 240, background: 'var(--text)', color: 'var(--bg)', borderRadius: 30, padding: '8px 8px 8px 18px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 8px 30px rgba(0,0,0,0.25)', maxWidth: 'calc(100vw - 32px)' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {sideSelection.length === 1 ? '1 séance — choisis-en une autre' : `${sideSelection.length} séances`}
+          </span>
+          <button onClick={() => setSideBySideIds(sideSelection)} disabled={sideSelection.length < 2}
+            style={{ background: 'var(--bg)', color: 'var(--text)', border: 'none', borderRadius: 20, padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: sideSelection.length < 2 ? 'default' : 'pointer', opacity: sideSelection.length < 2 ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+            <Columns size={14} /> Ouvrir côte à côte
+          </button>
+          <button onClick={() => setSideSelection([])} title="Annuler la sélection"
+            style={{ background: 'none', border: 'none', color: 'var(--bg)', fontSize: 18, cursor: 'pointer', padding: '2px 8px', lineHeight: 1 }}>×</button>
+        </div>
+      )}
+
+      {/* Un SessionBlockEditor par séance, en panneaux de 480px défilant horizontalement ; chacun
+          se ferme seul via onClose, fermer le dernier ferme la vue. */}
+      {sideBySideIds && sideBySideIds.length > 0 && (
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--bg2)', zIndex: 250, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <button onClick={closeSideBySide} style={{ background: 'none', border: 'none', fontSize: 22, color: 'var(--text2)', cursor: 'pointer', padding: 0, lineHeight: 1, display: 'flex' }}>←</button>
+            <span style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontWeight: 700, fontSize: 15 }}>Retour au groupe</span>
+            <span style={{ fontSize: 12, color: 'var(--text3)' }}>— {sideBySideIds.length} séance{sideBySideIds.length > 1 ? 's' : ''} côte à côte</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', margin: '0 auto', height: '100%', borderLeft: '1px solid var(--border)' }}>
+              {sideBySideIds.map(id => {
+                const closePanel = () => {
+                  const next = sideBySideIds.filter(x => x !== id)
+                  if (next.length) setSideBySideIds(next)
+                  else closeSideBySide()
+                }
+                return (
+                  <div key={id} style={{ width: 480, flexShrink: 0, height: '100%', overflowY: 'auto', borderRight: '1px solid var(--border)' }}>
+                    <SessionBlockEditor sessionId={id} backHref={`/groups/${groupId}`} onClose={closePanel} />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showStartPicker && (
         <div onClick={() => setShowStartPicker(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
