@@ -9,6 +9,7 @@ import AthletesSidebar from '@/app/components/AthletesSidebar'
 import { getCoachId } from '@/lib/coach'
 import { notifyAssigned } from '@/lib/notify'
 import { cloneTemplateToAthlete } from '@/lib/programTemplates'
+import { copieExercice } from '@/lib/copieExercice'
 
 function today() {
   const n = new Date()
@@ -78,12 +79,7 @@ async function copyProgramToAthletes(sourceProgram, targetAthleteIds, { coachId,
       const exos = (sess.program_exercises || []).sort((a, b) => a.order_index - b.order_index)
       if (exos.length > 0) {
         await supabase.from('program_exercises').insert(
-          exos.map(e => ({
-            program_session_id: newSess.id, order_index: e.order_index, name: e.name, sets: e.sets, reps: e.reps,
-            kg: e.kg, rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url, superset_group: e.superset_group,
-            focus_muscles: e.focus_muscles || null, pace_base: e.pace_base || null, pct_low: e.pct_low, pct_high: e.pct_high,
-            source_exercise_id: e.id,
-          }))
+          exos.map(e => copieExercice(e, { program_session_id: newSess.id, source_exercise_id: e.id }))
         )
       }
     }
@@ -342,11 +338,8 @@ export default function GroupDetailPage({ params }) {
       .select().single()
     if (error || !newSession) { alert('Erreur duplication : ' + (error?.message || '')); setSessionActionBusy(null); return }
     if ((exos || []).length) {
-      const { error: insErr } = await supabase.from('program_exercises').insert(exos.map((e, j) => ({
-        program_session_id: newSession.id, order_index: j, name: e.name, sets: e.sets, reps: e.reps, kg: e.kg,
-        rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url, superset_group: e.superset_group,
-        focus_muscles: e.focus_muscles, pace_base: e.pace_base, pct_low: e.pct_low, pct_high: e.pct_high,
-        timer_config: e.timer_config,
+      const { error: insErr } = await supabase.from('program_exercises').insert(exos.map((e, j) => copieExercice(e, {
+        program_session_id: newSession.id, order_index: j,
       })))
       if (insErr) { alert('Erreur duplication des exercices : ' + insErr.message); setSessionActionBusy(null); return }
     }

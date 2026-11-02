@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { copieExercice } from '@/lib/copieExercice'
 
 async function authenticate(token) {
   const { data: athlete } = await supabaseAdmin.from('athletes').select('*').eq('token', token).single()
@@ -114,24 +115,7 @@ export async function POST(request, { params }) {
     const exos = (sess.program_exercises || []).sort((a, b) => a.order_index - b.order_index)
     if (exos.length > 0) {
       await supabaseAdmin.from('program_exercises').insert(
-        exos.map(e => ({
-          program_session_id: newSess.id,
-          order_index: e.order_index,
-          name: e.name,
-          sets: e.sets,
-          reps: e.reps,
-          kg: e.kg,
-          rest: e.rest,
-          note: e.note,
-          materiel: e.materiel || null,
-          video_url: e.video_url,
-          superset_group: e.superset_group,
-          focus_muscles: e.focus_muscles || null,
-          pace_base: e.pace_base || null,
-          pct_low: e.pct_low,
-          pct_high: e.pct_high,
-          source_exercise_id: e.id,
-        }))
+        exos.map(e => copieExercice(e, { program_session_id: newSess.id, source_exercise_id: e.id }))
       )
     }
   }

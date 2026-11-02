@@ -17,6 +17,7 @@ import ActivityTypeSelect from '@/app/components/ActivityTypeSelect'
 import { notifyAssigned, notifyProgramAvailable } from '@/lib/notify'
 import SessionBlockEditor from '@/app/components/SessionBlockEditor'
 import SeanceRealisee from '@/app/components/coach/SeanceRealisee'
+import { copieExercice } from '@/lib/copieExercice'
 import {
   ClipboardText, CalendarBlank, Trash, UsersThree, Repeat,
   CopySimple, ArrowsOutCardinal, Barbell, Heartbeat, Columns, X, CheckCircle,
@@ -556,18 +557,9 @@ function ProgramEditorPage({ params }) {
       for (let j = 0; j < maxLen; j++) {
         const e = exos[j]
         if (e && existing[j]) {
-          await supabase.from('program_exercises').update({
-            order_index: j, name: e.name, sets: e.sets, reps: e.reps, kg: e.kg,
-            rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url, superset_group: e.superset_group,
-            focus_muscles: e.focus_muscles || null, timer_config: e.timer_config || null,
-          }).eq('id', existing[j].id)
+          await supabase.from('program_exercises').update({ ...e, order_index: j }).eq('id', existing[j].id)
         } else if (e && !existing[j]) {
-          await supabase.from('program_exercises').insert({
-            program_session_id: clientSess.id, order_index: j, name: e.name,
-            sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note, materiel: e.materiel || null,
-            video_url: e.video_url, superset_group: e.superset_group,
-            focus_muscles: e.focus_muscles || null, timer_config: e.timer_config || null,
-          })
+          await supabase.from('program_exercises').insert({ ...e, program_session_id: clientSess.id, order_index: j })
         } else if (!e && existing[j]) {
           await supabase.from('program_exercises').delete().eq('id', existing[j].id)
         }
@@ -644,17 +636,15 @@ function ProgramEditorPage({ params }) {
         warmup_content: s.warmup_content || null, cooldown_content: s.cooldown_content || null,
       recurring_daily_target: s.session_type === 'recurrent' ? (s.recurring_daily_target || 1) : null,
       }
-      const exos = s.exercises.filter(e => e.name.trim()).map((e, j) => ({
-        order_index: j, name: e.name.trim(),
-        sets: e.sets !== '' ? parseInt(e.sets) : null, reps: e.reps || null,
-        kg: e.kg !== '' && !isNaN(parseFloat(e.kg)) ? parseFloat(e.kg) : null,
-        rest: e.rest || null, note: e.note || null, materiel: e.materiel || null, video_url: e.video_url || null,
-        superset_group: e.superset_group || null, focus_muscles: e.focus_muscles || null,
-        pace_base: e.pace_base || null,
-        pct_low: e.pct_low !== '' && e.pct_low != null ? parseFloat(e.pct_low) : null,
-        pct_high: e.pct_high !== '' && e.pct_high != null ? parseFloat(e.pct_high) : null,
-        timer_config: e.timer_config || null,
-      }))
+      // Exercices relus en base (et non depuis l'état de la page) pour transmettre tout ce que le
+      // coach a saisi, set_details compris (reps / charge / secondes par série). La note privée
+      // reste propre à chaque client : elle n'est jamais écrasée par celle du modèle.
+      const { data: srcExos } = await supabase.from('program_exercises')
+        .select('*').eq('program_session_id', s.id).order('order_index')
+      const exos = (srcExos || []).filter(e => (e.name || '').trim()).map((e, j) => {
+        const { private_coach_note: _privee, ...champs } = copieExercice(e, { order_index: j, source_exercise_id: e.id })
+        return champs
+      })
       await propagateSessionToClients(s.id, s.order_index ?? 0, sessFields, exos)
       await supabase.from('program_sessions').update({ needs_sync: false }).eq('id', s.id)
     }
@@ -777,13 +767,7 @@ function ProgramEditorPage({ params }) {
 
     const exos = (srcSession.program_exercises || []).sort((a, b) => a.order_index - b.order_index)
     if (exos.length) {
-      await supabase.from('program_exercises').insert(exos.map(e => ({
-        program_session_id: newSess.id, order_index: e.order_index, name: e.name,
-        sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url,
-        superset_group: e.superset_group, focus_muscles: e.focus_muscles || null,
-        pace_base: e.pace_base || null, pct_low: e.pct_low, pct_high: e.pct_high,
-        timer_config: e.timer_config || null,
-      })))
+      await supabase.from('program_exercises').insert(exos.map(e => copieExercice(e, { program_session_id: newSess.id })))
     }
     router.push(`/programs/${athleteId}/${programId}/session/${newSess.id}`)
   }
@@ -820,7 +804,7 @@ function ProgramEditorPage({ params }) {
     if (sessErr || !newSession) return fail('Erreur duplication : ' + sessErr?.message)
 
     const toInsert = [...(srcExos || [])].sort((a, b) => a.order_index - b.order_index)
-      .map(({ id: _eid, created_at: _ec, updated_at: _eu, program_session_id: _ps, ...e }) => ({ ...e, program_session_id: newSession.id }))
+      .map(e => copieExercice(e, { program_session_id: newSession.id }))
     let insertedExos = []
     if (toInsert.length) {
       const { data: inserted, error: insErr } = await supabase.from('program_exercises').insert(toInsert).select()
@@ -972,13 +956,7 @@ function ProgramEditorPage({ params }) {
         const exos = (sess.program_exercises || []).sort((a, b) => a.order_index - b.order_index)
         if (exos.length > 0) {
           await supabase.from('program_exercises').insert(
-            exos.map(e => ({
-              program_session_id: newSess.id, order_index: e.order_index, name: e.name,
-              sets: e.sets, reps: e.reps, kg: e.kg, rest: e.rest, note: e.note, materiel: e.materiel || null, video_url: e.video_url,
-              superset_group: e.superset_group, focus_muscles: e.focus_muscles || null,
-              pace_base: e.pace_base || null, pct_low: e.pct_low, pct_high: e.pct_high, source_exercise_id: e.id,
-              timer_config: e.timer_config || null,
-            }))
+            exos.map(e => copieExercice(e, { program_session_id: newSess.id, source_exercise_id: e.id }))
           )
         }
       }

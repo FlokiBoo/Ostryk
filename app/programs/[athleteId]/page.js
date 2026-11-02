@@ -12,6 +12,7 @@ import AthletesSidebar from '@/app/components/AthletesSidebar'
 import { getCoachId } from '@/lib/coach'
 import { notifyAssigned } from '@/lib/notify'
 import ActivityTypeSelect from '@/app/components/ActivityTypeSelect'
+import { copieExercice } from '@/lib/copieExercice'
 
 function today() {
   const n = new Date()
@@ -240,24 +241,7 @@ function ProgramsPageInner({ params }) {
         const exos = (sess.program_exercises || []).sort((a, b) => a.order_index - b.order_index)
         if (exos.length > 0) {
           await supabase.from('program_exercises').insert(
-            exos.map(e => ({
-              program_session_id: newSess.id,
-              order_index: e.order_index,
-              name: e.name,
-              sets: e.sets,
-              reps: e.reps,
-              kg: e.kg,
-              rest: e.rest,
-              note: e.note,
-              materiel: e.materiel || null,
-              video_url: e.video_url,
-              superset_group: e.superset_group,
-              focus_muscles: e.focus_muscles,
-              pace_base: e.pace_base,
-              pct_low: e.pct_low,
-              pct_high: e.pct_high,
-              source_exercise_id: e.id,
-            }))
+            exos.map(e => copieExercice(e, { program_session_id: newSess.id, source_exercise_id: e.id }))
           )
         }
       }

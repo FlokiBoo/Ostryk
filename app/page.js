@@ -13,6 +13,7 @@ import LancerCoachingModal from '@/app/components/coach/LancerCoachingModal'
 import ClientsSuivis from '@/app/components/coach/ClientsSuivis'
 import MouvementsAFilmer from '@/app/components/coach/MouvementsAFilmer'
 import { registerPushNotifications } from '@/lib/pushRegistration'
+import { copieExercice } from '@/lib/copieExercice'
 
 function today() {
   const n = new Date()
@@ -799,9 +800,13 @@ function SessionBrowserModal({ programId, initialSessionId, athleteId, athleteNa
       .select().single()
     if (sessErr || !newSession) { alert('Erreur duplication : ' + sessErr?.message); return }
 
-    const toInsert = s.exercises.filter(e => e.name).map((e, j) => ({
-      program_session_id: newSession.id, order_index: j, name: e.name,
-      sets: e.sets ?? null, reps: e.reps || null, kg: e.kg ?? null, note: e.note || null, materiel: e.materiel || null,
+    // Exercices relus en entier : la liste chargée ici n'a que quelques colonnes, et la copie
+    // perdait set_details (reps / charge / secondes par série), le repos, les blocs…
+    const { data: srcExos, error: readErr } = await supabase.from('program_exercises')
+      .select('*').eq('program_session_id', s.id).order('order_index')
+    if (readErr) { alert('Erreur duplication des exercices : ' + readErr.message); return }
+    const toInsert = (srcExos || []).filter(e => e.name).map((e, j) => copieExercice(e, {
+      program_session_id: newSession.id, order_index: j,
     }))
     let insertedExos = []
     if (toInsert.length) {

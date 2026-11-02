@@ -12,6 +12,7 @@ import { getCoachId } from '@/lib/coach'
 import { notifyAssigned } from '@/lib/notify'
 import { coachingHref } from '@/lib/coachingHref'
 import ActivityTypeSelect from '@/app/components/ActivityTypeSelect'
+import { copieExercice } from '@/lib/copieExercice'
 
 export default function MicrocyclesBlock({ athleteId, athleteToken }) {
   const router = useRouter()
@@ -191,19 +192,7 @@ export default function MicrocyclesBlock({ athleteId, athleteToken }) {
         const exos = (sess.program_exercises || []).sort((a, b) => a.order_index - b.order_index)
         if (exos.length > 0) {
           await supabase.from('program_exercises').insert(
-            exos.map(e => ({
-              program_session_id: newSess.id,
-              order_index: e.order_index,
-              name: e.name,
-              sets: e.sets,
-              reps: e.reps,
-              kg: e.kg,
-              note: e.note,
-              materiel: e.materiel || null,
-              video_url: e.video_url,
-              superset_group: e.superset_group,
-              source_exercise_id: e.id,
-            }))
+            exos.map(e => copieExercice(e, { program_session_id: newSess.id, source_exercise_id: e.id }))
           )
         }
       }
@@ -249,7 +238,7 @@ export default function MicrocyclesBlock({ athleteId, athleteToken }) {
       .select('*').eq('program_session_id', sess.id).order('order_index')
     if (exos?.length) {
       await supabase.from('program_exercises').insert(
-        exos.map(({ id, program_session_id, ...e }) => ({ ...e, program_session_id: newSess.id }))
+        exos.map(e => copieExercice(e, { program_session_id: newSess.id }))
       )
     }
     setPrograms(prev => prev.map(p =>
