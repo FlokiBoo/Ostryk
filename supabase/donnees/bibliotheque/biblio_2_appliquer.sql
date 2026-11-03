@@ -2,279 +2,41 @@
 -- ÉTAPE 2 / 2 : APPLICATION. Une seule transaction : en cas d'erreur, rien n'est modifié.
 -- Lancer l'étape 1 (aperçu) d'abord.
 --
--- Choix de Maxime (2026-11-01) : supprimer toute la bibliothèque SAUF les mouvements cardio, puis
--- importer la feuille ; seules ses vidéos (colonne TUTO) sont reprises.
---   0. sauvegarde complète de la table dans movements_sauvegarde_20261101 ;
+-- Choix de Maxime (2026-11-03) : tout supprimer (cardio compris), puis importer de la feuille UNIQUEMENT
+-- les exercices dont la vidéo est sur sa chaîne YouTube @Ms_Coachingg. Vidéo d'une autre chaîne (HTS)
+-- ou pas de vidéo : l'exercice n'est pas importé.
+--   0. sauvegarde complète de la table dans movements_sauvegarde_20261103 ;
 --   1. les records des clients (tracked_movements) sont détachés de la bibliothèque, pas supprimés ;
---   2. suppression de tous les mouvements hors cardio ;
---   3. les mouvements cardio gardés perdent leur vidéo (pas celle de Maxime) ;
---   4. import des 621 exercices de la feuille, avec vidéo et muscles.
--- Les échauffements qui citaient un mouvement supprimé gardent son nom (mouvementNom), sans vidéo.
+--   2. suppression de tous les mouvements ;
+--   3. import des 372 exercices de la feuille qui ont une vidéo de Maxime, avec muscles et vidéo.
+-- Les programmes gardent leurs exercices (ils sont stockés par nom), seule la vidéo dépend de la bibliothèque.
 
 begin;
 
 -- 0. Sauvegarde. RLS activée sans policy : invisible depuis l'app et l'API publique.
-create table movements_sauvegarde_20261101 as select * from movements;
-alter table movements_sauvegarde_20261101 enable row level security;
+create table movements_sauvegarde_20261103 as select * from movements;
+alter table movements_sauvegarde_20261103 enable row level security;
 
-create temp table import_source (nom text, muscles text, video text) on commit drop;
-insert into import_source (nom, muscles, video) values
+-- 1. Records : on garde l'historique, on retire seulement le lien vers la bibliothèque
+update tracked_movements set movement_id = null where movement_id is not null;
+
+-- 2. Suppression de toute la bibliothèque
+delete from coach_hidden_content where content_type = 'movement';
+delete from movements;
+
+-- 3. Import de la feuille
+insert into movements (name, muscles, youtube_url, video_url, coach_id)
+select b.nom, b.muscles, b.video, null, null
+from (values
   ('Bench Press - Iso Overcoming', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/CEh6EKLnKcE'::text),
-  ('Band pull appart', 'Trapèzes, Épaules', 'https://youtu.be/a8nNqp2K_lM'::text),
   ('Romanian Deadlift - Iso Overcoming', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/XtFzW2QwCX4'::text),
-  ('Chest supported row - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/qDtVPsYJVjA'::text),
-  ('Chest supported row - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/hcOIEE3wrvw'::text),
-  ('Développé couché Haltères - Forme I', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/Aroikk7YLv0'::text),
-  ('Développé couché Haltères - Forme A', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/b5UcTefJIzI'::text),
-  ('Développé couché incliné - Forme T', 'Pectoraux, Épaules, Triceps', 'https://youtu.be/JlWiyB_0_jo'::text),
-  ('Fente Statique Focus Fessiers', 'Fessiers, Quadriceps, Ischio-jambiers', 'https://youtu.be/JKCE7XgXqLo'::text),
-  ('Fente Latérale Contralatérale', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/CZY9yaFitNw'::text),
-  ('FFE Split Squat Modifié', 'Quadriceps, Fessiers', 'https://youtu.be/1iFrqY7t620'::text),
   ('Leg Press - Iso Overcoming', 'Quadriceps, Fessiers', 'https://youtu.be/vSmNZY8WaX4'::text),
-  ('Hip Thrust', 'Fessiers, Ischio-jambiers', 'https://youtu.be/SuiVkw1YKIY'::text),
-  ('Lat Pullldown - Forme T', 'Grand dorsal, Biceps', 'https://youtu.be/xECfj2gVgI4'::text),
-  ('Lat Pulldown Unilatéral - Forme I', 'Grand dorsal, Biceps', 'https://youtu.be/EDs1DCFTX5M'::text),
-  ('Bridge DB Press', 'Pectoraux, Triceps, Fessiers', 'https://youtu.be/mLKAzoYjIP0'::text),
-  ('Pec Fly Décliné', 'Pectoraux, Épaules', 'https://youtu.be/rBxuFyN7RgU'::text),
-  ('Pompe - Forme A', 'Pectoraux, Triceps, Épaules, Abdominaux', 'https://youtu.be/aLFyv5LoAeI'::text),
-  ('Pompe - Forme I', 'Pectoraux, Triceps, Épaules, Abdominaux', 'https://youtu.be/KLJ7ct0fhak'::text),
-  ('Fente Latérale - 90°', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/2CWxKvq9Tjs'::text),
-  ('Ring Rows - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/qra2pHOJO8I'::text),
-  ('Ring Rows - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/FY9jEbO73Zo'::text),
-  ('Deadlift KB', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/XQmHC9HvtfY'::text),
-  ('Deadlift', 'Ischio-jambiers, Fessiers, Lombaires, Quadriceps', 'https://youtu.be/KfP9xpp_RhU'::text),
-  ('Sumo Deadlift', 'Fessiers, Adducteurs, Ischio-jambiers, Quadriceps', 'https://youtu.be/VhC_GwEOKMs'::text),
-  ('Tirage Horizontal - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/LcaSfDAv0hc'::text),
-  ('Viking Press - Forme I', 'Épaules, Triceps', 'https://youtu.be/Dcyg28BuFSY'::text),
+  ('Deadlift', 'Ischio-jambiers, Fessiers, Lombaires, Quadriceps', 'https://youtube.com/shorts/uSZCLTh_-4I'::text),
   ('Deadhang - Excentrique', 'Préhension, Grand dorsal', 'https://youtu.be/lLwDSiXXP94'::text),
-  ('Barbell Floor Press', 'Pectoraux, Triceps', 'https://youtu.be/qR9qclzV_ZU'::text),
-  ('Board Press', 'Pectoraux, Triceps', 'https://youtu.be/FSsed99dT_0'::text),
-  ('Split Stance Row - Unilatéral', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/aL8gH4Wx6IA'::text),
-  ('Chin ups avec poignet libre', 'Grand dorsal, Biceps', 'https://youtu.be/yhZDhVItDHk'::text),
   ('DB Bench Press - Position T', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/2BxpEh6AaYQ'::text),
-  ('Deadlift Off Blocks', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/Da_lvtpZmhA'::text),
   ('DB Bench Press - Position A', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/sSgMZhYhuDw'::text),
-  ('Développé Militaire Incliné', 'Épaules, Pectoraux, Triceps', 'https://youtu.be/wtEWNERP4Rs'::text),
   ('DB Bench Press - Position i', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/O0tLWw17zlQ'::text),
-  ('Safety Bar Fente Statique', 'Quadriceps, Fessiers', 'https://youtu.be/cBHNKhcrbGo'::text),
-  ('Split Squat Modifié Avec Talon Élevé', 'Quadriceps, Fessiers', 'https://youtu.be/ee9JfZlJ5Ak'::text),
-  ('Deadstart 75° Développé Militaire Incliné Barre – Forme A', 'Épaules, Pectoraux, Triceps', 'https://youtu.be/qK1AIWzb-2k'::text),
-  ('Half Kneeling KB Press', 'Épaules, Triceps, Abdominaux', 'https://youtu.be/n_AIS_zp_k8'::text),
-  ('Overhead Press Haltère', 'Épaules, Triceps', 'https://youtu.be/I_gdRapdQS8'::text),
-  ('Pompe sur Haltères', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/5LsudfHJtU4'::text),
-  ('Split Squat Modifié', 'Quadriceps, Fessiers', 'https://youtu.be/d1ILKI5qJsY'::text),
-  ('Développé Couché Oscillatoire', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/Cvd8Z2b215s'::text),
-  ('Scapulae Pull Up', 'Grand dorsal, Trapèzes', 'https://youtu.be/OHw69DPW1DQ'::text),
-  ('Développé Couché Iso Overcoming', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/ItNsyMe7HOY'::text),
-  ('Deep Push Ups Yielding', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/kiRTuIeTsmM'::text),
-  ('Dips Yielding Iso''s', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/isGrxxNmA_M'::text),
-  ('Overhead Press - Forme I', 'Épaules, Triceps', 'https://youtu.be/8b7Z75IGoTE'::text),
-  ('Pull up EQI', 'Grand dorsal, Biceps', 'https://youtu.be/PBfq_W1iK_o'::text),
-  ('Handstand Hold', 'Épaules, Triceps, Abdominaux', 'https://youtu.be/h4eZ_YOuBpo'::text),
-  ('Pull Up Oscillatoire', 'Grand dorsal, Biceps', 'https://youtu.be/oyozUNmGnzs'::text),
-  ('Overcoming Iso Split Squat', 'Quadriceps, Fessiers', 'https://youtu.be/9NU3d2G3ZnQ'::text),
-  ('45° Back Extension - Unilatéral', 'Lombaires, Fessiers, Ischio-jambiers', 'https://youtu.be/bRqH_3in9fY'::text),
-  ('45° Back Extension - Bilatéral', 'Lombaires, Fessiers, Ischio-jambiers', 'https://youtu.be/XZwxVbYyBgA'::text),
-  ('Curtsy Lunge - Dumbell', 'Fessiers, Quadriceps, Adducteurs', 'https://youtu.be/1yLARxH3nTo'::text),
-  ('Curtsy Lunge - Barbell Back Rack', 'Fessiers, Quadriceps, Adducteurs', 'https://youtu.be/wDjHvOeN9Dk'::text),
-  ('B Stance Hip Thrust', 'Fessiers, Ischio-jambiers', 'https://youtu.be/Gt4WHDLg7wU'::text),
-  ('Fentes Arrière - Barre', 'Fessiers, Quadriceps', 'https://youtu.be/ngUldo0nCuk'::text),
-  ('Romanian Deadlift - Haltères', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/EfhAZXYCueQ'::text),
-  ('Romanian Deadlift - Barre', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/d4TjkTuPD8M'::text),
-  ('Step Ups', 'Quadriceps, Fessiers', 'https://youtu.be/GFe289HJ6H0'::text),
-  ('Fentes Latérales Statique - Haltère', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/v0ktL4QRGs4'::text),
-  ('Fentes Arrière - Haltères', 'Fessiers, Quadriceps', 'https://youtu.be/QYUwuHHDQmw'::text),
-  ('Développé couché - Forme A', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/jQPk-Y_feZs'::text),
-  ('Développé couché - Forme T', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/2gROQMRgXVA'::text),
-  ('Long Lunge Hold', 'Fessiers, Quadriceps, Psoas', 'https://youtu.be/vr3AN9kyeLA'::text),
-  ('Deadlift Iso Overcoming', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/YzVnWZ7B7TI'::text),
-  ('Rounded Back Extension', 'Lombaires, Fessiers, Ischio-jambiers', 'https://youtu.be/csEbjxxddq4'::text),
-  ('Tirage Diagonal Unilatéral - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/VIgUoQ__9DA'::text),
-  ('Split Squat Hold', 'Quadriceps, Fessiers', 'https://youtu.be/ohfYpjJ8yCA'::text),
-  ('Rounded Back Extension Unilatéral', 'Lombaires, Fessiers, Ischio-jambiers', 'https://youtu.be/4B1JDyjeeKM'::text),
-  ('Tirage Horizontal Unilatéral - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/qMLggx94QpI'::text),
-  ('Lat Pulldown Bilatéral Forme I', 'Grand dorsal, Biceps', 'https://youtu.be/BkqFXHffvHE'::text),
-  ('Single Leg Hip Thrust Poids de corps', 'Fessiers, Ischio-jambiers', 'https://youtu.be/e7zOfbl9w7s'::text),
-  ('Tirage Diagonal Bilatéral - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/wG5ePwB9O7U'::text),
-  ('Tirage Diagonal - Forme T', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/_gdMpSiwwiU'::text),
-  ('Tirage Diagonal Unilatéral - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/fUvydTsM6O4'::text),
-  ('Développé Militaire Assis - Forme T', 'Épaules, Triceps', 'https://youtu.be/yJ1_qUgnZAU'::text),
-  ('Tirage Horizontal Bilatéral - Forme T', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/hCQCEgPYge0'::text),
-  ('B Stance Deadlift', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/SkaxP8onC94'::text),
-  ('3 Point Row - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/24zTW8UikkI'::text),
-  ('Fente Bulgare - Haltères', 'Quadriceps, Fessiers', 'https://youtu.be/yt0-PW1KSlo'::text),
-  ('Split Squat Modifié - Barre', 'Quadriceps, Fessiers', 'https://youtu.be/sPdJT8QxvtE'::text),
-  ('Chin Up Overcoming', 'Grand dorsal, Biceps', 'https://youtu.be/nsuezBJooxk'::text),
-  ('Overhead Press - Barre', 'Épaules, Triceps', 'https://youtu.be/Jw7ESmxoZrA'::text),
-  ('Tirage Horizontal Unilatéral - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/W_1CZShC280'::text),
-  ('Inverted Rows EQI', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/EzYUkqOMx-s'::text),
-  ('Tractions', 'Grand dorsal, Biceps', 'https://youtu.be/sBXN3OQXmM4'::text),
-  ('Dips', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/2aRqAp67W6o'::text),
-  ('Pec Fly Incliné Poulie', 'Pectoraux, Épaules', 'https://youtu.be/7q-5qkE1SZs'::text),
-  ('Pec Fly Neutre Poulie', 'Pectoraux, Épaules', 'https://youtu.be/oG8OQZ4D5xM'::text),
-  ('Straight Arm Lat Pulldown Bilatéral', 'Grand dorsal', 'https://youtu.be/dcZfwnIvRwY'::text),
-  ('Straight Arm Lat Pulldown Unilatéral', 'Grand dorsal', 'https://youtu.be/MrRoQoQ0Zn8'::text),
-  ('Tirage Horizontal Bilatéral - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/_qtAA53bzOs'::text),
-  ('Overhead Press - Overcoming', 'Épaules, Triceps', 'https://youtu.be/E_PIVeqm5j0'::text),
-  ('Landmine Press', 'Épaules, Pectoraux, Triceps', 'https://youtu.be/tAP3ftU9T28'::text),
-  ('Front Lever', 'Grand dorsal, Abdominaux', 'https://youtu.be/HrVlWmE4uIk'::text),
-  ('Overhead Press - Oscillatoire', 'Épaules, Triceps', 'https://youtu.be/cmDsOKs17E0'::text),
-  ('Fente Oscillatoire', 'Quadriceps, Fessiers', 'https://youtu.be/v0ZJvkcj5Ro'::text),
-  ('Fente Overcoming', 'Quadriceps, Fessiers', 'https://youtu.be/jrrw-sYInXc'::text),
-  ('Trapbar Deadlift', 'Quadriceps, Fessiers, Ischio-jambiers', 'https://youtu.be/q7hl39XSSWo'::text),
-  ('Overhead Press - Elastique', 'Épaules, Triceps', 'https://youtu.be/ujbe0vUcs2Q'::text),
-  ('Fente Latérale - Dynamique', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/GU7QLufckgI'::text),
-  ('Banded Press', 'Épaules, Triceps', 'https://youtu.be/gDe_IfCZGPY'::text),
-  ('Tirage Horizontale Élastique - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/mOjh0WI_l6U'::text),
-  ('Fente Arrière Assistée', 'Fessiers, Quadriceps', 'https://youtu.be/54qFfp0oxkI'::text),
-  ('Bulgarian Split Squat Yielding Iso', 'Quadriceps, Fessiers', 'https://youtu.be/57i7LcdrjGo'::text),
-  ('Speed Pull Ups', 'Grand dorsal, Biceps', 'https://youtu.be/RL93PuyBLSE'::text),
-  ('Skater Squat', 'Quadriceps, Fessiers', 'https://youtu.be/CjizCbuA298'::text),
-  ('Pike Push Up', 'Épaules, Triceps', 'https://youtu.be/UpJQCZQkeZs'::text),
-  ('Tirage Horizontal Alterné - Split Stance', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/z6M-t5-5mZk'::text),
-  ('Offset Bench Press', 'Pectoraux, Triceps, Obliques', 'https://youtu.be/Ix7fcRyO4tY'::text),
-  ('Speed Bench Press Barbell', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/zzhvaT0Lqe0'::text),
-  ('Drop Kneel Push Up', 'Pectoraux, Triceps', 'https://youtu.be/qfA7BbdAUyw'::text),
-  ('Speed Deadlift', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/v7XaaW-CHHc'::text),
-  ('Inverted Rows - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/m7iu_0WeteU'::text),
-  ('Pistol Squat', 'Quadriceps, Fessiers', 'https://youtu.be/Rn9I2qPH_es'::text),
-  ('Pseudo Planche Push Ups', 'Pectoraux, Épaules, Triceps, Abdominaux', 'https://youtu.be/igL27PZtN3I'::text),
-  ('Inertia / Deadstart Bench Press', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/IcJdR82HavI'::text),
-  ('Landmine Curtsy Lunge', 'Fessiers, Quadriceps, Adducteurs', 'https://youtu.be/3LFLdyzIKpc'::text),
-  ('Développé Militaire Unilatéral Élastique - Forme A', 'Épaules, Triceps', 'https://youtu.be/havAIMeUykw'::text),
-  ('Single Leg Deadlift - Élastique', 'Ischio-jambiers, Fessiers', 'https://youtu.be/ALEZi_izYKk'::text),
-  ('Staggered Stance Deadlift - Élastique', 'Ischio-jambiers, Fessiers', 'https://youtu.be/m554Wb8OV5s'::text),
-  ('Tirage Diagonal Unilatéral Élastique - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/9eNnY72UkOg'::text),
-  ('Fente Avant - Élastique', 'Quadriceps, Fessiers', 'https://youtu.be/7rkCkE76j7s'::text),
-  ('Tirage Horizontal Unilatéral Élastique - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/SazTohZKJlM'::text),
-  ('Tirage Vertical Unilatéral Élastique - Forme T', 'Grand dorsal, Biceps', 'https://youtu.be/7Eil3fxoi38'::text),
-  ('Tirage Horizontal Unilatéral Élastique - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/LAggYs2ehvc'::text),
-  ('Fente Arrière Élastique', 'Fessiers, Quadriceps', 'https://youtu.be/1qJICSetg2I'::text),
-  ('Staggered Stance Hip Thrust', 'Fessiers, Ischio-jambiers', 'https://youtu.be/whUUE9sEKwU'::text),
-  ('Dynamic Lateral Lunge', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/x1e-wJ7Ajx8'::text),
-  ('Overhead Press Oscillatoire - Haltères', 'Épaules, Triceps', 'https://youtu.be/ogqhjfOV2Kw'::text),
-  ('Speed Landmine Press', 'Épaules, Pectoraux, Triceps', 'https://youtu.be/csHpJSSfUfI'::text),
-  ('Speed Lunge', 'Quadriceps, Fessiers', 'https://youtu.be/aTiyEyciUGs'::text),
-  ('Inertia Lunge', 'Quadriceps, Fessiers', 'https://youtu.be/G-SPjZT2P0M'::text),
-  ('Tirages Alternés', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/EWtVf1WYQRA'::text),
-  ('Push Alterné', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/ktT_meGzvu0'::text),
-  ('Fente Avant/Arrière', 'Quadriceps, Fessiers', 'https://youtu.be/XLzv8zWkSaM'::text),
-  ('Fente Latérale Dynamique', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/2PBxJNE0C4s'::text),
-  ('Fente Arrière avec Barre (Back Rack)', 'Fessiers, Quadriceps', 'https://youtu.be/Gg46tjDX3DQ'::text),
-  ('Power Push Up', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/bqTr7P7try0'::text),
-  ('Fente Arrière Élevée Haltères', 'Fessiers, Quadriceps', 'https://youtu.be/ENugz8WKY7w'::text),
-  ('Deadstart Power Push Up', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/yBfPIAwPM6Y'::text),
-  ('Pistol Squat Assisté', 'Quadriceps, Fessiers', 'https://youtu.be/fGnmzp_rX1A'::text),
-  ('Staggered Deadlift Biais RI', 'Ischio-jambiers, Fessiers', 'https://youtu.be/k2S18agQep0'::text),
-  ('Kneel Push Presse - Landmine', 'Épaules, Pectoraux, Triceps', 'https://youtu.be/d875v8kIYpU'::text),
-  ('Fente Diagonale', 'Fessiers, Quadriceps, Adducteurs', 'https://youtu.be/Bg1ygOX05gk'::text),
-  ('Power Chin Up', 'Grand dorsal, Biceps', 'https://youtu.be/DCYoJ97cwS8'::text),
-  ('Single Leg Deadlift Assisté & Controlatéral', 'Ischio-jambiers, Fessiers', 'https://youtu.be/1vmttvl1MSU'::text),
-  ('Bent Over Row Overcoming', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/zGsWIEPtM7s'::text),
-  ('Pendlay Row', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/fl8UAVQvUHQ'::text),
-  ('Barbell Z Press', 'Épaules, Triceps, Abdominaux', 'https://youtu.be/6jKh5Hvw6VU'::text),
-  ('Suitcase Deadlift Haltères', 'Ischio-jambiers, Fessiers, Obliques, Préhension', 'https://youtu.be/3eGcX3URyBg'::text),
-  ('Snatch Grip Deadlift', 'Ischio-jambiers, Fessiers, Lombaires, Trapèzes', 'https://youtu.be/l3kWBGF7Kqw'::text),
-  ('Lat Pullldown Unilatéral - Forme T', 'Grand dorsal, Biceps', 'https://youtu.be/wwj7nCeJy90'::text),
-  ('Chest Supported Rows Iso Alterné - Forme A', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/5fSeSdFankw'::text),
-  ('Good Morning - Barre', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/9gW5TUupLNo'::text),
-  ('Good Morning Semi Sumo - Barre', 'Ischio-jambiers, Fessiers, Lombaires, Adducteurs', 'https://youtu.be/s3aF8BlD7jY'::text),
-  ('Tractions Overcoming', 'Grand dorsal, Biceps', 'https://youtu.be/UGKdg7kNAO4'::text),
-  ('Ring Push Ups - Forme A', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/xz08wDzwFac'::text),
-  ('Side Jump Push Ups', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/rK2mTXLtocI'::text),
-  ('Fente In & Out - Barbell', 'Fessiers, Quadriceps, Adducteurs', 'https://youtu.be/WoaeF7cCuGk'::text),
-  ('Push Press - Barre', 'Épaules, Triceps, Quadriceps', 'https://youtu.be/hOb_wmEq9UM'::text),
-  ('Single Leg Deadlift Excentrique - Barre', 'Ischio-jambiers, Fessiers', 'https://youtu.be/28bqhvu4xsQ'::text),
-  ('One Arm Chin Up Excentrique', 'Grand dorsal, Biceps', 'https://youtu.be/JT_kcsHa5g0'::text),
-  ('Développé Couché Unilatéral - Excentrique', 'Pectoraux, Triceps, Obliques', 'https://youtu.be/Q_wxXqSVlb0'::text),
-  ('Tirage Vertical Unilat - Forme A', 'Grand dorsal, Biceps', 'https://youtu.be/kQyzxih_9YE'::text),
-  ('Fente Latérale Dynamique - Haltères', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/jv8b0f7FiHY'::text),
-  ('Fente Avant - Haltères', 'Quadriceps, Fessiers', 'https://youtu.be/WKbYkxEN5Lo'::text),
-  ('Tirage Horizontal Forme I - Excentrique', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/G_DZ-Gs8QBM'::text),
-  ('Fente Bulgare - Back Rack', 'Quadriceps, Fessiers', 'https://youtu.be/2P8-hmhytbI'::text),
-  ('Landmine Single Leg Deadlift - Contralatéral', 'Ischio-jambiers, Fessiers', 'https://youtu.be/DWSDfiL41FI'::text),
-  ('Speed Bulgarian Split Squat - Back Rack', 'Quadriceps, Fessiers', 'https://youtu.be/BWe_TnBC_Us'::text),
-  ('Traction - Excentrique', 'Grand dorsal, Biceps', 'https://youtu.be/VIR-wVGINCk'::text),
-  ('Fente Latérale Dynamique - Landmine', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/2dVF5OsjHrE'::text),
-  ('Fente Arrière - Front Rack', 'Fessiers, Quadriceps, Abdominaux', 'https://youtu.be/gj-RxvxVL40'::text),
-  ('Speed Pendlay Row', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/uR2JxHRzmY4'::text),
-  ('Speed Reverse Lunge - Front Rack', 'Fessiers, Quadriceps', 'https://youtu.be/cWbi72Wpcj8'::text),
-  ('Walking Zombie Lunges', 'Quadriceps, Fessiers', 'https://youtu.be/msRGlreiH6U'::text),
-  ('3 Point Row - Catch', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/QfZCS9YJe0A'::text),
-  ('3 Point Row - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/-1WufIjRYE8'::text),
-  ('Développé Couché Alterné Position Bridge', 'Pectoraux, Triceps, Fessiers', 'https://youtu.be/ZCr99SmgZa4'::text),
-  ('Développé Couché Iso Alterné - Haltères', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/QVNNG1_bzvY'::text),
-  ('Diamond Push Ups', 'Triceps, Pectoraux', 'https://youtu.be/7gMTcXz9N_A'::text),
-  ('Pec Fly Décliné - Haltères', 'Pectoraux, Épaules', 'https://youtu.be/1odAu5EBCoI'::text),
-  ('Chin Ups', 'Grand dorsal, Biceps', 'https://youtu.be/024a4lHIj_M'::text),
-  ('Close Grip Push Ups - Focus Triceps', 'Triceps, Pectoraux', 'https://youtu.be/jDfq98lzUi4'::text),
-  ('Bent Over Rows Alterné', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/8Rvh0eDZdpE'::text),
-  ('B Stance Deadlift - Pelvic Reach', 'Ischio-jambiers, Fessiers', 'https://youtu.be/LbfOFnR1Zow'::text),
-  ('Développé Couché Incliné - Barre', 'Pectoraux, Épaules, Triceps', 'https://youtu.be/GQSw1fqT4Yw'::text),
-  ('Fente Arrière Pied Avant Elevé - Back Rack', 'Fessiers, Quadriceps', 'https://youtu.be/Gm3Fkxn6mQc'::text),
-  ('Ring Power Rows', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/pxxtw0BZ778'::text),
-  ('Pec Fly - Iso Overcoming', 'Pectoraux, Épaules', 'https://youtu.be/5hsSGdsMGhg'::text),
-  ('Single Leg Calf Raise - Iso Overcoming', 'Mollets', 'https://youtu.be/WVjL6YDSLjE'::text),
-  ('Single Leg Wall Push - Iso Overcoming', 'Quadriceps, Fessiers, Mollets', 'https://youtu.be/IUGuxzMxfSw'::text),
-  ('Muscle Up', 'Grand dorsal, Biceps, Triceps, Pectoraux', 'https://youtu.be/YyxvBhHnNGw'::text),
-  ('Fente Bulgare Contralatéral - Haltère', 'Quadriceps, Fessiers', 'https://youtu.be/uGvp3aUdu6I'::text),
-  ('Half Kneel Landmine Press - Forme I', 'Épaules, Pectoraux, Triceps', 'https://youtu.be/J9BU03UsNqk'::text),
-  ('Bent Over Row - Barre', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/fjiFE9blEZI'::text),
-  ('Bent Over Row - Haltères', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/ZegEX17NnP4'::text),
-  ('Box Step Up - Back rack', 'Quadriceps, Fessiers', 'https://youtu.be/nIEejwRsPTs'::text),
-  ('Curtsy Lunge - Cable', 'Fessiers, Quadriceps, Adducteurs', 'https://youtu.be/EynqAhUmo5c'::text),
-  ('Half Kneel BD/KB Press', 'Épaules, Triceps, Abdominaux', 'https://youtu.be/BMlIGxRs78o'::text),
-  ('Overhead Press Haltères - Oscillatoire', 'Épaules, Triceps', 'https://youtu.be/43XqoL_FVNU'::text),
-  ('Single Leg Bridge DB Bench Press - Unilat', 'Pectoraux, Triceps, Fessiers', 'https://youtu.be/lNJjY4_qt3o'::text),
-  ('Fente Multidirectionnelle', 'Quadriceps, Fessiers, Adducteurs', 'https://youtu.be/vvD1H3pZtrY'::text),
-  ('Toe Squat', 'Quadriceps, Pieds, Mollets', 'https://youtu.be/u5FckHp-tg4'::text),
-  ('Tirage Diagonal Bilatéral Forme I - Élastique', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/5mhMl-1I1EA'::text),
-  ('Tirage Vertical Bilatéral Forme A - Élastique', 'Grand dorsal, Biceps', 'https://youtu.be/D1JQ3CfswHQ'::text),
-  ('Tirage Vertical Bilatéral Forme I - Élastique', 'Grand dorsal, Biceps', 'https://youtu.be/5gx9pSzZUJQ'::text),
-  ('Speed Banded Lat Pulldown', 'Grand dorsal, Biceps', 'https://youtu.be/EhWGyKKmZTM'::text),
-  ('Tirage Diagonal Bilatéral Forme A - Élastique', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/ENkK4MYqtiU'::text),
-  ('Pompe Avec Rotation', 'Pectoraux, Triceps, Obliques', 'https://youtu.be/rANdT-nNXBY'::text),
-  ('Cobra/Hindu Push Up', 'Pectoraux, Épaules, Triceps', 'https://youtu.be/AUkzeSfXhGA'::text),
-  ('Single Arm Push Up', 'Pectoraux, Triceps, Obliques', 'https://youtu.be/XAIvM7C6lZo'::text),
-  ('Deadlift - Élastique', 'Ischio-jambiers, Fessiers, Lombaires', 'https://youtu.be/fXQ8VvKzKUk'::text),
-  ('Fente Latérale Dynamique Back Rack', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/9geKCmq33Bc'::text),
-  ('Dips Chaises', 'Triceps, Pectoraux', 'https://youtu.be/26rOp7kIN4s'::text),
-  ('Fente Avant - Back Rack', 'Quadriceps, Fessiers', 'https://youtu.be/wzEG1fT418c'::text),
-  ('Elevated Push Up', 'Pectoraux, Triceps, Épaules', 'https://youtu.be/HFmWOnL-uBA'::text),
-  ('Pompe Déclinée', 'Pectoraux, Épaules, Triceps', 'https://youtu.be/5FrFWFvDvBw'::text),
-  ('Inverted Rows - Forme I', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/-9FL5Lnjaac'::text),
-  ('KB / DB Thrusters', 'Quadriceps, Fessiers, Épaules, Triceps', 'https://youtu.be/iDU3HmLRssY'::text),
-  ('Ring & Trx Row Unilatéral', 'Grand dorsal, Trapèzes, Biceps, Obliques', 'https://youtu.be/Pao2A8L1MPU'::text),
-  ('DB Squat', 'Quadriceps, Fessiers', 'https://youtu.be/706Y4rTlb1Y'::text),
-  ('DB Cyclist Squat', 'Quadriceps', 'https://youtu.be/Ic0M1CgATnE'::text),
-  ('Pompes Avec Twist', 'Pectoraux, Triceps, Obliques', 'https://youtu.be/KVO1m7h99tg'::text),
-  ('Développé Couché - Prise Serrée', 'Triceps, Pectoraux', 'https://youtu.be/42XRV9AmYCQ'::text),
-  ('Fentes Avant ATL Goblet', 'Quadriceps, Fessiers', 'https://youtu.be/T8nqeFn5Ah4'::text),
-  ('Side Step Squat', 'Quadriceps, Fessiers, Adducteurs', 'https://youtu.be/BTjZ8alu8CI'::text),
-  ('Fente Latérale Wall Push - Iso Overcoming', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/hMmAUW14al4'::text),
-  ('Fente Latérale Élevée', 'Fessiers, Adducteurs, Quadriceps', 'https://youtu.be/Jk1F8zG7qMs'::text),
-  ('Explosive 3 Point Row', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/S9oA_euCFHo'::text),
-  ('Demi Squat with Pause – Résistance Accommodante', 'Quadriceps, Fessiers', 'https://youtu.be/bcISFT7KxoM'::text),
-  ('Straight Arm Lat Pull Down – Élastique', 'Grand dorsal', 'https://youtu.be/mxXUYlkwqhM'::text),
-  ('Band Pull Apart Overhand - Iso Hold', 'Trapèzes, Épaules', 'https://youtu.be/sJfcmJxQHqY'::text),
-  ('Band Pull Apart Underhand - Iso Hold', 'Trapèzes, Épaules', 'https://youtu.be/2_zcq4SlTVc'::text),
-  ('Deep Lunges', 'Quadriceps, Fessiers, Psoas', 'https://youtu.be/vA7tyM6St1c'::text),
-  ('Tractions – Prise Large Forme T', 'Grand dorsal, Biceps', 'https://youtu.be/MTtrBPCorRM'::text),
-  ('Tirage Vertical Lat Pulldown – Forme T', 'Grand dorsal, Biceps', 'https://youtu.be/_bizZn1Q0Yo'::text),
-  ('Offset MB Push Up With Shoulder Tap', 'Pectoraux, Triceps, Abdominaux, Obliques', 'https://youtu.be/Ulv8hFRTAh4'::text),
-  ('Landmine Power Press', 'Épaules, Pectoraux, Triceps', 'https://youtu.be/xxErSb4K8ag'::text),
-  ('45° Développé Couché Haltères - Forme A', 'Pectoraux, Épaules, Triceps', 'https://youtu.be/XaKryJLu_ZQ'::text),
-  ('Toes Elevated Romanian Deadlift - Haltères', 'Ischio-jambiers, Fessiers, Mollets', 'https://youtu.be/wR4csaT6spk'::text),
-  ('Superman Twist', 'Lombaires, Obliques, Fessiers', 'https://youtu.be/pu4UlhYXgek'::text),
-  ('KB Sumo Deadlift High Pull', 'Fessiers, Ischio-jambiers, Trapèzes, Épaules', 'https://youtu.be/T10s6BK0oWE'::text),
-  ('KB Goblet Fente Avant', 'Quadriceps, Fessiers', 'https://youtu.be/DDdJYby7LLo'::text),
-  ('Speed 3 Point Row', 'Grand dorsal, Trapèzes, Biceps', 'https://youtu.be/83E09a_JkV4'::text),
-  ('Single KB Clean & Push Press', 'Fessiers, Ischio-jambiers, Épaules, Triceps', 'https://youtu.be/Z-gvaElHlNM'::text),
-  ('Fente Arrière Alternée – Haltères', 'Fessiers, Quadriceps', 'https://youtu.be/xDw5HSpldyM'::text),
-  ('Tirage Vertical Lat Pulldown - Forme A', 'Grand dorsal, Biceps', 'https://youtu.be/xCP-WB4MRTU'::text),
-  ('Single Leg Deadlift with Row', 'Ischio-jambiers, Fessiers, Grand dorsal', 'https://youtu.be/CZa7Ck0iwuQ'::text),
-  ('Back Squat - Oscillatoire', 'Quadriceps, Fessiers', 'https://youtu.be/GXpluCTHk5Y'::text),
-  ('Single Leg Sprinter Squat - Iso Overcoming', 'Quadriceps, Fessiers', 'https://youtu.be/feaHmS2NXiw'::text),
+  ('Dips', 'Pectoraux, Triceps, Épaules', 'https://youtube.com/shorts/bBnKPwmMMoM'::text),
   ('KB Bent Over Row - Drop & Catch', 'Grand dorsal, Trapèzes, Biceps', 'https://youtube.com/shorts/3PFmzm9fENk'::text),
   ('Spanish Squat', 'Quadriceps', 'https://youtube.com/shorts/Qhdj1g55tgQ'::text),
   ('ATG Split Squat', 'Quadriceps, Fessiers, Psoas', 'https://youtu.be/JE16ZN7Iqr0'::text),
@@ -362,9 +124,6 @@ insert into import_source (nom, muscles, video) values
   ('Goblet Squat Focus Fessiers', 'Fessiers, Quadriceps', 'https://youtube.com/shorts/s-NaWVwJxFY'::text),
   ('Deep Press', 'Épaules, Triceps', 'https://youtube.com/shorts/NU42DKCC6C0'::text),
   ('Pull Up - Iso Overcoming', 'Grand dorsal, Biceps', 'https://youtube.com/shorts/XJpMSxWPtB8'::text),
-  ('Banded Crandle Bar Muscle Up', 'Grand dorsal, Triceps, Abdominaux', null::text),
-  ('Box Assisted Bar Muscle Up', 'Grand dorsal, Triceps, Pectoraux', null::text),
-  ('Level To kip to Stand', 'Grand dorsal, Abdominaux', null::text),
   ('Calf Raise - Bent Leg', 'Mollets', 'https://youtu.be/0b1T3t8Bp5o'::text),
   ('Single Leg Glute Bridge', 'Fessiers, Ischio-jambiers', 'https://youtu.be/tsCpbK0jNus'::text),
   ('Biceps Curl - Opener', 'Biceps', 'https://youtu.be/FUJRtGcvOxM'::text),
@@ -411,7 +170,6 @@ insert into import_source (nom, muscles, video) values
   ('Biceps Banc Incliné Amplitude Complète', 'Biceps', 'https://youtube.com/shorts/wLJLB-de04g'::text),
   ('Pec Hold', 'Pectoraux', 'https://youtube.com/shorts/hwklHLcullU'::text),
   ('Glute Bridge - Dynamique', 'Fessiers', 'https://youtube.com/shorts/ogxwZJIudBE'::text),
-  ('Bodyweight Tricep Extension - Floor', 'Triceps', null::text),
   ('Bear Crawl - Front & Back', 'Abdominaux, Obliques, Épaules', 'https://youtu.be/3IzN9sw_1ck'::text),
   ('Seated Leg Lift - Pike', 'Abdominaux, Psoas', 'https://youtu.be/5G_j-xUIVr0'::text),
   ('Hollow Body Hold', 'Abdominaux', 'https://youtu.be/1ko4paYuvw8'::text),
@@ -639,34 +397,13 @@ insert into import_source (nom, muscles, video) values
   ('RAC Cat Cow', 'Lombaires, Abdominaux', 'https://youtube.com/shorts/EYBcgO800Rk'::text),
   ('Toes Worm Walk', 'Ischio-jambiers, Abdominaux, Épaules', 'https://youtube.com/shorts/o1Ex3VYEmbI'::text),
   ('Ergo / Cossack et shoulder tap', 'Adducteurs, Fessiers, Abdominaux', 'https://youtube.com/shorts/l9c0Hr3RXGM'::text),
-  ('Lizard transition jump', 'Psoas, Adducteurs, Fessiers', 'https://youtube.com/shorts/xeFplHOOt7s'::text);
-
--- 1. Records : on garde l'historique, on retire seulement le lien vers la bibliothèque
-update tracked_movements set movement_id = null
-where movement_id in (select m.id from movements m where not (m.name ~* '^\s*\d' or m.name ~* '\m(run|bike|marathon|cooper|ski erg)\M' or m.name ~* '^\s*(row|ski)\M'));
-
--- 2. Suppression de tout sauf le cardio
-delete from coach_hidden_content
-where content_type = 'movement'
-  and content_id::text in (select m.id::text from movements m where not (m.name ~* '^\s*\d' or m.name ~* '\m(run|bike|marathon|cooper|ski erg)\M' or m.name ~* '^\s*(row|ski)\M'));
-
-delete from movements m where not (m.name ~* '^\s*\d' or m.name ~* '\m(run|bike|marathon|cooper|ski erg)\M' or m.name ~* '^\s*(row|ski)\M');
-
--- 3. Cardio gardé : plus de vidéo qui ne soit pas de Maxime
-update movements set youtube_url = null, video_url = null;
-
--- 4. Import de la feuille (un nom déjà présent côté cardio reçoit la vidéo et les muscles de la feuille)
-update movements m set youtube_url = s.video, video_url = null, muscles = s.muscles
-from import_source s
-where lower(trim(m.name)) = lower(trim(s.nom));
-
-insert into movements (name, muscles, youtube_url, coach_id)
-select s.nom, s.muscles, s.video, null
-from import_source s
-where not exists (select 1 from movements m where lower(trim(m.name)) = lower(trim(s.nom)));
+  ('Lizard transition jump', 'Psoas, Adducteurs, Fessiers', 'https://youtube.com/shorts/xeFplHOOt7s'::text),
+  ('P&R Hanche Externe', 'Fessiers', 'https://youtu.be/cF5Xzp-E7BA'::text),
+  ('Hanche Rotation Capsulaire', 'Fessiers, Adducteurs', 'https://youtube.com/shorts/Bp_8-CVaI7M'::text)
+) as b(nom, muscles, video);
 
 select
-  (select count(*) from movements_sauvegarde_20261101) as mouvements_avant,
+  (select count(*) from movements_sauvegarde_20261103) as mouvements_avant,
   (select count(*) from movements) as mouvements_apres,
   (select count(*) from movements where coalesce(youtube_url, '') <> '') as avec_video;
 
@@ -675,8 +412,8 @@ commit;
 -- Retour arrière complet (à lancer seul, si besoin) :
 --   begin;
 --   delete from movements;
---   insert into movements select * from movements_sauvegarde_20261101;
+--   insert into movements select * from movements_sauvegarde_20261103;
 --   commit;
 --   (les liens records → bibliothèque et les masquages coach_hidden_content ne sont pas restaurés)
 --
--- Une fois l'import validé : drop table movements_sauvegarde_20261101;
+-- Une fois l'import validé : drop table movements_sauvegarde_20261103;

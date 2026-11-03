@@ -1,261 +1,261 @@
 PAT|Bench Press - Iso Overcoming|P,Tr,E|y:CEh6EKLnKcE
-PAT|Band pull appart|T,E|y:a8nNqp2K_lM
+PAT|Band pull appart|T,E|-
 PAT|Romanian Deadlift - Iso Overcoming|IJ,F,L|y:XtFzW2QwCX4
-PAT|Chest supported row - Forme A|GD,T,B|y:qDtVPsYJVjA
-PAT|Chest supported row - Forme I|GD,T,B|y:hcOIEE3wrvw
-PAT|Développé couché Haltères - Forme I|P,Tr,E|y:Aroikk7YLv0
-PAT|Développé couché Haltères - Forme A|P,Tr,E|y:b5UcTefJIzI
-PAT|Développé couché incliné - Forme T|P,E,Tr|y:JlWiyB_0_jo
-PAT|Fente Statique Focus Fessiers|F,Q,IJ|y:JKCE7XgXqLo
-PAT|Fente Latérale Contralatérale|F,AD,Q|y:CZY9yaFitNw
-PAT|FFE Split Squat Modifié|Q,F|y:1iFrqY7t620
+PAT|Chest supported row - Forme A|GD,T,B|-
+PAT|Chest supported row - Forme I|GD,T,B|-
+PAT|Développé couché Haltères - Forme I|P,Tr,E|-
+PAT|Développé couché Haltères - Forme A|P,Tr,E|-
+PAT|Développé couché incliné - Forme T|P,E,Tr|-
+PAT|Fente Statique Focus Fessiers|F,Q,IJ|-
+PAT|Fente Latérale Contralatérale|F,AD,Q|-
+PAT|FFE Split Squat Modifié|Q,F|-
 PAT|Leg Press - Iso Overcoming|Q,F|y:vSmNZY8WaX4
-PAT|Hip Thrust|F,IJ|y:SuiVkw1YKIY
-PAT|Lat Pullldown - Forme T|GD,B|y:xECfj2gVgI4
-PAT|Lat Pulldown Unilatéral - Forme I|GD,B|y:EDs1DCFTX5M
-PAT|Bridge DB Press|P,Tr,F|y:mLKAzoYjIP0
-PAT|Pec Fly Décliné|P,E|y:rBxuFyN7RgU
-PAT|Pompe - Forme A|P,Tr,E,A|y:aLFyv5LoAeI
-PAT|Pompe - Forme I|P,Tr,E,A|y:KLJ7ct0fhak
-PAT|Fente Latérale - 90°|F,AD,Q|y:2CWxKvq9Tjs
-PAT|Ring Rows - Forme A|GD,T,B|y:qra2pHOJO8I
-PAT|Ring Rows - Forme I|GD,T,B|y:FY9jEbO73Zo
-PAT|Deadlift KB|IJ,F,L|y:XQmHC9HvtfY
-PAT|Deadlift|IJ,F,L,Q|y:KfP9xpp_RhU
-PAT|Sumo Deadlift|F,AD,IJ,Q|y:VhC_GwEOKMs
-PAT|Tirage Horizontal - Forme A|GD,T,B|y:LcaSfDAv0hc
-PAT|Viking Press - Forme I|E,Tr|y:Dcyg28BuFSY
+PAT|Hip Thrust|F,IJ|-
+PAT|Lat Pullldown - Forme T|GD,B|-
+PAT|Lat Pulldown Unilatéral - Forme I|GD,B|-
+PAT|Bridge DB Press|P,Tr,F|-
+PAT|Pec Fly Décliné|P,E|-
+PAT|Pompe - Forme A|P,Tr,E,A|-
+PAT|Pompe - Forme I|P,Tr,E,A|-
+PAT|Fente Latérale - 90°|F,AD,Q|-
+PAT|Ring Rows - Forme A|GD,T,B|-
+PAT|Ring Rows - Forme I|GD,T,B|-
+PAT|Deadlift KB|IJ,F,L|-
+PAT|Deadlift|IJ,F,L,Q|-
+PAT|Sumo Deadlift|F,AD,IJ,Q|-
+PAT|Tirage Horizontal - Forme A|GD,T,B|-
+PAT|Viking Press - Forme I|E,Tr|-
 PAT|Deadhang - Excentrique|AB,GD|y:lLwDSiXXP94
-PAT|Barbell Floor Press|P,Tr|y:qR9qclzV_ZU
-PAT|Board Press|P,Tr|y:FSsed99dT_0
-PAT|Split Stance Row - Unilatéral|GD,T,B|y:aL8gH4Wx6IA
-PAT|Chin ups avec poignet libre|GD,B|y:yhZDhVItDHk
+PAT|Barbell Floor Press|P,Tr|-
+PAT|Board Press|P,Tr|-
+PAT|Split Stance Row - Unilatéral|GD,T,B|-
+PAT|Chin ups avec poignet libre|GD,B|-
 PAT|DB Bench Press - Position T|P,Tr,E|y:2BxpEh6AaYQ
-PAT|Deadlift Off Blocks|IJ,F,L|y:Da_lvtpZmhA
+PAT|Deadlift Off Blocks|IJ,F,L|-
 PAT|DB Bench Press - Position A|P,Tr,E|y:sSgMZhYhuDw
-PAT|Développé Militaire Incliné|E,P,Tr|y:wtEWNERP4Rs
+PAT|Développé Militaire Incliné|E,P,Tr|-
 PAT|DB Bench Press - Position i|P,Tr,E|y:O0tLWw17zlQ
-PAT|Safety Bar Fente Statique|Q,F|y:cBHNKhcrbGo
-PAT|Split Squat Modifié Avec Talon Élevé|Q,F|y:ee9JfZlJ5Ak
-PAT|Deadstart 75° Développé Militaire Incliné Barre – Forme A|E,P,Tr|y:qK1AIWzb-2k
-PAT|Half Kneeling KB Press|E,Tr,A|y:n_AIS_zp_k8
-PAT|Overhead Press Haltère|E,Tr|y:I_gdRapdQS8
-PAT|Pompe sur Haltères|P,Tr,E|y:5LsudfHJtU4
-PAT|Split Squat Modifié|Q,F|y:d1ILKI5qJsY
-PAT|Développé Couché Oscillatoire|P,Tr,E|y:Cvd8Z2b215s
-PAT|Scapulae Pull Up|GD,T|y:OHw69DPW1DQ
-PAT|Développé Couché Iso Overcoming|P,Tr,E|y:ItNsyMe7HOY
-PAT|Deep Push Ups Yielding|P,Tr,E|y:kiRTuIeTsmM
-PAT|Dips Yielding Iso's|P,Tr,E|y:isGrxxNmA_M
-PAT|Overhead Press - Forme I|E,Tr|y:8b7Z75IGoTE
-PAT|Pull up EQI|GD,B|y:PBfq_W1iK_o
-PAT|Handstand Hold|E,Tr,A|y:h4eZ_YOuBpo
-PAT|Pull Up Oscillatoire|GD,B|y:oyozUNmGnzs
-PAT|Overcoming Iso Split Squat|Q,F|y:9NU3d2G3ZnQ
-PAT|45° Back Extension - Unilatéral|L,F,IJ|y:bRqH_3in9fY
-PAT|45° Back Extension - Bilatéral|L,F,IJ|y:XZwxVbYyBgA
-PAT|Curtsy Lunge - Dumbell|F,Q,AD|y:1yLARxH3nTo
-PAT|Curtsy Lunge - Barbell Back Rack|F,Q,AD|y:wDjHvOeN9Dk
-PAT|B Stance Hip Thrust|F,IJ|y:Gt4WHDLg7wU
-PAT|Fentes Arrière - Barre|F,Q|y:ngUldo0nCuk
-PAT|Romanian Deadlift - Haltères|IJ,F,L|y:EfhAZXYCueQ
-PAT|Romanian Deadlift - Barre|IJ,F,L|y:d4TjkTuPD8M
-PAT|Step Ups|Q,F|y:GFe289HJ6H0
-PAT|Fentes Latérales Statique - Haltère|F,AD,Q|y:v0ktL4QRGs4
-PAT|Fentes Arrière - Haltères|F,Q|y:QYUwuHHDQmw
-PAT|Développé couché - Forme A|P,Tr,E|y:jQPk-Y_feZs
-PAT|Développé couché - Forme T|P,Tr,E|y:2gROQMRgXVA
-PAT|Long Lunge Hold|F,Q,PS|y:vr3AN9kyeLA
-PAT|Deadlift Iso Overcoming|IJ,F,L|y:YzVnWZ7B7TI
-PAT|Rounded Back Extension|L,F,IJ|y:csEbjxxddq4
-PAT|Tirage Diagonal Unilatéral - Forme I|GD,T,B|y:VIgUoQ__9DA
-PAT|Split Squat Hold|Q,F|y:ohfYpjJ8yCA
-PAT|Rounded Back Extension Unilatéral|L,F,IJ|y:4B1JDyjeeKM
-PAT|Tirage Horizontal Unilatéral - Forme I|GD,T,B|y:qMLggx94QpI
-PAT|Lat Pulldown Bilatéral Forme I|GD,B|y:BkqFXHffvHE
-PAT|Single Leg Hip Thrust Poids de corps|F,IJ|y:e7zOfbl9w7s
-PAT|Tirage Diagonal Bilatéral - Forme A|GD,T,B|y:wG5ePwB9O7U
-PAT|Tirage Diagonal - Forme T|GD,T,B|y:_gdMpSiwwiU
-PAT|Tirage Diagonal Unilatéral - Forme A|GD,T,B|y:fUvydTsM6O4
-PAT|Développé Militaire Assis - Forme T|E,Tr|y:yJ1_qUgnZAU
-PAT|Tirage Horizontal Bilatéral - Forme T|GD,T,B|y:hCQCEgPYge0
-PAT|B Stance Deadlift|IJ,F,L|y:SkaxP8onC94
-PAT|3 Point Row - Forme A|GD,T,B|y:24zTW8UikkI
-PAT|Fente Bulgare - Haltères|Q,F|y:yt0-PW1KSlo
-PAT|Split Squat Modifié - Barre|Q,F|y:sPdJT8QxvtE
-PAT|Chin Up Overcoming|GD,B|y:nsuezBJooxk
-PAT|Overhead Press - Barre|E,Tr|y:Jw7ESmxoZrA
-PAT|Tirage Horizontal Unilatéral - Forme A|GD,T,B|y:W_1CZShC280
-PAT|Inverted Rows EQI|GD,T,B|y:EzYUkqOMx-s
-PAT|Tractions|GD,B|y:sBXN3OQXmM4
-PAT|Dips|P,Tr,E|y:2aRqAp67W6o
-PAT|Pec Fly Incliné Poulie|P,E|y:7q-5qkE1SZs
-PAT|Pec Fly Neutre Poulie|P,E|y:oG8OQZ4D5xM
-PAT|Straight Arm Lat Pulldown Bilatéral|GD|y:dcZfwnIvRwY
-PAT|Straight Arm Lat Pulldown Unilatéral|GD|y:MrRoQoQ0Zn8
-PAT|Tirage Horizontal Bilatéral - Forme I|GD,T,B|y:_qtAA53bzOs
-PAT|Overhead Press - Overcoming|E,Tr|y:E_PIVeqm5j0
-PAT|Landmine Press|E,P,Tr|y:tAP3ftU9T28
-PAT|Front Lever|GD,A|y:HrVlWmE4uIk
-PAT|Overhead Press - Oscillatoire|E,Tr|y:cmDsOKs17E0
-PAT|Fente Oscillatoire|Q,F|y:v0ZJvkcj5Ro
-PAT|Fente Overcoming|Q,F|y:jrrw-sYInXc
-PAT|Trapbar Deadlift|Q,F,IJ|y:q7hl39XSSWo
-PAT|Overhead Press - Elastique|E,Tr|y:ujbe0vUcs2Q
-PAT|Fente Latérale - Dynamique|F,AD,Q|y:GU7QLufckgI
-PAT|Banded Press|E,Tr|y:gDe_IfCZGPY
-PAT|Tirage Horizontale Élastique - Forme A|GD,T,B|y:mOjh0WI_l6U
-PAT|Fente Arrière Assistée|F,Q|y:54qFfp0oxkI
-PAT|Bulgarian Split Squat Yielding Iso|Q,F|y:57i7LcdrjGo
-PAT|Speed Pull Ups|GD,B|y:RL93PuyBLSE
-PAT|Skater Squat|Q,F|y:CjizCbuA298
-PAT|Pike Push Up|E,Tr|y:UpJQCZQkeZs
-PAT|Tirage Horizontal Alterné - Split Stance|GD,T,B|y:z6M-t5-5mZk
-PAT|Offset Bench Press|P,Tr,O|y:Ix7fcRyO4tY
-PAT|Speed Bench Press Barbell|P,Tr,E|y:zzhvaT0Lqe0
-PAT|Drop Kneel Push Up|P,Tr|y:qfA7BbdAUyw
-PAT|Speed Deadlift|IJ,F,L|y:v7XaaW-CHHc
-PAT|Inverted Rows - Forme A|GD,T,B|y:m7iu_0WeteU
-PAT|Pistol Squat|Q,F|y:Rn9I2qPH_es
-PAT|Pseudo Planche Push Ups|P,E,Tr,A|y:igL27PZtN3I
-PAT|Inertia / Deadstart Bench Press|P,Tr,E|y:IcJdR82HavI
-PAT|Landmine Curtsy Lunge|F,Q,AD|y:3LFLdyzIKpc
-PAT|Développé Militaire Unilatéral Élastique - Forme A|E,Tr|y:havAIMeUykw
-PAT|Single Leg Deadlift - Élastique|IJ,F|y:ALEZi_izYKk
-PAT|Staggered Stance Deadlift - Élastique|IJ,F|y:m554Wb8OV5s
-PAT|Tirage Diagonal Unilatéral Élastique - Forme I|GD,T,B|y:9eNnY72UkOg
-PAT|Fente Avant - Élastique|Q,F|y:7rkCkE76j7s
-PAT|Tirage Horizontal Unilatéral Élastique - Forme A|GD,T,B|y:SazTohZKJlM
-PAT|Tirage Vertical Unilatéral Élastique - Forme T|GD,B|y:7Eil3fxoi38
-PAT|Tirage Horizontal Unilatéral Élastique - Forme I|GD,T,B|y:LAggYs2ehvc
-PAT|Fente Arrière Élastique|F,Q|y:1qJICSetg2I
-PAT|Staggered Stance Hip Thrust|F,IJ|y:whUUE9sEKwU
-PAT|Dynamic Lateral Lunge|F,AD,Q|y:x1e-wJ7Ajx8
-PAT|Overhead Press Oscillatoire - Haltères|E,Tr|y:ogqhjfOV2Kw
-PAT|Speed Landmine Press|E,P,Tr|y:csHpJSSfUfI
-PAT|Speed Lunge|Q,F|y:aTiyEyciUGs
-PAT|Inertia Lunge|Q,F|y:G-SPjZT2P0M
-PAT|Tirages Alternés|GD,T,B|y:EWtVf1WYQRA
-PAT|Push Alterné|P,Tr,E|y:ktT_meGzvu0
-PAT|Fente Avant/Arrière|Q,F|y:XLzv8zWkSaM
-PAT|Fente Latérale Dynamique|F,AD,Q|y:2PBxJNE0C4s
-PAT|Fente Arrière avec Barre (Back Rack)|F,Q|y:Gg46tjDX3DQ
-PAT|Power Push Up|P,Tr,E|y:bqTr7P7try0
-PAT|Fente Arrière Élevée Haltères|F,Q|y:ENugz8WKY7w
-PAT|Deadstart Power Push Up|P,Tr,E|y:yBfPIAwPM6Y
-PAT|Pistol Squat Assisté|Q,F|y:fGnmzp_rX1A
-PAT|Staggered Deadlift Biais RI|IJ,F|y:k2S18agQep0
-PAT|Kneel Push Presse - Landmine|E,P,Tr|y:d875v8kIYpU
-PAT|Fente Diagonale|F,Q,AD|y:Bg1ygOX05gk
-PAT|Power Chin Up|GD,B|y:DCYoJ97cwS8
-PAT|Single Leg Deadlift Assisté & Controlatéral|IJ,F|y:1vmttvl1MSU
-PAT|Bent Over Row Overcoming|GD,T,B|y:zGsWIEPtM7s
-PAT|Pendlay Row|GD,T,B|y:fl8UAVQvUHQ
-PAT|Barbell Z Press|E,Tr,A|y:6jKh5Hvw6VU
-PAT|Suitcase Deadlift Haltères|IJ,F,O,AB|y:3eGcX3URyBg
-PAT|Snatch Grip Deadlift|IJ,F,L,T|y:l3kWBGF7Kqw
-PAT|Lat Pullldown Unilatéral - Forme T|GD,B|y:wwj7nCeJy90
-PAT|Chest Supported Rows Iso Alterné - Forme A|GD,T,B|y:5fSeSdFankw
-PAT|Good Morning - Barre|IJ,F,L|y:9gW5TUupLNo
-PAT|Good Morning Semi Sumo - Barre|IJ,F,L,AD|y:s3aF8BlD7jY
-PAT|Tractions Overcoming|GD,B|y:UGKdg7kNAO4
-PAT|Ring Push Ups - Forme A|P,Tr,E|y:xz08wDzwFac
-PAT|Side Jump Push Ups|P,Tr,E|y:rK2mTXLtocI
-PAT|Ring Rows - Forme A|GD,T,B|y:8e0FgTDO5Rc
-PAT|Fente In & Out - Barbell|F,Q,AD|y:WoaeF7cCuGk
-PAT|Push Press - Barre|E,Tr,Q|y:hOb_wmEq9UM
-PAT|Single Leg Deadlift Excentrique - Barre|IJ,F|y:28bqhvu4xsQ
-PAT|One Arm Chin Up Excentrique|GD,B|y:JT_kcsHa5g0
-PAT|Développé Couché Unilatéral - Excentrique|P,Tr,O|y:Q_wxXqSVlb0
-PAT|Tirage Vertical Unilat -  Forme A|GD,B|y:kQyzxih_9YE
-PAT|Fente Latérale Dynamique - Haltères|F,AD,Q|y:jv8b0f7FiHY
-PAT|Fente Avant - Haltères|Q,F|y:WKbYkxEN5Lo
-PAT|Tirage Horizontal Forme I - Excentrique|GD,T,B|y:G_DZ-Gs8QBM
-PAT|Fente Bulgare - Back Rack|Q,F|y:2P8-hmhytbI
-PAT|Landmine Single Leg Deadlift - Contralatéral|IJ,F|y:DWSDfiL41FI
-PAT|Speed Bulgarian Split Squat - Back Rack|Q,F|y:BWe_TnBC_Us
-PAT|Traction - Excentrique|GD,B|y:VIR-wVGINCk
-PAT|Fente Latérale Dynamique - Landmine|F,AD,Q|y:2dVF5OsjHrE
-PAT|Fente Arrière - Front Rack|F,Q,A|y:gj-RxvxVL40
-PAT|Speed Pendlay Row|GD,T,B|y:uR2JxHRzmY4
-PAT|Speed Reverse Lunge - Front Rack|F,Q|y:cWbi72Wpcj8
-PAT|Walking Zombie Lunges|Q,F|y:msRGlreiH6U
-PAT|3 Point Row - Catch|GD,T,B|y:QfZCS9YJe0A
-PAT|3 Point Row - Forme I|GD,T,B|y:-1WufIjRYE8
-PAT|Développé Couché Alterné Position Bridge|P,Tr,F|y:ZCr99SmgZa4
-PAT|Développé Couché Iso Alterné - Haltères|P,Tr,E|y:QVNNG1_bzvY
-PAT|Diamond Push Ups|Tr,P|y:7gMTcXz9N_A
-PAT|Pec Fly Décliné - Haltères|P,E|y:1odAu5EBCoI
-PAT|Chin Ups|GD,B|y:024a4lHIj_M
-PAT|Close Grip Push Ups - Focus Triceps|Tr,P|y:jDfq98lzUi4
-PAT|Bent Over Rows Alterné|GD,T,B|y:8Rvh0eDZdpE
-PAT|B Stance Deadlift - Pelvic Reach|IJ,F|y:LbfOFnR1Zow
-PAT|Développé Couché Incliné - Barre|P,E,Tr|y:GQSw1fqT4Yw
-PAT|Fente Arrière Pied Avant Elevé - Back Rack|F,Q|y:Gm3Fkxn6mQc
-PAT|Ring Power Rows|GD,T,B|y:pxxtw0BZ778
-PAT|Pec Fly - Iso Overcoming|P,E|y:5hsSGdsMGhg
-PAT|Single Leg Calf Raise - Iso Overcoming|M|y:WVjL6YDSLjE
-PAT|Single Leg Wall Push - Iso Overcoming|Q,F,M|y:IUGuxzMxfSw
-PAT|Muscle Up|GD,B,Tr,P|y:YyxvBhHnNGw
-PAT|3 Point Row - Catch|GD,T,B|y:JYxrDh9gDHY
-PAT|Fente Bulgare Contralatéral - Haltère|Q,F|y:uGvp3aUdu6I
-PAT|Half Kneel Landmine Press - Forme I|E,P,Tr|y:J9BU03UsNqk
-PAT|Bent Over Row - Barre|GD,T,B|y:fjiFE9blEZI
-PAT|Bent Over Row - Haltères|GD,T,B|y:ZegEX17NnP4
-PAT|Box Step Up - Back rack|Q,F|y:nIEejwRsPTs
-PAT|Curtsy Lunge - Cable|F,Q,AD|y:EynqAhUmo5c
-PAT|Half Kneel BD/KB Press|E,Tr,A|y:BMlIGxRs78o
-PAT|Overhead Press Haltères - Oscillatoire|E,Tr|y:43XqoL_FVNU
-PAT|Single Leg Bridge DB Bench Press - Unilat|P,Tr,F|y:lNJjY4_qt3o
-PAT|Fente Multidirectionnelle|Q,F,AD|y:vvD1H3pZtrY
-PAT|Toe Squat|Q,PI,M|y:u5FckHp-tg4
-PAT|Tirage Diagonal Bilatéral Forme I - Élastique|GD,T,B|y:5mhMl-1I1EA
-PAT|Tirage Vertical Bilatéral Forme A - Élastique|GD,B|y:D1JQ3CfswHQ
-PAT|Tirage Vertical Bilatéral Forme I - Élastique|GD,B|y:5gx9pSzZUJQ
-PAT|Speed Banded Lat Pulldown|GD,B|y:EhWGyKKmZTM
-PAT|Tirage Diagonal Bilatéral Forme A - Élastique|GD,T,B|y:ENkK4MYqtiU
-PAT|Pompe Avec Rotation|P,Tr,O|y:rANdT-nNXBY
-PAT|Cobra/Hindu Push Up|P,E,Tr|y:AUkzeSfXhGA
-PAT|Single Arm Push Up|P,Tr,O|y:XAIvM7C6lZo
-PAT|Deadlift - Élastique|IJ,F,L|y:fXQ8VvKzKUk
-PAT|Fente Latérale Dynamique Back Rack|F,AD,Q|y:9geKCmq33Bc
-PAT|Dips Chaises|Tr,P|y:26rOp7kIN4s
-PAT|Fente Avant - Back Rack|Q,F|y:wzEG1fT418c
-PAT|Elevated Push Up|P,Tr,E|y:HFmWOnL-uBA
-PAT|Pompe Déclinée|P,E,Tr|y:5FrFWFvDvBw
-PAT|Inverted Rows - Forme I|GD,T,B|y:-9FL5Lnjaac
-PAT|KB / DB Thrusters|Q,F,E,Tr|y:iDU3HmLRssY
-PAT|Ring & Trx Row Unilatéral|GD,T,B,O|y:Pao2A8L1MPU
-PAT|DB Squat|Q,F|y:706Y4rTlb1Y
-PAT|DB Cyclist Squat|Q|y:Ic0M1CgATnE
-PAT|Pompes Avec Twist|P,Tr,O|y:KVO1m7h99tg
-PAT|Développé Couché - Prise Serrée|Tr,P|y:42XRV9AmYCQ
-PAT|Fentes Avant ATL Goblet|Q,F|y:T8nqeFn5Ah4
-PAT|Side Step Squat|Q,F,AD|y:BTjZ8alu8CI
-PAT|Fente Latérale Wall Push - Iso Overcoming|F,AD,Q|y:hMmAUW14al4
-PAT|Fente Latérale Élevée|F,AD,Q|y:Jk1F8zG7qMs
-PAT|Explosive 3 Point Row|GD,T,B|y:S9oA_euCFHo
-PAT|Demi Squat with Pause – Résistance Accommodante|Q,F|y:bcISFT7KxoM
-PAT|Straight Arm Lat Pull Down – Élastique|GD|y:mxXUYlkwqhM
-PAT|Band Pull Apart Overhand - Iso Hold|T,E|y:sJfcmJxQHqY
-PAT|Band Pull Apart Underhand - Iso Hold|T,E|y:2_zcq4SlTVc
-PAT|Deep Lunges|Q,F,PS|y:vA7tyM6St1c
-PAT|Tractions – Prise Large Forme T|GD,B|y:MTtrBPCorRM
-PAT|Tirage Vertical Lat Pulldown – Forme T|GD,B|y:_bizZn1Q0Yo
-PAT|Offset MB Push Up With Shoulder Tap|P,Tr,A,O|y:Ulv8hFRTAh4
-PAT|Landmine Power Press|E,P,Tr|y:xxErSb4K8ag
-PAT|45° Développé Couché Haltères  - Forme A|P,E,Tr|y:XaKryJLu_ZQ
-PAT|Toes Elevated Romanian Deadlift - Haltères|IJ,F,M|y:wR4csaT6spk
-PAT|Superman Twist|L,O,F|y:pu4UlhYXgek
-PAT|KB Sumo Deadlift High Pull|F,IJ,T,E|y:T10s6BK0oWE
-PAT|KB Goblet Fente Avant|Q,F|y:DDdJYby7LLo
-PAT|Speed 3 Point Row|GD,T,B|y:83E09a_JkV4
-PAT|Single KB Clean & Push Press|F,IJ,E,Tr|y:Z-gvaElHlNM
-PAT|Fente Arrière Alternée – Haltères|F,Q|y:xDw5HSpldyM
-PAT|Tirage Vertical Lat Pulldown - Forme A|GD,B|y:xCP-WB4MRTU
-PAT|Single Leg Deadlift with Row|IJ,F,GD|y:CZa7Ck0iwuQ
-PAT|Back Squat - Oscillatoire|Q,F|y:GXpluCTHk5Y
-PAT|Single Leg Sprinter Squat - Iso Overcoming|Q,F|y:feaHmS2NXiw
+PAT|Safety Bar Fente Statique|Q,F|-
+PAT|Split Squat Modifié Avec Talon Élevé|Q,F|-
+PAT|Deadstart 75° Développé Militaire Incliné Barre – Forme A|E,Tr,P|-
+PAT|Half Kneeling KB Press|E,Tr,A|-
+PAT|Overhead Press Haltère|E,Tr|-
+PAT|Pompe sur Haltères|P,Tr,E|-
+PAT|Split Squat Modifié|Q,F|-
+PAT|Développé Couché Oscillatoire|P,Tr,E|-
+PAT|Scapulae Pull Up|GD,T|-
+PAT|Développé Couché Iso Overcoming|P,Tr,E|-
+PAT|Deep Push Ups Yielding|P,Tr,E|-
+PAT|Dips Yielding Iso's|P,Tr,E|-
+PAT|Overhead Press - Forme I|E,Tr|-
+PAT|Pull up EQI|GD,B|-
+PAT|Handstand Hold|E,Tr,A|-
+PAT|Pull Up Oscillatoire|GD,B|-
+PAT|Overcoming Iso Split Squat|Q,F|-
+PAT|45° Back Extension - Unilatéral|F,IJ,L|-
+PAT|45° Back Extension - Bilatéral|F,IJ,L|-
+PAT|Curtsy Lunge - Dumbell|F,Q,AD|-
+PAT|Curtsy Lunge - Barbell Back Rack|F,Q,AD|-
+PAT|B Stance Hip Thrust|F,IJ|-
+PAT|Fentes Arrière - Barre|F,Q|-
+PAT|Romanian Deadlift - Haltères|IJ,F,L|-
+PAT|Romanian Deadlift - Barre|IJ,F,L|-
+PAT|Step Ups|Q,F|-
+PAT|Fentes Latérales Statique - Haltère|F,AD,Q|-
+PAT|Fentes Arrière - Haltères|F,Q|-
+PAT|Développé couché - Forme A|P,Tr,E|-
+PAT|Développé couché - Forme T|P,Tr,E|-
+PAT|Long Lunge Hold|F,Q,PS|-
+PAT|Deadlift Iso Overcoming|IJ,F,L|-
+PAT|Rounded Back Extension|L,F,IJ|-
+PAT|Tirage Diagonal Unilatéral - Forme I|GD,T,B|-
+PAT|Split Squat Hold|Q,F|-
+PAT|Rounded Back Extension Unilatéral|L,F,IJ|-
+PAT|Tirage Horizontal Unilatéral - Forme I|GD,T,B|-
+PAT|Lat Pulldown Bilatéral Forme I|GD,B|-
+PAT|Single Leg Hip Thrust Poids de corps|F,IJ|-
+PAT|Tirage Diagonal Bilatéral - Forme A|GD,T,B|-
+PAT|Tirage Diagonal - Forme T|GD,T,B|-
+PAT|Tirage Diagonal Unilatéral - Forme A|GD,T,B|-
+PAT|Développé Militaire Assis - Forme T|E,Tr|-
+PAT|Tirage Horizontal Bilatéral - Forme T|GD,T,B|-
+PAT|B Stance Deadlift|IJ,F,L|-
+PAT|3 Point Row - Forme A|GD,T,B|-
+PAT|Fente Bulgare - Haltères|Q,F|-
+PAT|Split Squat Modifié - Barre|Q,F|-
+PAT|Chin Up Overcoming|GD,B|-
+PAT|Overhead Press - Barre|E,Tr|-
+PAT|Tirage Horizontal Unilatéral - Forme A|GD,T,B|-
+PAT|Inverted Rows EQI|GD,T,B|-
+PAT|Tractions|GD,B|-
+PAT|Dips|P,Tr,E|-
+PAT|Pec Fly Incliné Poulie|P,E|-
+PAT|Pec Fly Neutre Poulie|P,E|-
+PAT|Straight Arm Lat Pulldown Bilatéral|GD|-
+PAT|Straight Arm Lat Pulldown Unilatéral|GD|-
+PAT|Tirage Horizontal Bilatéral - Forme I|GD,T,B|-
+PAT|Overhead Press - Overcoming|E,Tr|-
+PAT|Landmine Press|E,P,Tr|-
+PAT|Front Lever|GD,A|-
+PAT|Overhead Press - Oscillatoire|E,Tr|-
+PAT|Fente Oscillatoire|Q,F|-
+PAT|Fente Overcoming|Q,F|-
+PAT|Trapbar Deadlift|Q,F,IJ|-
+PAT|Overhead Press - Elastique|E,Tr|-
+PAT|Fente Latérale - Dynamique|Q,F,AD|-
+PAT|Banded Press|E,Tr|-
+PAT|Tirage Horizontale Élastique - Forme A|GD,T,B|-
+PAT|Fente Arrière Assistée|F,Q|-
+PAT|Bulgarian Split Squat Yielding Iso|Q,F|-
+PAT|Speed Pull Ups|GD,B|-
+PAT|Skater Squat|Q,F|-
+PAT|Pike Push Up|E,Tr|-
+PAT|Tirage Horizontal Alterné - Split Stance|GD,T,B|-
+PAT|Offset Bench Press|P,Tr,O|-
+PAT|Speed Bench Press Barbell|P,Tr,E|-
+PAT|Drop Kneel Push Up|P,Tr|-
+PAT|Speed Deadlift|IJ,F,L|-
+PAT|Inverted Rows - Forme A|GD,T,B|-
+PAT|Pistol Squat|Q,F|-
+PAT|Pseudo Planche Push Ups|P,E,Tr,A|-
+PAT|Inertia / Deadstart Bench Press|P,Tr,E|-
+PAT|Landmine Curtsy Lunge|F,Q,AD|-
+PAT|Développé Militaire Unilatéral Élastique - Forme A|E,Tr|-
+PAT|Single Leg Deadlift - Élastique|IJ,F|-
+PAT|Staggered Stance Deadlift - Élastique|IJ,F|-
+PAT|Tirage Diagonal Unilatéral Élastique - Forme I|GD,T,B|-
+PAT|Fente Avant - Élastique|Q,F|-
+PAT|Tirage Horizontal Unilatéral Élastique - Forme A|GD,T,B|-
+PAT|Tirage Vertical Unilatéral Élastique - Forme T|GD,B|-
+PAT|Tirage Horizontal Unilatéral Élastique - Forme I|GD,T,B|-
+PAT|Fente Arrière Élastique|F,Q|-
+PAT|Staggered Stance Hip Thrust|F,IJ|-
+PAT|Dynamic Lateral Lunge|F,AD,Q|-
+PAT|Overhead Press Oscillatoire - Haltères|E,Tr|-
+PAT|Speed Landmine Press|E,P,Tr|-
+PAT|Speed Lunge|Q,F|-
+PAT|Inertia Lunge|Q,F|-
+PAT|Tirages Alternés|GD,T,B|-
+PAT|Push Alterné|P,Tr,E|-
+PAT|Fente Avant/Arrière|Q,F|-
+PAT|Fente Latérale Dynamique|F,AD,Q|-
+PAT|Fente Arrière avec Barre (Back Rack)|F,Q|-
+PAT|Power Push Up|P,Tr,E|-
+PAT|Fente Arrière Élevée Haltères|F,Q|-
+PAT|Deadstart Power Push Up|P,Tr,E|-
+PAT|Pistol Squat Assisté|Q,F|-
+PAT|Staggered Deadlift Biais RI|IJ,F|-
+PAT|Kneel Push Presse - Landmine|E,P,Tr|-
+PAT|Fente Diagonale|F,Q,AD|-
+PAT|Power Chin Up|GD,B|-
+PAT|Single Leg Deadlift Assisté & Controlatéral|IJ,F|-
+PAT|Bent Over Row Overcoming|GD,T,B|-
+PAT|Pendlay Row|GD,T,B|-
+PAT|Barbell Z Press|E,Tr,A|-
+PAT|Suitcase Deadlift Haltères|IJ,F,O,AB|-
+PAT|Snatch Grip Deadlift|IJ,F,L,T|-
+PAT|Lat Pullldown Unilatéral - Forme T|GD,B|-
+PAT|Chest Supported Rows Iso Alterné - Forme A|GD,T,B|-
+PAT|Good Morning - Barre|IJ,F,L|-
+PAT|Good Morning Semi Sumo - Barre|IJ,F,L,AD|-
+PAT|Tractions Overcoming|GD,B|-
+PAT|Ring Push Ups - Forme A|P,Tr,E|-
+PAT|Side Jump Push Ups|P,Tr,E|-
+PAT|Ring Rows - Forme A|GD,T,B|-
+PAT|Fente In & Out - Barbell|F,Q,AD|-
+PAT|Push Press - Barre|E,Tr,Q|-
+PAT|Single Leg Deadlift Excentrique - Barre|IJ,F|-
+PAT|One Arm Chin Up Excentrique|GD,B|-
+PAT|Développé Couché Unilatéral - Excentrique|P,Tr,E|-
+PAT|Tirage Vertical Unilat - Forme A|GD,B|-
+PAT|Fente Latérale Dynamique - Haltères|Q,F,AD|-
+PAT|Fente Avant - Haltères|Q,F|-
+PAT|Tirage Horizontal Forme I - Excentrique|GD,T,B|-
+PAT|Fente Bulgare - Back Rack|Q,F|-
+PAT|Landmine Single Leg Deadlift - Contralatéral|IJ,F,L|-
+PAT|Speed Bulgarian Split Squat - Back Rack|Q,F|-
+PAT|Traction - Excentrique|GD,B|-
+PAT|Fente Latérale Dynamique - Landmine|Q,F,AD|-
+PAT|Fente Arrière - Front Rack|Q,F|-
+PAT|Speed Pendlay Row|GD,T,B|-
+PAT|Speed Reverse Lunge - Front Rack|F,Q|-
+PAT|Walking Zombie Lunges|Q,F|-
+PAT|3 Point Row - Catch|GD,T,B|-
+PAT|3 Point Row - Forme I|GD,T,B|-
+PAT|Développé Couché Alterné Position Bridge|P,Tr,E,F|-
+PAT|Développé Couché Iso Alterné - Haltères|P,Tr,E|-
+PAT|Diamond Push Ups|Tr,P|-
+PAT|Pec Fly Décliné - Haltères|P|-
+PAT|Chin Ups|GD,B|-
+PAT|Close Grip Push Ups - Focus Triceps|Tr,P|-
+PAT|Bent Over Rows Alterné|GD,T,B|-
+PAT|B Stance Deadlift - Pelvic Reach|IJ,F|-
+PAT|Développé Couché Incliné - Barre|P,E,Tr|-
+PAT|Fente Arrière Pied Avant Elevé - Back Rack|Q,F|-
+PAT|Ring Power Rows|GD,T,B|-
+PAT|Pec Fly - Iso Overcoming|P,E|-
+PAT|Single Leg Calf Raise - Iso Overcoming|M|-
+PAT|Single Leg Wall Push - Iso Overcoming|Q,F,M|-
+PAT|Muscle Up|GD,B,Tr,P|-
+PAT|3 Point Row - Catch|GD,T,B|-
+PAT|Fente Bulgare Contralatéral - Haltère|Q,F|-
+PAT|Half Kneel Landmine Press - Forme I|E,P,Tr|-
+PAT|Bent Over Row - Barre|GD,T,B|-
+PAT|Bent Over Row - Haltères|GD,T,B|-
+PAT|Box Step Up - Back rack|Q,F|-
+PAT|Curtsy Lunge - Cable|F,Q,AD|-
+PAT|Half Kneel BD/KB Press|E,Tr,A|-
+PAT|Overhead Press Haltères - Oscillatoire|E,Tr|-
+PAT|Single Leg Bridge DB Bench Press - Unilat|P,Tr,F|-
+PAT|Fente Multidirectionnelle|Q,F,AD|-
+PAT|Toe Squat|Q,PI,M|-
+PAT|Tirage Diagonal Bilatéral Forme I - Élastique|GD,T,E|-
+PAT|Tirage Vertical Bilatéral Forme A - Élastique|GD,B|-
+PAT|Tirage Vertical Bilatéral Forme I - Élastique|GD,B|-
+PAT|Speed Banded Lat Pulldown|GD,B|-
+PAT|Tirage Diagonal Bilatéral Forme A - Élastique|GD,T,E|-
+PAT|Pompe Avec Rotation|P,Tr,O|-
+PAT|Cobra/Hindu Push Up|P,E,Tr|-
+PAT|Single Arm Push Up|P,Tr,O|-
+PAT|Deadlift - Élastique|IJ,F,L,Q|-
+PAT|Fente Latérale Dynamique Back Rack|Q,F,AD|-
+PAT|Dips Chaises|Tr,P|-
+PAT|Fente Avant - Back Rack|Q,F|-
+PAT|Elevated Push Up|P,Tr,E|-
+PAT|Pompe Déclinée|P,E,Tr|-
+PAT|Inverted Rows - Forme I|GD,T,B|-
+PAT|KB / DB Thrusters|Q,F,E,Tr|-
+PAT|Ring & Trx Row Unilatéral|GD,T,B,O|-
+PAT|DB Squat|Q,F|-
+PAT|DB Cyclist Squat|Q|-
+PAT|Pompes Avec Twist|P,Tr,O|-
+PAT|Développé Couché - Prise Serrée|Tr,P|-
+PAT|Fentes Avant ATL Goblet|Q,F|-
+PAT|Side Step Squat|Q,F,AD|-
+PAT|Fente Latérale Wall Push - Iso Overcoming|Q,F,AD|-
+PAT|Fente Latérale Élevée|Q,F,AD|-
+PAT|Explosive 3 Point Row|GD,T,B|-
+PAT|Demi Squat with Pause – Résistance Accommodante|Q,F|-
+PAT|Straight Arm Lat Pull Down – Élastique|GD|-
+PAT|Band Pull Apart Overhand - Iso Hold|T,E|-
+PAT|Band Pull Apart Underhand - Iso Hold|T,E|-
+PAT|Deep Lunges|Q,F,PS|-
+PAT|Tractions – Prise Large Forme T|GD,B|-
+PAT|Tirage Vertical Lat Pulldown – Forme T|GD,B|-
+PAT|Offset MB Push Up With Shoulder Tap|P,Tr,A,O|-
+PAT|Landmine Power Press|E,P,Tr|-
+PAT|45° Développé Couché Haltères - Forme A|P,E,Tr|-
+PAT|Toes Elevated Romanian Deadlift - Haltères|IJ,F,L|-
+PAT|Superman Twist|L,O,F|-
+PAT|KB Sumo Deadlift High Pull|F,IJ,T,E|-
+PAT|KB Goblet Fente Avant|Q,F|-
+PAT|Speed 3 Point Row|GD,T,B|-
+PAT|Single KB Clean & Push Press|F,IJ,E,Tr|-
+PAT|Fente Arrière Alternée – Haltères|Q,F|-
+PAT|Tirage Vertical Lat Pulldown - Forme A|GD,B|-
+PAT|Single Leg Deadlift with Row|IJ,F,GD|-
+PAT|Back Squat - Oscillatoire|Q,F|-
+PAT|Single Leg Sprinter Squat - Iso Overcoming|Q,F|-
 PAT|KB Bent Over Row - Drop & Catch|GD,T,B|s:3PFmzm9fENk
 PAT|Spanish Squat|Q|s:Qhdj1g55tgQ
 PAT|ATG Split Squat|Q,F,PS|y:JE16ZN7Iqr0
@@ -630,3 +630,23 @@ PRE|Toes Worm Walk|IJ,A,E|s:o1Ex3VYEmbI
 PRE|Single leg Calf raise on wall - Overcoming|M|s:ZxZX1MT24Ng
 PRE|Ergo / Cossack et shoulder tap|AD,F,A|s:l9c0Hr3RXGM
 PRE|Lizard transition jump|PS,AD,F|s:xeFplHOOt7s
+AJO|Reverse Nordic Curl|Q|-
+AJO|Bench Press Single Arm - DB A|P,Tr|-
+AJO|P&R Hanche Externe|F|y:cF5Xzp-E7BA
+AJO|Hanche Rotation Capsulaire|F,AD|s:Bp_8-CVaI7M
+AJO|Sandbag Bear Hug Carry|A,T,Q,F|-
+AJO|Seated Row Iso Overcoming - Towel|GD,T,B|-
+AJO|Wall Sit|Q|-
+AJO|Copenhagen Plank|AD,O|-
+AJO|Snatch Balance|Q,F,E,T|-
+AJO|Fentes|Q,F|-
+AJO|Medball Chest Pass - Floor|P,Tr|-
+AJO|Star Plank|O,F,A|-
+AJO|Pogo - Frontal|M,PI|-
+AJO|Box Jump - Straight Legs|M,Q|-
+AJO|Pogo - Sagital|M,PI|-
+AJO|Superman - Asymmetric|GD,T,L,F|-
+AJO|Triceps Opener - 3 Phases|Tr,E|-
+AJO|ATG Row|GD,T,B|-
+AJO|Zercher Squat|Q,F,A|-
+AJO|Push Up|P,Tr,E|-
