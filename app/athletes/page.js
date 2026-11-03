@@ -242,7 +242,7 @@ export default function AthletesPage() {
   const renderAthleteRow = (a, i) => (
     <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', position: 'relative', opacity: busyId === a.id ? 0.5 : 1 }}>
       <div
-        onClick={() => router.push(`/semaine/${a.id}/${today()}`)}
+        onClick={() => router.push(a.is_coach ? `/semaine/${a.id}/${today()}` : `/athletes/${a.id}`)}
         style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer' }}
       >
         <div style={{
@@ -493,8 +493,8 @@ export default function AthletesPage() {
               </button>
             )}
             {!menu.athlete.is_coach && (
-              <button onClick={() => router.push(`/athletes/${menu.athlete.id}`)} style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
-                📋 Ouvrir la fiche
+              <button onClick={() => router.push(`/semaine/${menu.athlete.id}/${today()}`)} style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
+                📅 Ouvrir le calendrier
               </button>
             )}
             {!menu.athlete.is_coach && (
