@@ -242,7 +242,9 @@ export default function AthletesSidebar({ athleteId, date = today() }) {
                 return (
                   <Link
                     key={a.id}
-                    href={`/semaine/${a.id}/${date}`}
+                    // Même destination que la liste Sportifs : la fiche du client,
+                    // le planning de la semaine seulement pour un compte coach.
+                    href={a.is_coach ? `/semaine/${a.id}/${date}` : `/athletes/${a.id}`}
                     onClick={e => { if (guardNavigation(e)) { setOpen(false); setSearch('') } }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
