@@ -41,6 +41,7 @@ import { annotatePaceReferences, formatPace, isRunMovement, isCardioMovementName
 import { hasCardioSteps } from '@/lib/cardioSteps'
 import { buildCardioFitFile, downloadFitFile } from '@/lib/fitExport'
 import { CIRCUIT_MODES } from '@/lib/circuitModes'
+import { ordreSeances } from '@/lib/programSchedule'
 import { registerPushNotifications } from '@/lib/pushRegistration'
 import { unlockAudio } from '@/lib/audioBeep'
 import { unlockSpeech } from '@/lib/speak'
@@ -633,7 +634,7 @@ function AthleteView({ params }) {
       const progList = (progs || []).map(p => ({
         ...p,
         sessions: [...(p.program_sessions || [])]
-          .sort((a, b) => a.order_index - b.order_index)
+          .sort(ordreSeances)
           .map(s => ({
             ...s,
             exercises: [...(s.program_exercises || [])].sort((a, b) => a.order_index - b.order_index)
@@ -1038,7 +1039,7 @@ function AthleteView({ params }) {
       const prog = programs.find(p => p.sessions.some(s => s.id === sessId))
       if (prog?.is_self_service) {
         const limit = prog.free_sessions_count ?? 3
-        const sorted = [...prog.sessions].sort((a, b) => a.order_index - b.order_index)
+        const sorted = [...prog.sessions].sort(ordreSeances)
         const isLastFreeSession = sorted.length > limit && sorted.findIndex(s => s.id === sessId) === limit - 1
         if (isLastFreeSession) setFreeGateUpsell({ programName: prog.title })
       }

@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { buildKnownRaces } from '@/lib/raceEstimates'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
 import { SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
+import { ordreSeances } from '@/lib/programSchedule'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -82,7 +83,7 @@ export async function GET(request, { params }) {
     ? (progs || []).map(p => {
         if (!p.is_self_service) return p
         const limit = p.free_sessions_count ?? 3
-        const sorted = [...(p.program_sessions || [])].sort((a, b) => a.order_index - b.order_index)
+        const sorted = [...(p.program_sessions || [])].sort(ordreSeances)
         const lockedIds = new Set(sorted.slice(limit).map(s => s.id))
         return {
           ...p,

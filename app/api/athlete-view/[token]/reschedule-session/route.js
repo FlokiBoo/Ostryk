@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { isIsoDate, planFrom } from '@/lib/programSchedule'
+import { isIsoDate, planFrom, ordreSeances } from '@/lib/programSchedule'
 
 // "Décaler" depuis l'accueil : la séance passe à la date choisie et les séances suivantes non
 // faites du programme se recalent derrière elle (voir lib/programSchedule.js). L'ordre des séances
@@ -40,7 +40,7 @@ export async function POST(request, { params }) {
   const doneIds = new Set((completions || []).filter(c => !c.skipped).map(c => c.program_session_id))
   if (doneIds.has(sessionId)) return NextResponse.json({ error: 'séance déjà faite' }, { status: 400 })
 
-  const progression = sessions.filter(s => s.session_type !== 'recurrent')
+  const progression = [...sessions].sort(ordreSeances).filter(s => s.session_type !== 'recurrent')
   const from = progression.findIndex(s => s.id === sessionId)
   const upcoming = progression.slice(from).filter(s => !doneIds.has(s.id))
   const plan = planFrom(upcoming, date, {
