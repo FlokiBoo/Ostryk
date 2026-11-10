@@ -717,7 +717,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     if (hasUnsavedChanges() && !window.confirm('Tu as des modifications non sauvegardées sur cette page. Les quitter sans enregistrer ?')) return
     if (onClose) { onClose(); return }
     // On revient à la page précédente réelle (dashboard, liste de séances...) plutôt que de forcer
-    // systématiquement le calendrier du programme — backHref ne sert que de filet si cette page a
+    // systématiquement la liste du programme — backHref ne sert que de filet si cette page a
     // été ouverte directement (lien externe, rechargement) et qu'il n'y a rien à "back" dans l'historique.
     if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back()
@@ -1634,7 +1634,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       <div style={{ background: c.bg, minHeight: '100svh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: c.textMuted, fontFamily: 'var(--font-ui)' }}>
         <div>Séance introuvable.</div>
         <button onClick={() => (onClose ? onClose() : router.push(backHref))} style={{ border: `1px solid ${c.border}`, borderRadius: 6, padding: '9px 20px', background: c.bg, cursor: 'pointer' }}>
-          Retour au calendrier
+          Retour au programme
         </button>
       </div>
     )
@@ -1768,7 +1768,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         {/* Récurrence : hors calendrier, proposée au sportif tous les jours plutôt qu'à une
             date précise — voir la note en tête de fichier sur le périmètre réduit de cette page,
             ce champ est l'exception portée ici car il n'a pas d'équivalent dans l'ancien éditeur
-            plein écran une fois la séance créée depuis la grille Jour 1→N. */}
+            plein écran. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
           <button
             onClick={() => { setActivityMode(m => m === 'cardio' ? 'standard' : 'cardio'); setUnsavedChanges(true) }}

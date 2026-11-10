@@ -351,7 +351,6 @@ export default function WodTab({
         }))}
         onCommencerSeance={s => openSession(s.id)}
         onOuvrirSeance={s => openSession(s.id)}
-        prochaineHorsSemaine={null}
         onDecalerSeance={null}
         onAjouterObjectif={showObjectivesRail ? () => setShowObjectives(true) : null}
         onOuvrirObjectifs={showObjectivesRail ? () => setShowObjectives(true) : null}

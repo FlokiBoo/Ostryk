@@ -6,10 +6,9 @@ import SwipeCarousel from "./SwipeCarousel";
 /*
   Accueil client Ostryk — v3 de la maquette, branchée sur le modèle réel des séances.
 
-  L'app ne date pas les séances : chaque programme propose sa PROCHAINE séance non faite, le jour
-  prévu n'est qu'une indication (voir WodTab, qui construit les données). La bande de la semaine
-  montre donc ce qui a été fait (date de validation) et ce qui est prévu sur les jours à venir —
-  jamais de séance "manquée" : une séance en retard est simplement proposée aujourd'hui.
+  L'app ne date pas les séances : chaque programme propose aujourd'hui sa PROCHAINE séance non
+  faite, et les deux suivantes en glissant la carte (voir WodTab, qui construit les données).
+  Plus de bande de la semaine depuis le 2026-11-10 : l'accueil montre seulement aujourd'hui.
 
   Statut d'une séance, déduit de sa date et de `faite` : faite → "faite", aujourd'hui → "a_faire",
   future → "a_venir" (et "manquee" pour une date passée non faite, que WodTab ne produit pas).
@@ -37,7 +36,6 @@ const TITRE = "var(--font-title)";
 const TYPE_COULEUR = { force: T.bordeaux, endurance: T.vert, mobilite: T.ocre };
 const TYPE_LABEL = { force: "Force", endurance: "Endurance", mobilite: "Mobilité" };
 const STATUT_LABEL = { faite: "faite", manquee: "pas encore faite", a_faire: "à faire", a_venir: "à venir" };
-const JOURS = ["L", "M", "M", "J", "V", "S", "D"];
 const LARGEUR_OBJECTIF = 300;
 const GAP_OBJECTIF = 18;
 
@@ -68,8 +66,6 @@ export function joursDeLaSemaine() {
 // Écart en jours calendaires ; Math.round absorbe les changements d'heure.
 const ecartJours = (iso) => Math.round((parseJour(iso) - aujourdhui()) / 86400000);
 const estAujourdhui = (iso) => ecartJours(iso) === 0;
-const jourDuMois = (iso) => parseJour(iso).getDate();
-const indexJour = (iso) => (parseJour(iso).getDay() + 6) % 7;
 
 function statutSeance(date, seance) {
   if (seance.faite) return "faite";
@@ -153,51 +149,6 @@ function CarteObjectif({ objectif, onOuvrir }) {
       </div>
     </button>
   );
-}
-
-function Pastille({ seance, statut }) {
-  const couleur = TYPE_COULEUR[seance.type] || T.bordeaux;
-  // Séance avec le coach : anneau ocre autour de la pastille habituelle.
-  const coach = seance.is_coached ? { outline: `1.5px solid ${T.ocre}`, outlineOffset: 2 } : null;
-  if (statut === "faite") {
-    return <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: couleur, ...coach }} />;
-  }
-  const trait = statut === "manquee" ? "dashed" : "solid";
-  const teinte = statut === "manquee" ? T.muted : couleur;
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: "50%",
-        border: `1.5px ${trait} ${teinte}`,
-        boxSizing: "border-box",
-        ...coach,
-      }}
-    />
-  );
-}
-
-function Pastilles({ date, seances }) {
-  if (seances.length === 0) {
-    return <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: "50%", background: T.filet }} />;
-  }
-  return (
-    <span aria-hidden="true" style={{ display: "flex", gap: 3, height: 8 }}>
-      {seances.slice(0, 3).map((s) => (
-        <Pastille key={s.id} seance={s} statut={statutSeance(date, s)} />
-      ))}
-    </span>
-  );
-}
-
-function descriptionJour({ date, seances }) {
-  if (seances.length === 0) return `${dateLongue(date)}, repos`;
-  const detail = seances
-    .map((s) => `${s.titre}${s.is_coached ? ", avec ton coach" : ""}, ${STATUT_LABEL[statutSeance(date, s)]}`)
-    .join(" ; ");
-  return `${dateLongue(date)}, ${detail}`;
 }
 
 function CarteSeance({ date, seance, enAvant, onCommencer, onDecaler, onOuvrir }) {
@@ -351,22 +302,14 @@ function CarteSeance({ date, seance, enAvant, onCommencer, onDecaler, onOuvrir }
   );
 }
 
-function JourSelectionne({ entree, prochaine, prochaineHorsSemaine, onCommencer, onDecaler, onOuvrir }) {
+function JourSelectionne({ entree, onCommencer, onDecaler, onOuvrir }) {
   const { date, seances } = entree;
 
   if (seances.length === 0) {
     return (
       <div style={{ padding: "4px 4px 0" }}>
-        <p style={{ fontSize: 11, color: T.texteSec, margin: "0 0 6px" }}>{dateLongue(date)}</p>
         <p style={{ fontFamily: TITRE, fontSize: 26, lineHeight: 1.15, margin: "0 0 8px" }}>
-          {ecartJours(date) < 0 ? "Pas de séance" : "Jour de repos"}
-        </p>
-        <p style={{ fontSize: 13, color: T.texteCorps, margin: 0 }}>
-          {prochaine
-            ? `Prochaine séance : ${prochaine.seances.find((s) => !s.faite).titre}, ${dateCourte(prochaine.date)}`
-            : prochaineHorsSemaine
-              ? `Prochaine séance : ${prochaineHorsSemaine.titre}, ${dateLongue(prochaineHorsSemaine.date)}`
-              : "Aucune séance à venir"}
+          Aucune séance à faire
         </p>
       </div>
     );
@@ -417,7 +360,6 @@ export default function AccueilClient({
   programme = null,
   semaine = [],
   programmes = [],
-  prochaineHorsSemaine = null, // { titre, date } : prochaine séance après dimanche
   onCommencerSeance = () => {},
   onDecalerSeance = null,
   onOuvrirSeance = () => {},
@@ -426,8 +368,7 @@ export default function AccueilClient({
   onOuvrirProgramme = () => {},
   children = null,
 }) {
-  const indexInitial = Math.max(0, semaine.findIndex((e) => estAujourdhui(e.date)));
-  const [selection, setSelection] = useState(indexInitial);
+  const entreeDuJour = semaine.find((e) => estAujourdhui(e.date)) || { date: isoLocal(new Date()), seances: [] };
   const [pageObjectif, setPageObjectif] = useState(0);
   const [railDefilable, setRailDefilable] = useState(false);
   const rail = useRef(null);
@@ -443,18 +384,6 @@ export default function AccueilClient({
           return parseJour(a.date) - parseJour(b.date);
         }),
     [objectifs]
-  );
-
-  const compteur = useMemo(() => {
-    const toutes = semaine.flatMap((e) => e.seances);
-    return { faites: toutes.filter((s) => s.faite).length, prevues: toutes.length };
-  }, [semaine]);
-
-  const indexCourant = Math.min(selection, semaine.length - 1);
-
-  const prochaine = useMemo(
-    () => semaine.slice(indexCourant + 1).find((e) => e.seances.some((s) => !s.faite)) || null,
-    [semaine, indexCourant]
   );
 
   const nbCartes = objectifsTries.length + (onAjouterObjectif ? 1 : 0);
@@ -582,81 +511,18 @@ export default function AccueilClient({
         </>
       ) : null}
 
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 18px", marginBottom: 12 }}>
-        <h2 style={{ ...libelleSection, fontWeight: 400 }}>Cette semaine</h2>
-        {compteur.prevues > 0 ? (
-          <span style={{ fontSize: 11, color: T.texteSec }}>
-            {compteur.faites} / {compteur.prevues}
-            {programme ? ` · ${programme.phase.toLowerCase()}, semaine ${programme.semaine}` : ""}
-          </span>
-        ) : null}
+      {/* Plus de bande « Cette semaine » (2026-11-10) : les séances n'ont plus de jour, l'accueil
+          montre seulement celles d'aujourd'hui — la prochaine de chaque programme, et les deux
+          suivantes en glissant la carte (voir WodTab). */}
+      <h2 style={{ ...libelleSection, fontWeight: 400, padding: "0 18px", margin: "0 0 12px" }}>Aujourd&apos;hui</h2>
+      <div style={{ padding: "0 14px" }}>
+        <JourSelectionne
+          entree={entreeDuJour}
+          onCommencer={onCommencerSeance}
+          onDecaler={onDecalerSeance}
+          onOuvrir={onOuvrirSeance}
+        />
       </div>
-
-      {semaine.length === 0 ? (
-        <p style={{ fontSize: 13, color: T.texteCorps, margin: "0 18px" }}>
-          Aucune séance prévue cette semaine.
-        </p>
-      ) : (
-        <>
-          <div style={{ display: "flex", gap: 2, padding: "0 14px", marginBottom: 22 }}>
-            {semaine.map((e, i) => {
-              const on = i === indexCourant;
-              return (
-                <button
-                  key={e.date}
-                  type="button"
-                  aria-pressed={on}
-                  aria-current={estAujourdhui(e.date) ? "date" : undefined}
-                  aria-label={descriptionJour(e)}
-                  onClick={() => setSelection(i)}
-                  style={{
-                    flex: 1,
-                    border: "none",
-                    background: "none",
-                    padding: "8px 0",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 7,
-                    fontFamily: "inherit",
-                    cursor: "pointer",
-                  }}
-                >
-                  <span style={{ fontSize: 10, color: T.texteSec }}>{JOURS[indexJour(e.date)]}</span>
-                  <span
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: "50%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 13,
-                      background: on ? T.texte : "transparent",
-                      color: on ? T.clair : T.texte,
-                      fontWeight: estAujourdhui(e.date) ? 700 : 400,
-                    }}
-                  >
-                    {jourDuMois(e.date)}
-                  </span>
-                  <Pastilles date={e.date} seances={e.seances} />
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={{ padding: "0 14px" }}>
-            <JourSelectionne
-              entree={semaine[indexCourant]}
-              prochaine={prochaine}
-              prochaineHorsSemaine={prochaineHorsSemaine}
-              onCommencer={onCommencerSeance}
-              onDecaler={onDecalerSeance}
-              onOuvrir={onOuvrirSeance}
-            />
-          </div>
-        </>
-      )}
 
       <div style={{ height: 30 }} />
 
