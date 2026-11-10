@@ -7,7 +7,6 @@ import Link from 'next/link'
 import AthletesSidebar from '@/app/components/AthletesSidebar'
 import ObjectivesBlock from '@/app/components/ObjectivesBlock'
 import { buildKnownRaces } from '@/lib/raceEstimates'
-import { WEEK_DAYS } from '@/lib/weekDays'
 import { setUnsavedChanges, guardNavigation } from '@/lib/unsavedChanges'
 import { SortableGroup, SortableItem, DragHandle } from '@/app/components/SortableItem'
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, closestCenter, pointerWithin } from '@dnd-kit/core'
@@ -35,30 +34,13 @@ function emptyExo(order) {
   return { _key: Date.now() + Math.random(), order_index: order, name: '', sets: '', reps: '', kg: '', rest: '', note: '', video_url: '', focus_muscles: '', pace_base: null, pct_low: '', pct_high: '' }
 }
 
-// Vue calendrier Semaine/Jour : seul point d'entrée pour parcourir/ouvrir les séances du
-// programme — cliquer une case navigue vers sa page séance (SessionBlockEditor).
-// Case cible du glisser-déposer (une par jour de programme) — le fond se surligne quand une
-// séance est glissée au-dessus, pour indiquer où elle atterrira.
-function DayCell({ children, isOver, setNodeRef, borderLeft }) {
-  return (
-    <div ref={setNodeRef} style={{
-      display: 'flex', flexDirection: 'column', gap: 6, minHeight: 180, padding: 10,
-      borderLeft, background: isOver ? 'var(--green-light)' : undefined, transition: 'background 0.1s',
-    }}>
-      {children}
-    </div>
-  )
-}
-
-// Séance sélectionnable/dupliquable/déplaçable, utilisée à la fois dans les cases du calendrier et
-// dans la liste "Non planifiées". Trois contrôles distincts côte à côte (checkbox, dupliquer,
+// Séance sélectionnable/dupliquable/déplaçable de la liste du programme (SessionList). Trois contrôles distincts côte à côte (checkbox, dupliquer,
 // poignée ⊕) plutôt qu'une puce entièrement "draggable" — même principe que SortableItem/DragHandle
 // ailleurs dans l'app : seule la poignée porte les listeners de glisser, le reste (case à cocher,
 // titre cliquable) reste utilisable normalement sans ambiguïté clic/glisser.
 //
 // La puce est aussi une zone de dépôt (`chip:<id>`) : lâcher une séance dessus la place juste
-// au-dessus — c'est ce qui permet de choisir l'ordre de deux séances le même jour. Pendant le
-// glisser, c'est le DragOverlay de WeekGrid qui suit le pointeur (avec le nombre de séances
+// au-dessus. Pendant le glisser, c'est le DragOverlay de SessionList qui suit le pointeur (avec le nombre de séances
 // emportées) ; les puces d'origine restent en place, estompées.
 function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact, doneAt, dimmed }) {
   const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: s.id })
@@ -96,64 +78,11 @@ function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact
         style={{ background: 'none', border: 'none', padding: 3, display: 'flex', color: 'inherit', cursor: 'pointer', flexShrink: 0, opacity: 0.85 }}>
         <CopySimple size={compact ? 12 : 14} />
       </button>
-      <span {...listeners} {...attributes} title="Maintenir puis glisser : sur un autre jour pour déplacer, sur une autre séance pour la placer au-dessus"
+      <span {...listeners} {...attributes} title="Maintenir puis glisser sur une autre séance pour la placer au-dessus"
         style={{ cursor: 'grab', touchAction: 'none', display: 'flex', flexShrink: 0, opacity: 0.85, padding: 3 }}>
         <ArrowsOutCardinal size={compact ? 12 : 14} />
       </span>
     </div>
-  )
-}
-
-function WeekDayCell({ week, d, dayNumber, cellSessions, isFirstCol, selectedIds, doneDates, onToggleSelect, onOpenSession, onAddAt, onAddFromWorkout, onDuplicateSession, movingIds }) {
-  const { isOver, setNodeRef } = useDroppable({ id: `${week}-${d.key}` })
-  const [addMenuOpen, setAddMenuOpen] = useState(false)
-  return (
-    <DayCell isOver={isOver} setNodeRef={setNodeRef} borderLeft={isFirstCol ? 'none' : '1px solid var(--border)'}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, paddingBottom: 4 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>Jour {dayNumber}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{d.short}</span>
-      </div>
-      {cellSessions.map(s => (
-        <SessionChip key={s.id} s={s} selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} dimmed={movingIds.includes(s.id)} />
-      ))}
-      <div style={{ position: 'relative' }}>
-        <button onClick={() => setAddMenuOpen(v => !v)} style={{
-          width: '100%', background: 'transparent', border: '1px solid var(--border2)', color: 'var(--text3)',
-          borderRadius: 'var(--r)', padding: '6px 4px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-        }}>
-          + Ajouter
-        </button>
-        {addMenuOpen && (
-          <>
-            <div onClick={() => setAddMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
-            <div style={{
-              position: 'absolute', left: 0, top: '100%', marginTop: 4, width: 150, background: 'var(--bg)',
-              border: '1px solid var(--border)', borderRadius: 'var(--r)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-              zIndex: 100, padding: 4, display: 'flex', flexDirection: 'column', gap: 2,
-            }}>
-              <button onClick={() => { setAddMenuOpen(false); onAddAt(week, d.key, 'standard') }} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6, fontSize: 12,
-                color: 'var(--text)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 600,
-              }}>
-                <Barbell size={13} /> Standard
-              </button>
-              <button onClick={() => { setAddMenuOpen(false); onAddAt(week, d.key, 'cardio') }} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6, fontSize: 12,
-                color: 'var(--text)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 600,
-              }}>
-                <Heartbeat size={13} /> Cardio
-              </button>
-              <button onClick={() => { setAddMenuOpen(false); onAddFromWorkout(week, d.key) }} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6, fontSize: 12,
-                color: 'var(--text)', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontWeight: 600,
-              }}>
-                <Barbell size={13} /> Depuis un workout
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </DayCell>
   )
 }
 
@@ -172,23 +101,28 @@ function detectDrop(args) {
   return closestCenter({ ...args, droppableContainers: args.droppableContainers.filter(c => !String(c.id).startsWith('chip:')) })
 }
 
-function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSession, onApplyLayout, onDuplicateSession, selectedIds, doneDates, onToggleSelect }) {
-  const byCell = {}
-  ;[...sessions].sort(byOrder).forEach(s => {
-    if (s.week_number == null || s.day_of_week == null) return
-    const key = `${s.week_number}-${s.day_of_week}`
-    ;(byCell[key] = byCell[key] || []).push(s)
-  })
-  const unscheduled = sessions.filter(s => s.week_number == null || s.day_of_week == null).sort(byOrder)
+// Liste des séances du programme, dans l'ordre où le sportif les fera (order_index). Plus de
+// calendrier : le sportif voit chaque jour la prochaine séance à faire et les deux suivantes.
+// On réordonne en glissant une séance (poignée ⊕) sur une autre — elle se place au-dessus — ou
+// sur « Fin du programme ». Les séances récurrentes, hors progression, gardent leur bandeau.
+function EndDrop() {
+  const { isOver, setNodeRef } = useDroppable({ id: 'fin' })
+  return (
+    <div ref={setNodeRef} style={{
+      padding: '8px 10px', borderRadius: 'var(--r)', border: '1px dashed var(--border2)',
+      fontSize: 11, fontWeight: 600, color: 'var(--text3)', textAlign: 'center',
+      background: isOver ? 'var(--green-light)' : 'transparent',
+    }}>
+      Fin du programme
+    </div>
+  )
+}
 
-  const weeks = Array.from({ length: durationWeeks }, (_, wi) => wi + 1)
-
+function SessionList({ sessions, onAdd, onAddFromWorkout, onOpenSession, onApplyLayout, onDuplicateSession, selectedIds, doneDates, onToggleSelect }) {
+  const ordered = sessions.filter(s => s.session_type !== 'recurrent').sort(byOrder)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 6 } }))
   const [movingIds, setMovingIds] = useState([])
-  // Lu par handleDragEnd (le lot fixé au début du glisser).
   const movingIdsRef = useRef([])
-
-  // Si la séance saisie fait partie d'une sélection multiple, tout le lot part avec elle.
   const lotFor = (activeId) => (selectedIds.has(activeId) && selectedIds.size > 1 ? [...selectedIds] : [activeId])
 
   const handleDragStart = ({ active }) => {
@@ -196,123 +130,60 @@ function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSe
     movingIdsRef.current = ids
     setMovingIds(ids)
   }
-
   const handleDragCancel = () => { movingIdsRef.current = []; setMovingIds([]) }
 
-  const handleDragEnd = ({ active, over }) => {
-    const idsToMove = movingIdsRef.current.length ? movingIdsRef.current : [active.id]
+  const handleDragEnd = ({ over }) => {
+    const moving = new Set(movingIdsRef.current)
     handleDragCancel()
-    if (!over) return
-
-    // Cible : une case (« semaine-jour ») ou une puce (« chip:<id> », on se place au-dessus d'elle).
-    let week, day, beforeId = null
-    if (String(over.id).startsWith('chip:')) {
-      beforeId = String(over.id).slice(5)
-      // Lâchée sur elle-même (ou sur une autre séance du lot) : rien ne bouge.
-      if (idsToMove.includes(beforeId)) return
-      const target = sessions.find(x => x.id === beforeId)
-      if (!target || target.week_number == null || target.day_of_week == null) return
-      week = target.week_number; day = target.day_of_week
-    } else {
-      const [weekStr, dayStr] = String(over.id).split('-')
-      week = parseInt(weekStr, 10); day = parseInt(dayStr, 10)
-    }
-
-    const dragged = sessions.find(x => x.id === active.id)
-    // Décalage (en jours) entre la position d'origine de la séance saisie et la case cible, appliqué
-    // aux autres séances du lot pour garder leur organisation relative (ex. Jour 1/Jour 2 -> Jour 4/
-    // Jour 5 si on lâche Jour 2 sur Jour 5), plutôt que de toutes les empiler sur la même case.
-    const hasOrigin = dragged && dragged.week_number != null && dragged.day_of_week != null
-    const delta = hasOrigin ? ((week - 1) * 7 + day) - ((dragged.week_number - 1) * 7 + dragged.day_of_week) : 0
-    const maxAbsDay = durationWeeks * 7 - 1
-
-    const moving = new Set(idsToMove)
-    const placed = new Map() // id -> { week_number, day_of_week }
-    sessions.forEach(s => {
-      if (!moving.has(s.id)) { placed.set(s.id, { week_number: s.week_number, day_of_week: s.day_of_week }); return }
-      if (!hasOrigin || s.week_number == null || s.day_of_week == null) {
-        placed.set(s.id, { week_number: week, day_of_week: day })
-      } else {
-        const abs = Math.min(maxAbsDay, Math.max(0, (s.week_number - 1) * 7 + s.day_of_week + delta))
-        placed.set(s.id, { week_number: Math.floor(abs / 7) + 1, day_of_week: abs % 7 })
-      }
-    })
-
-    // Ordre dans chaque case : les séances restées en place gardent leur ordre ; celles qui
-    // arrivent vont juste au-dessus de la puce visée, ou à la fin de la case si on a lâché sur la
-    // case elle-même (c'est aussi comme ça qu'on renvoie une séance en bas de sa journée).
-    const cells = new Map()
-    const cellKey = (p) => (p.week_number == null || p.day_of_week == null ? 'none' : `${p.week_number}-${p.day_of_week}`)
-    ;[...sessions].sort(byOrder).forEach(s => {
-      const k = cellKey(placed.get(s.id))
-      if (!cells.has(k)) cells.set(k, { stay: [], arrive: [] })
-      cells.get(k)[moving.has(s.id) ? 'arrive' : 'stay'].push(s.id)
-    })
-    const targetKey = `${week}-${day}`
-    const ordered = []
-    const keys = [...cells.keys()].filter(k => k !== 'none').sort((a, b) => {
-      const [wa, da] = a.split('-').map(Number); const [wb, db] = b.split('-').map(Number)
-      return (wa * 7 + da) - (wb * 7 + db)
-    })
-    if (cells.has('none')) keys.push('none')
-    keys.forEach(k => {
-      const { stay, arrive } = cells.get(k)
-      const at = k === targetKey && beforeId ? stay.indexOf(beforeId) : -1
-      if (at === -1) ordered.push(...stay, ...arrive)
-      else ordered.push(...stay.slice(0, at), ...arrive, ...stay.slice(at))
-    })
-
-    // order_index renuméroté sur tout le programme dans l'ordre du calendrier : c'est lui qui fixe
-    // l'ordre d'affichage, ici comme dans l'espace du sportif. On n'envoie que ce qui change.
+    if (!over || !moving.size) return
+    const beforeId = String(over.id).startsWith('chip:') ? String(over.id).slice(5) : null
+    if (beforeId && moving.has(beforeId)) return
+    const stay = ordered.filter(s => !moving.has(s.id)).map(s => s.id)
+    const arrive = ordered.filter(s => moving.has(s.id)).map(s => s.id)
+    const at = beforeId ? stay.indexOf(beforeId) : -1
+    const next = at === -1 ? [...stay, ...arrive] : [...stay.slice(0, at), ...arrive, ...stay.slice(at)]
+    // order_index renuméroté sur tout le programme ; on n'envoie que ce qui change. Le jour et la
+    // semaine (ancien calendrier) sont effacés au passage : ils ne servent plus à rien.
     const changes = []
-    ordered.forEach((id, i) => {
-      const s = sessions.find(x => x.id === id)
-      const p = placed.get(id)
-      const moved = s.week_number !== p.week_number || s.day_of_week !== p.day_of_week
-      if (moved || s.order_index !== i) changes.push({ id, week_number: p.week_number, day_of_week: p.day_of_week, order_index: i, moved })
+    next.forEach((id, i) => {
+      const s = ordered.find(x => x.id === id)
+      if (s.order_index !== i || s.week_number != null || s.day_of_week != null) {
+        changes.push({ id, week_number: null, day_of_week: null, order_index: i, moved: s.order_index !== i })
+      }
     })
     if (changes.length) onApplyLayout(changes)
   }
 
   const overlaySession = movingIds.length ? sessions.find(x => x.id === movingIds[0]) : null
+  const boutonAjout = {
+    display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid var(--border2)',
+    color: 'var(--text2)', borderRadius: 'var(--r)', padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+  }
 
   return (
-    <div style={{ margin: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ margin: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <DndContext sensors={sensors} collisionDetection={detectDrop} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
-        <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', overflow: 'hidden' }}>
-          {weeks.map((week, wi) => (
-            <div key={week} style={{
-              display: 'grid', gridTemplateColumns: 'repeat(7, minmax(130px, 1fr))', overflowX: 'auto',
-              borderTop: wi === 0 ? 'none' : '1px solid var(--border)',
-            }}>
-              {WEEK_DAYS.map((d, di) => {
-                const dayNumber = (week - 1) * 7 + di + 1
-                return (
-                  <WeekDayCell key={d.key} week={week} d={d} dayNumber={dayNumber}
-                    cellSessions={byCell[`${week}-${d.key}`] || []} isFirstCol={di === 0}
-                    selectedIds={selectedIds} doneDates={doneDates} onToggleSelect={onToggleSelect} movingIds={movingIds}
-                    onOpenSession={onOpenSession} onAddAt={onAddAt} onAddFromWorkout={onAddFromWorkout} onDuplicateSession={onDuplicateSession} />
-                )
-              })}
+        <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', padding: 12, display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 640 }}>
+          {ordered.length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--text3)', padding: '6px 2px' }}>Aucune séance pour l&apos;instant.</div>
+          )}
+          {ordered.map((s, i) => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 22, flexShrink: 0, textAlign: 'right', fontSize: 12, fontWeight: 700, color: 'var(--text3)' }}>{i + 1}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <SessionChip s={s} selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} dimmed={movingIds.includes(s.id)} />
+              </div>
             </div>
           ))}
+          {ordered.length > 1 && movingIds.length > 0 && <EndDrop />}
         </div>
-
-        {unscheduled.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '4px 2px' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)' }}>Non planifiées :</span>
-            {unscheduled.map(s => (
-              <SessionChip key={s.id} s={s} compact selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} dimmed={movingIds.includes(s.id)} />
-            ))}
-          </div>
-        )}
 
         <DragOverlay dropAnimation={null}>
           {overlaySession ? (
             <div style={{
               position: 'relative', display: 'flex', alignItems: 'center', gap: 6, cursor: 'grabbing',
               background: 'var(--green)', color: '#fff', border: '1px solid var(--green)', borderRadius: 'var(--r)',
-              padding: '8px 10px', fontSize: 13, fontWeight: 700, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 220,
+              padding: '8px 10px', fontSize: 13, fontWeight: 700, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 260,
             }}>
               <ArrowsOutCardinal size={14} style={{ flexShrink: 0 }} />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -322,6 +193,12 @@ function WeekGrid({ sessions, durationWeeks, onAddAt, onAddFromWorkout, onOpenSe
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <button onClick={() => onAdd('standard')} style={boutonAjout}><Barbell size={13} /> Ajouter une séance</button>
+        <button onClick={() => onAdd('cardio')} style={boutonAjout}><Heartbeat size={13} /> Séance cardio</button>
+        <button onClick={onAddFromWorkout} style={boutonAjout}><Barbell size={13} /> Depuis un workout</button>
+      </div>
     </div>
   )
 }
@@ -566,10 +443,10 @@ function ProgramEditorPage({ params }) {
       }
     }
   }
-  // Déplacement par glisser-déposer dans la grille Jour 1→N : contrairement à updateSession (qui
+  // Réordonnancement par glisser-déposer dans la liste des séances : contrairement à updateSession (qui
   // ne fait que marquer "modifié" en attendant le clic sur Sauvegarder), ici on écrit tout de suite
   // en base — l'utilisateur s'attend à ce qu'un glisser-déposer soit persisté immédiatement.
-  // Reçoit en une fois tout ce qu'un glisser-déposer change (jour et/ou ordre, voir WeekGrid) : un
+  // Reçoit en une fois tout ce qu'un glisser-déposer change (ordre, voir SessionList) : un
   // seul setSessions, puis une écriture par séance touchée — des lignes différentes, donc l'ordre
   // d'arrivée des requêtes n'a pas d'importance.
   const applyLayout = async (changes) => {
@@ -597,7 +474,7 @@ function ProgramEditorPage({ params }) {
   }
 
   // Les copies sont faites l'une après l'autre (pas en parallèle) pour garder des order_index
-  // distincts et dans l'ordre du calendrier. Une copie qui échoue n'arrête pas les suivantes.
+  // distincts et dans l'ordre de la liste. Une copie qui échoue n'arrête pas les suivantes.
   const duplicateSelectedSessions = async () => {
     if (duplicatingSelected) return
     setDuplicatingSelected(true)
@@ -717,17 +594,16 @@ function ProgramEditorPage({ params }) {
     setAddingFollowerId(null)
   }
 
-  // Créée depuis une case de la grille Semaine/Jour (WeekGrid) : place directement la séance au
-  // bon endroit plutôt que de la laisser "non planifiée" en bas de la liste par défaut. Ouvre
+  // Nouvelle séance, ajoutée en fin de programme (week/day restent nuls : plus de calendrier). Ouvre
   // ensuite la nouvelle page séance (blocks) plutôt que l'ancien éditeur plein écran (setOpenId).
   const addSessionAt = async (weekNumber, dayOfWeek, mode = 'standard') => {
     const { data: s } = await supabase.from('program_sessions')
-      .insert({ program_id: programId, order_index: sessions.length, title: '', week_number: weekNumber, day_of_week: dayOfWeek, activity_mode: mode })
+      .insert({ program_id: programId, order_index: Math.max(-1, ...sessions.map(x => x.order_index ?? 0)) + 1, title: '', week_number: weekNumber, day_of_week: dayOfWeek, activity_mode: mode })
       .select().single()
     if (s) router.push(`/programs/${athleteId}/${programId}/session/${s.id}`)
   }
 
-  // Picker "Depuis un workout" (bouton + Ajouter d'une case du calendrier) : liste chargée à la
+  // Picker "Depuis un workout" (bouton « Depuis un workout » sous la liste) : liste chargée à la
   // demande plutôt qu'au montage de la page, ces workouts ne servant qu'à cette action ponctuelle.
   const [workoutPickerFor, setWorkoutPickerFor] = useState(null) // { week, day } ou null
   const [availableWorkouts, setAvailableWorkouts] = useState([])
@@ -754,7 +630,7 @@ function ProgramEditorPage({ params }) {
 
     const { data: newSess } = await supabase.from('program_sessions')
       .insert({
-        program_id: programId, order_index: sessions.length,
+        program_id: programId, order_index: Math.max(-1, ...sessions.map(x => x.order_index ?? 0)) + 1,
         title: srcSession.title || workout.title || '', week_number: week, day_of_week: day,
         activation: srcSession.activation || null, coach_notes: srcSession.coach_notes || null,
         activation_videos: srcSession.activation_videos || [], circuits: srcSession.circuits || [],
@@ -1115,7 +991,7 @@ function ProgramEditorPage({ params }) {
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: isTemplate ? 8 : 14, paddingTop: isTemplate ? 0 : 12, borderTop: isTemplate ? 'none' : '1px solid var(--border)', fontSize: 11, color: 'var(--text3)', flexWrap: 'wrap' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CalendarBlank size={11} /> Rythme conseillé (si l&apos;athlète choisit ses jours) :</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CalendarBlank size={11} /> Rythme conseillé :</span>
             <input type="number" min="1" max="7" placeholder="X" value={program?.recommended_sessions_per_week ?? ''}
               onChange={e => saveScheduleHint('recommended_sessions_per_week', e.target.value ? parseInt(e.target.value) : null)}
               style={{ width: 44, boxSizing: 'border-box', padding: '2px 4px', border: '1px solid var(--border2)', borderRadius: 4, fontSize: 11, outline: 'none', background: 'var(--bg2)', color: 'var(--text)', textAlign: 'center' }} />
@@ -1315,11 +1191,10 @@ function ProgramEditorPage({ params }) {
           </div>
         )}
 
-        <WeekGrid
+        <SessionList
           sessions={sessions}
-          durationWeeks={program?.duration_weeks || 1}
-          onAddAt={addSessionAt}
-          onAddFromWorkout={openWorkoutPicker}
+          onAdd={mode => addSessionAt(null, null, mode)}
+          onAddFromWorkout={() => openWorkoutPicker(null, null)}
           onOpenSession={goToSessionPage}
           onApplyLayout={applyLayout}
           onDuplicateSession={duplicateFromChip}
@@ -1379,7 +1254,7 @@ function ProgramEditorPage({ params }) {
             }}>
               <button onClick={() => setSideBySideIds(null)} style={{ background: 'none', border: 'none', fontSize: 22, color: 'var(--text2)', cursor: 'pointer', padding: 0, lineHeight: 1, display: 'flex' }}>←</button>
               <span style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontWeight: 700, fontSize: 15 }}>
-                Retour au calendrier
+                Retour au programme
               </span>
               <span style={{ fontSize: 12, color: 'var(--text3)' }}>
                 — {sideBySideIds.length} séance{sideBySideIds.length > 1 ? 's' : ''} côte à côte

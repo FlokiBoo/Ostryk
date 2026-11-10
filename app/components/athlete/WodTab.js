@@ -15,14 +15,10 @@ import { SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 // bas. Le conseil du coach y plafonne la sélection quand il existe (voir le commentaire du popup). Le prédicat est exporté parce que app/s/[token]/page.js doit savoir si ce popup est en
 // attente : il passe avant le rappel d'abonnement dans la file des popups, sinon les deux
 // s'affichent l'un sur l'autre au même chargement.
-export function hasPendingDayPicker(programs, completions, skippedSessions) {
-  return (programs || []).filter(p => p.pinned_board !== false && !p.archived && !p.group_id).some(prog => {
-    const progression = prog.sessions.filter(s => s.session_type !== 'recurrent')
-    if (progression.length <= 1) return false
-    if (progression.some(s => s.day_of_week != null)) return false
-    if (prog.athlete_days_of_week?.length) return false
-    return progression.some(s => !(completions.has(s.id) && !skippedSessions.has(s.id)))
-  })
+// Désactivé depuis le retrait du calendrier (2026-11-10) : le sportif voit chaque jour la prochaine
+// séance, il n'a plus de jours à choisir. Gardé exporté pour app/s/[token]/page.js.
+export function hasPendingDayPicker() {
+  return false
 }
 
 // Aucune durée réelle n'est connue avant d'avoir fait la séance (duration_minutes n'existe qu'en
@@ -174,14 +170,6 @@ export default function WodTab({
     prog.sessions.filter(s => s.session_type === 'recurrent').forEach(s => recurringEntries.push({ session: s, program: prog }))
   })
 
-  const coachDatedPrograms = []
-  const athleteDatedPrograms = []
-  const unscheduledPrograms = []
-  boardPrograms.forEach(prog => {
-    if (prog.sessions.some(s => s.session_type !== 'recurrent' && s.day_of_week != null)) coachDatedPrograms.push(prog)
-    else if (prog.athlete_days_of_week?.length) athleteDatedPrograms.push(prog)
-    else if (!prog.sessions.every(s => s.session_type === 'recurrent')) unscheduledPrograms.push(prog)
-  })
   const isValidated = (s) => completions.has(s.id) && !skippedSessions.has(s.id)
   // La séance que le sportif a ouverte en dernier reste la séance "en cours" tant qu'il ne l'a pas
   // validée — y compris s'il a rouvert une séance plus ancienne depuis l'historique. Sans ça, la
@@ -195,32 +183,15 @@ export default function WodTab({
     return opened || progressionSessions.find(s => !isValidated(s))
   }
 
-  // Une seule carte par programme actif, toujours affichée jusqu'à validation de la séance —
-  // dayKey (quand connu) n'est là que pour l'affichage ("le jour choisi est écrit"), voir
-  // renderDayCard. Un programme entièrement fini (plus de nextUncompleted, ex. une "Séance libre"
-  // déjà faite) n'a simplement pas d'entrée, comme avant.
+  // Plus de calendrier (2026-11-10) : chaque programme actif propose AUJOURD'HUI sa prochaine
+  // séance non faite, dans l'ordre de la liste du coach, et les deux suivantes en glissant la carte.
+  // Les anciens jours (day_of_week, athlete_days_of_week, date d'un « Décaler ») sont ignorés —
+  // cas réel : Audrey ne voyait plus la suite, sa prochaine séance était rangée sur un autre jour.
   const programEntries = []
-  coachDatedPrograms.forEach(prog => {
-    const next = nextUncompletedOf(prog)
-    if (next) programEntries.push({ session: next, program: prog, isRecurring: false, dayKey: next.day_of_week ?? null })
-  })
-  // Jour "de référence" de l'athlète : chaque séance a une position fixe dans la rotation de ses
-  // jours choisis (séance 1 → jour A, séance 2 → jour B, séance 3 → jour A, etc.) — ne sert plus
-  // qu'à afficher le jour prévu sur la carte, plus à décider si la séance doit apparaître ou non.
-  athleteDatedPrograms.forEach(prog => {
-    const progressionSessions = prog.sessions.filter(s => s.session_type !== 'recurrent')
-    const next = nextUncompletedOf(prog)
-    if (!next) return
-    const chosenDays = prog.athlete_days_of_week
-    const idx = progressionSessions.findIndex(s => s.id === next.id)
-    const dayKey = chosenDays.length ? chosenDays[idx % chosenDays.length] : null
-    programEntries.push({ session: next, program: prog, isRecurring: false, dayKey })
-  })
-  unscheduledPrograms.forEach(prog => {
+  boardPrograms.forEach(prog => {
     const next = nextUncompletedOf(prog)
     if (next) programEntries.push({ session: next, program: prog, isRecurring: false, dayKey: null })
   })
-
 
   // Séance récurrente : hors calendrier, proposée tous les jours, affichée dans son propre encart
   // ("Séance récurrente"), séparé de "Séance du jour" — un programme classique n'a rien à voir avec
@@ -251,12 +222,7 @@ export default function WodTab({
   // Un vrai programme multi-séances non daté doit demander à l'athlète son rythme hebdomadaire
   // (popup) — une "Séance libre" ponctuelle (1 seule séance) n'a pas de "rythme" à choisir, elle
   // reste juste accessible via sa carte dans "Séance du jour" ci-dessus sans popup.
-  const programsNeedingDays = unscheduledPrograms.filter(prog =>
-    prog.sessions.filter(s => s.session_type !== 'recurrent').length > 1
-    && !dismissedDayPickerIds.has(prog.id)
-    && nextUncompletedOf(prog)
-  )
-  const dayPickerProgram = programsNeedingDays[0] || null
+  const dayPickerProgram = null
 
   // isPrimary est fourni explicitement par l'appelant (pas dérivé de la position locale dans sa
   // propre liste) : "Séance récurrente" et "Séance du jour" sont deux sections indépendantes qui
@@ -339,7 +305,7 @@ export default function WodTab({
       meta: faite ? exosLabel : `≈ ${estimateDurationMin(s.exercises)} minutes · ${exosLabel}`,
       blocs: faite ? [] : blocsSeance(s.exercises),
       jour,
-      decalable: !isCoachView && !!onRescheduleSession,
+      decalable: false,
       is_coached: !!s.is_coached,
     }
   }
@@ -349,29 +315,15 @@ export default function WodTab({
     const idx = semaineDates.indexOf(isoLocal(new Date(completionDates[s.id])))
     if (idx !== -1) semaine[idx].seances.push(toSeance(s, prog, true))
   }))
-  // Prochaine séance datée au-delà de dimanche : annoncée sur un jour de repos ("Prochaine séance").
-  let prochaineApres = null
-  programEntries.forEach(({ session, program, dayKey }) => {
-    const iso = session.date
-      ? (session.date < todayIso ? todayIso : session.date)
-      : semaineDates[dayKey != null && dayKey > todayIdx ? dayKey : todayIdx]
-    const idx = semaineDates.indexOf(iso)
-    if (idx !== -1) {
-      // Les deux autres séances à faire du programme, proposées en glissant la carte : celle que
-      // le sportif ouvre devient sa séance en cours (openedSessionId, voir nextUncompletedOf), donc
-      // la carte principale au retour. Une séance déjà décalée à une date a sa place sur son jour.
-      const suivantes = program.sessions
-        .filter(s => s.id !== session.id && s.session_type !== 'recurrent' && !s.hidden && !s.locked && !s.date && !isValidated(s))
-        .slice(0, 2)
-        .map(s => ({ ...toSeance(s, program, false, iso), decalable: false, alternative: true }))
-      semaine[idx].seances.push({ ...toSeance(session, program, false, iso), suivantes })
-    }
-    else if (!prochaineApres || iso < prochaineApres.date) prochaineApres = { titre: session.title || 'Séance', date: iso }
-    program.sessions.forEach(s => {
-      if (s.id === session.id || s.session_type === 'recurrent' || s.hidden || isValidated(s) || !s.date || s.date <= iso) return
-      const j = semaineDates.indexOf(s.date)
-      if (j !== -1) semaine[j].seances.push(toSeance(s, program, false, s.date))
-    })
+  programEntries.forEach(({ session, program }) => {
+    // Les deux autres séances à faire du programme, proposées en glissant la carte : celle que le
+    // sportif ouvre devient sa séance en cours (openedSessionId, voir nextUncompletedOf), donc la
+    // carte principale au retour.
+    const suivantes = program.sessions
+      .filter(s => s.id !== session.id && s.session_type !== 'recurrent' && !s.hidden && !s.locked && !isValidated(s))
+      .slice(0, 2)
+      .map(s => ({ ...toSeance(s, program, false, todayIso), alternative: true }))
+    if (todayIdx !== -1) semaine[todayIdx].seances.push({ ...toSeance(session, program, false, todayIso), suivantes })
   })
 
   // Coach qui prévisualise un vrai client : ni objectifs ni ajout (voir le commentaire plus bas sur
@@ -399,8 +351,8 @@ export default function WodTab({
         }))}
         onCommencerSeance={s => openSession(s.id)}
         onOuvrirSeance={s => openSession(s.id)}
-        prochaineHorsSemaine={prochaineApres}
-        onDecalerSeance={onRescheduleSession && !isCoachView ? s => setDecalerTarget(s) : null}
+        prochaineHorsSemaine={null}
+        onDecalerSeance={null}
         onAjouterObjectif={showObjectivesRail ? () => setShowObjectives(true) : null}
         onOuvrirObjectifs={showObjectivesRail ? () => setShowObjectives(true) : null}
         onOuvrirProgramme={() => setActiveTab?.('templates')}
