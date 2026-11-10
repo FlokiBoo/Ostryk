@@ -10,7 +10,7 @@ import { getCoachId } from '@/lib/coach'
 import { notifyAssigned } from '@/lib/notify'
 import { cloneTemplateToAthlete } from '@/lib/programTemplates'
 import { copieExercice } from '@/lib/copieExercice'
-import SessionBlockEditor from '@/app/components/SessionBlockEditor'
+import PanneauSeanceGroupe from '@/app/components/coach/PanneauSeanceGroupe'
 
 function today() {
   const n = new Date()
@@ -840,7 +840,7 @@ export default function GroupDetailPage({ params }) {
         </div>
       )}
 
-      {/* Un SessionBlockEditor par séance, en panneaux de 480px défilant horizontalement ; chacun
+      {/* Un panneau par séance (contenu ou résultats, voir PanneauSeanceGroupe), de 480px défilant horizontalement ; chacun
           se ferme seul via onClose, fermer le dernier ferme la vue. */}
       {sideBySideIds && sideBySideIds.length > 0 && (
         <div style={{ position: 'fixed', inset: 0, background: 'var(--bg2)', zIndex: 250, display: 'flex', flexDirection: 'column' }}>
@@ -859,7 +859,7 @@ export default function GroupDetailPage({ params }) {
                 }
                 return (
                   <div key={id} style={{ width: 480, flexShrink: 0, height: '100%', overflowY: 'auto', borderRight: '1px solid var(--border)' }}>
-                    <SessionBlockEditor sessionId={id} backHref={`/groups/${groupId}`} onClose={closePanel} />
+                    <PanneauSeanceGroupe groupId={groupId} sessionId={id} onClose={closePanel} />
                   </div>
                 )
               })}
