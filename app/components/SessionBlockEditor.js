@@ -34,6 +34,7 @@ import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVi
 import { sectionDeSeance, lignesDeProtocole } from '@/lib/sectionsTexte'
 import { historiqueParExercice, cleExercice } from '@/lib/historiqueExercice'
 import { telechargerSeancePdf } from '@/lib/seancePdf'
+import { codeSeance, codesExercices, nomsParCode, normaliserLettre, memeNom } from '@/lib/codeSeance'
 
 // Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
 // petit helper autonome plutôt qu'un import cross-fichier).
@@ -457,7 +458,7 @@ const input = {
 // Sans onClose, comportement page normale : navigation vers backHref.
 // athleteId (optionnel) : séance d'un programme client — active le bouton Historique de chaque
 // exercice (ce que le sportif a saisi les fois précédentes). Absent sur les templates/workouts.
-export default function SessionBlockEditor({ sessionId, backHref, canManageCatalog = true, onClose, athleteId = null }) {
+export default function SessionBlockEditor({ sessionId, backHref, canManageCatalog = true, onClose, athleteId = null, onExercicesPropages }) {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
@@ -466,6 +467,16 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [savedFlash, setSavedFlash] = useState(false)
 
   const [sessionTitle, setSessionTitle] = useState('')
+  // Code de séance (SA1, SA2…) : lettre + numéro libres, voir lib/codeSeance.js.
+  const [programId, setProgramId] = useState(null)
+  const [seanceLettre, setSeanceLettre] = useState('')
+  const [seanceNumero, setSeanceNumero] = useState('')
+  // Noms par code d'exercice tels qu'enregistrés en base (au chargement, puis après chaque Save) :
+  // c'est la référence pour détecter « A1 a changé » au Save suivant.
+  const nomsEnregistres = useRef({})
+  // Proposition de report d'un exercice remplacé sur les séances suivantes de la même lettre.
+  const [propagation, setPropagation] = useState(null)
+  const [propagationEnCours, setPropagationEnCours] = useState(false)
   const [description, setDescription] = useState('')
   const [sessionType, setSessionType] = useState(null)
   // Séance "explication" (session_type: 'explication', porté depuis l'ancien éditeur plein
@@ -590,7 +601,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     let cancelled = false
     async function load() {
       const [{ data: sessionRow }, { data: exerciseRows }, { data: movs }] = await Promise.all([
-        supabase.from('program_sessions').select('id, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, warmup_content, cooldown_content, timer_config, activation, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
+        supabase.from('program_sessions').select('id, program_id, seance_lettre, seance_numero, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, warmup_content, cooldown_content, timer_config, activation, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
         supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, materiel, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles, cardio_structure').eq('program_session_id', sessionId).order('order_index'),
         // Bibliothèque récupérée en entier (petit volume) plutôt que filtrée par nom — sensible à
         // la casse côté Postgres, raterait silencieusement un nom mal accordé. Même approche que
@@ -604,6 +615,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         return
       }
       setSessionTitle(sessionRow.title || '')
+      setProgramId(sessionRow.program_id || null)
+      setSeanceLettre(sessionRow.seance_lettre || '')
+      setSeanceNumero(sessionRow.seance_numero != null ? String(sessionRow.seance_numero) : '')
+      nomsEnregistres.current = nomsParCode(exerciseRows || [])
       setDescription(sessionRow.coach_notes || '')
       setSessionType(sessionRow.session_type || null)
       setActivityMode(sessionRow.activity_mode || 'standard')
@@ -758,6 +773,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       await supabase.from('program_sessions')
         .update({
           title: sessionTitle, coach_notes: description, circuits: flattenBlocksToCircuits(blocksAEcrire),
+          ...(canManageCatalog ? {
+            seance_lettre: seanceLettre || null,
+            seance_numero: seanceLettre && seanceNumero !== '' ? parseInt(seanceNumero, 10) : null,
+          } : {}),
           warmup_block: extractBlockMeta(blocksAEcrire, 'warmup'), cooldown_block: extractBlockMeta(blocksAEcrire, 'cooldown'),
           ...(sections.warmup?.modifiee ? { warmup_content: sections.warmup.contenu } : {}),
           ...(sections.cooldown?.modifiee ? { cooldown_content: sections.cooldown.contenu } : {}),
@@ -783,6 +802,14 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         await supabase.from('movements').upsert(names.map(name => ({ name })), { onConflict: 'name', ignoreDuplicates: true })
       }
 
+      const avant = nomsEnregistres.current
+      const apres = nomsParCode(rows)
+      nomsEnregistres.current = apres
+      const remplaces = Object.keys(apres)
+        .filter(code => avant[code]?.nom && apres[code].nom && !memeNom(avant[code].nom, apres[code].nom))
+        .map(code => ({ code, ancien: avant[code].nom, nouveau: apres[code].nom }))
+      if (remplaces.length && canManageCatalog) await proposerPropagation(remplaces)
+
       setBlocks(blocksAEcrire)
       setUnsavedChanges(false)
       setSavedFlash(true)
@@ -790,6 +817,56 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     } finally {
       setSaving(false)
     }
+  }
+
+  // Séances suivantes de la même lettre (numéro supérieur, même programme) : pour chaque exercice
+  // remplacé, on liste ce qui occupe la même place (A1, B2…) chez elles. Cochées d'office celles
+  // qui avaient encore l'ancien exercice ; une séance déjà réalisée par le sportif reste intouchable.
+  const proposerPropagation = async (remplaces) => {
+    const numero = parseInt(seanceNumero, 10)
+    if (!seanceLettre || !programId || Number.isNaN(numero)) return
+    const { data: suivantes } = await supabase.from('program_sessions')
+      .select('id, title, seance_lettre, seance_numero, program_exercises(id, name, order_index, superset_group, block_type)')
+      .eq('program_id', programId).eq('seance_lettre', seanceLettre).gt('seance_numero', numero)
+      .order('seance_numero')
+    if (!suivantes?.length) return
+    const { data: faites } = await supabase.from('program_completions')
+      .select('program_session_id, skipped').in('program_session_id', suivantes.map(s => s.id))
+    const terminees = new Set((faites || []).filter(f => !f.skipped).map(f => f.program_session_id))
+    const changements = remplaces.map(r => ({
+      ...r,
+      cibles: suivantes.flatMap(s => {
+        const exos = [...(s.program_exercises || [])].sort((a, b) => a.order_index - b.order_index)
+        const place = nomsParCode(exos)[r.code]
+        if (!place) return []
+        const terminee = terminees.has(s.id)
+        return [{
+          exoId: place.id, sessionId: s.id, code: codeSeance(s), titre: s.title || '',
+          nomActuel: place.nom, terminee, coche: !terminee && memeNom(place.nom, r.ancien),
+        }]
+      }),
+    })).filter(ch => ch.cibles.length)
+    if (changements.length) setPropagation(changements)
+  }
+
+  const basculerCible = (ci, ti) => {
+    setPropagation(prev => prev.map((ch, i) => i !== ci ? ch : {
+      ...ch, cibles: ch.cibles.map((t, j) => j !== ti ? t : { ...t, coche: !t.coche }),
+    }))
+  }
+
+  // Seul le nom change : la note, les séries, les charges de la ligne restent en place (la vidéo
+  // et les muscles se déduisent du nom partout ailleurs).
+  const appliquerPropagation = async () => {
+    const aFaire = propagation.flatMap(ch => ch.cibles.filter(t => t.coche && !t.terminee).map(t => ({ ...t, nouveau: ch.nouveau })))
+    if (!aFaire.length) { setPropagation(null); return }
+    setPropagationEnCours(true)
+    const resultats = await Promise.all(aFaire.map(t => supabase.from('program_exercises').update({ name: t.nouveau }).eq('id', t.exoId)))
+    setPropagationEnCours(false)
+    const echec = resultats.find(r => r.error)
+    if (echec) alert('Erreur lors du remplacement dans les séances suivantes : ' + echec.error.message)
+    setPropagation(null)
+    onExercicesPropages?.([...new Set(aFaire.map(t => t.sessionId))])
   }
 
   const addWarmupBlock = () => {
@@ -912,6 +989,14 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
 
   // Dérivé de activeBlockId (voir sa déclaration) plutôt que stocké directement.
   const activeBlockIndex = blocks.findIndex(b => b.id === activeBlockId)
+  // Code A1/B2… de chaque exercice affiché, calculé exactement comme à l'enregistrement.
+  const codesBlocs = (() => {
+    const lignes = blocks.flatMap(b => (b.type === 'circuit' ? [] : (b.exercises || []).map(ex => ({
+      exId: ex.id, block_type: b.type, superset_group: b.exercises.length > 1 ? b.id : null,
+    }))))
+    const codes = codesExercices(lignes)
+    return Object.fromEntries(lignes.map((l, i) => [l.exId, codes[i]]))
+  })()
   const activeBlock = blocks[activeBlockIndex] ?? null
   // Un même exercice (id) n'existe que dans un seul bloc, mais la modale Advanced settings est
   // déclenchée depuis la grille des sets sans y garder de référence directe à son bloc parent.
@@ -1689,6 +1774,24 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
           <button onClick={goBack} style={{ display: 'flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: c.text }}>
             <X size={22} />
           </button>
+          {canManageCatalog && (
+            <div title="Code de séance : S + lettre + numéro (ex. SA1). Dupliquer SA1 crée SA2."
+              style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, fontSize: 15, fontWeight: 700, color: c.textMuted }}>
+              S
+              <input
+                value={seanceLettre}
+                onChange={e => { setSeanceLettre(normaliserLettre(e.target.value)); setUnsavedChanges(true) }}
+                placeholder="A" aria-label="Lettre de la séance"
+                style={{ ...input, width: 40, fontSize: 15, padding: '10px 4px', textAlign: 'center', fontWeight: 700, textTransform: 'uppercase' }}
+              />
+              <input
+                value={seanceNumero}
+                onChange={e => { setSeanceNumero(e.target.value.replace(/[^0-9]/g, '').slice(0, 3)); setUnsavedChanges(true) }}
+                placeholder="1" inputMode="numeric" aria-label="Numéro de la séance" disabled={!seanceLettre}
+                style={{ ...input, width: 44, fontSize: 15, padding: '10px 4px', textAlign: 'center', fontWeight: 700, opacity: seanceLettre ? 1 : 0.5 }}
+              />
+            </div>
+          )}
           <input
             value={sessionTitle}
             onChange={e => { setSessionTitle(e.target.value); setUnsavedChanges(true) }}
@@ -2123,7 +2226,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                             {ex.name}
                           </button>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 15, fontWeight: 600, color: c.text, textDecoration: 'underline' }}>{ex.name}</div>
+                            <div style={{ fontSize: 15, fontWeight: 600, color: c.text }}>
+                              {codesBlocs[ex.id] && <span style={{ marginRight: 6, fontSize: 12, fontWeight: 800, color: c.blue }}>{codesBlocs[ex.id]}</span>}
+                              <span style={{ textDecoration: 'underline' }}>{ex.name}</span>
+                            </div>
                             {ex.muscles && (
                               <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, color: c.textMuted, background: c.disabledBg, borderRadius: 5, padding: '2px 8px' }}>
                                 {ex.muscles}
@@ -3109,6 +3215,59 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         )}
 
         {/* Historique du sportif sur un exercice — voir openHistorique. */}
+        {propagation && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 240 }} />
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 241,
+              width: 520, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 64px)', overflowY: 'auto',
+              background: c.bg, borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            }}>
+              <div style={{ padding: '20px 24px', borderBottom: `1px solid ${c.border}` }}>
+                <span style={{ display: 'block', fontSize: 20, fontWeight: 700, color: c.text }}>Modifier aussi les séances suivantes ?</span>
+                <span style={{ fontSize: 13, color: c.textMuted }}>
+                  Seul l&apos;exercice change : les notes, séries et charges de chaque séance restent en place.
+                </span>
+              </div>
+              {propagation.map((ch, ci) => (
+                <div key={ch.code} style={{ padding: '16px 24px', borderBottom: `1px solid ${c.border}` }}>
+                  <div style={{ fontSize: 14, color: c.text, marginBottom: 10 }}>
+                    <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>{ch.code}</span>
+                    <span style={{ textDecoration: 'line-through', color: c.textMuted }}>{ch.ancien}</span>
+                    {' → '}<span style={{ fontWeight: 700 }}>{ch.nouveau}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {ch.cibles.map((t, ti) => (
+                      <label key={t.sessionId} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: t.terminee ? c.textFaint : c.text, cursor: t.terminee ? 'default' : 'pointer' }}>
+                        <input type="checkbox" checked={t.coche} disabled={t.terminee} onChange={() => basculerCible(ci, ti)}
+                          style={{ accentColor: 'var(--green)', width: 15, height: 15, flexShrink: 0 }} />
+                        <span style={{ fontWeight: 700, minWidth: 44 }}>{t.code}</span>
+                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {ch.code} actuel : {t.nomActuel || '—'}{t.titre ? ` · ${t.titre}` : ''}
+                        </span>
+                        {t.terminee && <span style={{ fontSize: 11, fontWeight: 600 }}>déjà faite</span>}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '16px 24px' }}>
+                <button onClick={() => setPropagation(null)} disabled={propagationEnCours} style={{
+                  background: c.bg, color: c.text, border: `1px solid ${c.border}`, borderRadius: 6, padding: '9px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}>
+                  Non, juste cette séance
+                </button>
+                <button onClick={appliquerPropagation} disabled={propagationEnCours} style={{
+                  background: c.blue, color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 14, fontWeight: 600,
+                  cursor: propagationEnCours ? 'default' : 'pointer', opacity: propagationEnCours ? 0.7 : 1,
+                }}>
+                  {propagationEnCours ? 'Modification…' : 'Modifier les séances cochées'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         {historiqueOuvert && (
           <>
             <div onClick={() => setHistoriqueOuvert(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 210 }} />

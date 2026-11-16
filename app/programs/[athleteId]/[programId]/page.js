@@ -17,6 +17,7 @@ import { notifyAssigned, notifyProgramAvailable } from '@/lib/notify'
 import SessionBlockEditor from '@/app/components/SessionBlockEditor'
 import SeanceRealisee from '@/app/components/coach/SeanceRealisee'
 import { copieExercice } from '@/lib/copieExercice'
+import { codeSeance } from '@/lib/codeSeance'
 import {
   ClipboardText, CalendarBlank, Trash, UsersThree, Repeat,
   CopySimple, ArrowsOutCardinal, Barbell, Heartbeat, Columns, X, CheckCircle,
@@ -72,7 +73,8 @@ function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact
         font: 'inherit', fontWeight: 'inherit', color: 'inherit', cursor: 'pointer',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: compact ? 'nowrap' : 'normal', wordBreak: compact ? undefined : 'break-word',
       }}>
-        {s.title || 'Séance'}
+        {codeSeance(s) && <span style={{ marginRight: 6, fontWeight: 800 }}>{codeSeance(s)}</span>}
+        {s.title || (codeSeance(s) ? '' : 'Séance')}
       </button>
       <button onClick={() => onDuplicate(s.id)} title="Dupliquer cette séance"
         style={{ background: 'none', border: 'none', padding: 3, display: 'flex', color: 'inherit', cursor: 'pointer', flexShrink: 0, opacity: 0.85 }}>
@@ -227,6 +229,9 @@ function ProgramEditorPage({ params }) {
   // s'ouvrent sur ce qui a été réalisé ; editingDoneIds liste celles repassées en édition.
   const [doneDates, setDoneDates] = useState({})
   const [editingDoneIds, setEditingDoneIds] = useState(new Set())
+  // Panneaux à recharger après un report d'exercice depuis un autre panneau (voir
+  // onExercicesPropages) : sinon leur prochain Save réécrirait l'ancien exercice.
+  const [versionsPanneaux, setVersionsPanneaux] = useState({})
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [duplicatingSelected, setDuplicatingSelected] = useState(false)
   const [titleSaving, setTitleSaving] = useState(false)
@@ -405,7 +410,7 @@ function ProgramEditorPage({ params }) {
       if (!clientSess) {
         // Nouvelle séance côté template, jamais vue par ce client : on la crée
         const { data: created } = await supabase.from('program_sessions')
-          .insert({ program_id: cp.id, order_index: sessOrderIndex, title: fields.title, source_session_id: sessId, session_type: fields.session_type || null, materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run, warmup_content: fields.warmup_content ?? null, cooldown_content: fields.cooldown_content ?? null })
+          .insert({ program_id: cp.id, order_index: sessOrderIndex, title: fields.title, source_session_id: sessId, seance_lettre: fields.seance_lettre ?? null, seance_numero: fields.seance_numero ?? null, session_type: fields.session_type || null, materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run, warmup_content: fields.warmup_content ?? null, cooldown_content: fields.cooldown_content ?? null })
           .select().single()
         clientSess = created
         if (!clientSess) continue
@@ -416,7 +421,7 @@ function ProgramEditorPage({ params }) {
         if (completion) continue
 
         await supabase.from('program_sessions').update({
-          title: fields.title, activation: fields.activation,
+          title: fields.title, activation: fields.activation, seance_lettre: fields.seance_lettre ?? null, seance_numero: fields.seance_numero ?? null,
           coach_notes: fields.coach_notes, activation_videos: fields.activation_videos,
           circuits: fields.circuits, session_type: fields.session_type || null,
           materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run,
@@ -507,6 +512,7 @@ function ProgramEditorPage({ params }) {
     for (const s of pending) {
       const sessFields = {
         title: s.title || '', activation: s.activation || null,
+        seance_lettre: s.seance_lettre || null, seance_numero: s.seance_numero ?? null,
         coach_notes: s.coach_notes || null, activation_videos: s.activation_videos || [],
         circuits: s.circuits || [], session_type: s.session_type || null,
         materiel: s.materiel || null, day_of_week: s.day_of_week ?? null, hidden_until_run: !!s.hidden_until_run,
@@ -669,12 +675,22 @@ function ProgramEditorPage({ params }) {
       source_session_id: _src, needs_sync: _ns, customized_at: _cu, is_coached: _co,
       ...fields
     } = src
+    // Séance codée (SA1) : la copie prend le numéro suivant de sa lettre et garde son titre. Le
+    // maximum est relu en base, pas dans `sessions` : la duplication multiple enchaîne les copies
+    // sans re-render, l'état y serait périmé et donnerait deux fois le même numéro.
+    let code = {}
+    if (src.seance_lettre) {
+      const { data: memeLettre } = await supabase.from('program_sessions')
+        .select('seance_numero').eq('program_id', programId).eq('seance_lettre', src.seance_lettre)
+      code = { seance_numero: Math.max(0, ...(memeLettre || []).map(x => x.seance_numero ?? 0)) + 1 }
+    }
     const { data: newSession, error: sessErr } = await supabase.from('program_sessions')
       .insert({
         ...fields,
+        ...code,
         program_id: programId,
         order_index: forcedIdx !== null ? forcedIdx : Math.max(-1, ...sessions.map(s => s.order_index ?? 0)) + 1,
-        title: src.title ? `${src.title} (copie)` : '',
+        title: src.seance_lettre ? (src.title || '') : (src.title ? `${src.title} (copie)` : ''),
       })
       .select().single()
     if (sessErr || !newSession) return fail('Erreur duplication : ' + sessErr?.message)
@@ -1281,10 +1297,16 @@ function ProgramEditorPage({ params }) {
                       />
                     ) : (
                       <SessionBlockEditor
+                        key={versionsPanneaux[id] || 0}
                         sessionId={id}
                         backHref={`/programs/${athleteId}/${programId}`}
                         athleteId={isTemplate ? null : athleteId}
                         onClose={closePanel}
+                        onExercicesPropages={ids => setVersionsPanneaux(prev => {
+                          const next = { ...prev }
+                          ids.forEach(x => { next[x] = (next[x] || 0) + 1 })
+                          return next
+                        })}
                       />
                     )}
                   </div>
