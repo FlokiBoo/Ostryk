@@ -71,7 +71,10 @@ function ResultatsSeance({ groupId, sessionId }) {
   const { sess, exercices, membres, runs, sets, att } = donnees
   const nom = Object.fromEntries(membres.map(m => [m.id, m.name]))
 
-  if (!runs.length) {
+  // Les séries sont écrites en base dès leur saisie, le passage (présents, notes) seulement au clic
+  // sur Enregistrer : une séance faite sans ce clic a des charges mais aucun passage. On les
+  // affiche quand même, au lieu de « pas encore faite » qui les cachait.
+  if (!runs.length && !sets.length) {
     return (
       <div style={{ padding: 16 }}>
         <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontWeight: 700, fontSize: 16, marginBottom: 6 }}>{sess?.title || 'Séance'}</div>
@@ -82,11 +85,16 @@ function ResultatsSeance({ groupId, sessionId }) {
 
   const carte = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', padding: 12 }
   const titreBloc = { fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 8 }
-  const dernier = runs[0]
+  const dernier = runs[0] || {}
 
   return (
     <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontFamily: 'var(--font-title)', color: 'var(--title)', fontWeight: 700, fontSize: 16 }}>{sess?.title || 'Séance'}</div>
+      {!runs.length && (
+        <div style={{ ...carte, fontSize: 12, color: 'var(--text2)' }}>
+          Passage jamais enregistré (bouton Enregistrer de la séance de groupe) : présences et notes perso n&apos;ont pas été gardées, seules les séries saisies le sont.
+        </div>
+      )}
 
       {runs.map(r => {
         const presents = att.filter(a => a.run_id === r.id).map(a => nom[a.athlete_id]).filter(Boolean).sort((a, b) => a.localeCompare(b))
