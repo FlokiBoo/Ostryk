@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect, use, Suspense } from 'react'
+import { useState, useEffect, useRef, use, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { UsersThree, Lightning, FlagCheckered, FloppyDisk } from '@phosphor-icons/react'
+import { UsersThree, Lightning, FlagCheckered } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { getCoachId } from '@/lib/coach'
-import { notifyGroupSessionReminder, notifyGroupSessionAttendance } from '@/lib/notify'
 import { unlockAudio } from '@/lib/audioBeep'
 import { unlockSpeech } from '@/lib/speak'
 import SplitTimerSession from '@/app/components/SplitTimerSession'
@@ -50,10 +49,18 @@ function GroupCoachingSessionPage({ params }) {
   const [athleteSets, setAthleteSets] = useState({}) // { athleteId: { programExerciseId: [series...] } }
   const [prefilledSetIds, setPrefilledSetIds] = useState(new Set()) // séries créées via "+ Ajouter" pas encore retouchées par le coach
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [runningTimer, setRunningTimer] = useState(null) // { config, label } | null — timer préparé sur un circuit/exercice
   const [showTimer, setShowTimer] = useState(null) // { seconds, label } | null — chrono libre sans config préparée
+  // Enregistrement automatique du passage (présents, notes perso, ressenti) : avant, rien n'était
+  // gardé sans clic sur Enregistrer, et des notes de séance ont été perdues ainsi. Les séries,
+  // elles, sont déjà écrites à la saisie (updateSet / addSet).
+  const [modifs, setModifs] = useState(0)
+  const [autoEtat, setAutoEtat] = useState(null) // null | 'attente' | 'ok' | 'erreur'
+  const etatRef = useRef({})
+  const runIdRef = useRef(null)
+  const enAttenteRef = useRef(false)
+  const chaineRef = useRef(Promise.resolve())
+  const modifie = () => { setModifs(n => n + 1); setAutoEtat('attente') }
 
   useEffect(() => { load() }, [groupId, sessionId, runDate])
 
@@ -87,6 +94,7 @@ function GroupCoachingSessionPage({ params }) {
       .select('*').eq('group_id', groupId).eq('source_session_id', sessionId).eq('date', runDate).maybeSingle()
     if (existingRun) {
       setRunId(existingRun.id)
+      runIdRef.current = existingRun.id
       setExerciseNotes(existingRun.exercise_notes || {})
       setCoachDifficulty(existingRun.coach_difficulty)
       setCoachNote(existingRun.coach_note || '')
@@ -129,6 +137,7 @@ function GroupCoachingSessionPage({ params }) {
   }
 
   const togglePresent = (athleteId) => {
+    modifie()
     setPresentIds(prev => {
       const next = new Set(prev)
       if (next.has(athleteId)) next.delete(athleteId)
@@ -137,46 +146,57 @@ function GroupCoachingSessionPage({ params }) {
     })
   }
 
-  const save = async () => {
-    setSaving(true)
-    const coachId = await getCoachId()
+  useEffect(() => {
+    etatRef.current = { exerciseNotes, coachDifficulty, coachNote, presentIds, title: session?.title }
+  })
 
-    const { data: run, error } = await supabase.from('group_session_runs')
-      .upsert({
-        id: runId || undefined,
-        group_id: groupId, coach_id: coachId, source_session_id: sessionId,
-        title: session?.title || 'Séance', date: runDate,
-        exercise_notes: exerciseNotes, coach_difficulty: coachDifficulty, coach_note: coachNote.trim() || null,
-      }, { onConflict: 'group_id,source_session_id,date' })
-      .select().single()
-    if (error || !run) { alert('Erreur : ' + (error?.message || '')); setSaving(false); return }
-    setRunId(run.id)
+  // Les écritures passent l'une après l'autre : deux upserts simultanés du même passage pourraient
+  // créer puis supprimer des présences dans le désordre.
+  const enregistrerPassage = () => {
+    const tache = chaineRef.current.then(async () => {
+      const { exerciseNotes: notes, coachDifficulty: diff, coachNote: noteSeance, presentIds: presents, title } = etatRef.current
+      const coachId = await getCoachId()
+      const { data: run, error } = await supabase.from('group_session_runs')
+        .upsert({
+          id: runIdRef.current || undefined,
+          group_id: groupId, coach_id: coachId, source_session_id: sessionId,
+          title: title || 'Séance', date: runDate,
+          exercise_notes: notes, coach_difficulty: diff, coach_note: (noteSeance || '').trim() || null,
+        }, { onConflict: 'group_id,source_session_id,date' })
+        .select().single()
+      if (error || !run) throw new Error(error?.message || 'échec')
+      runIdRef.current = run.id
+      setRunId(run.id)
 
-    const { data: existingAtt } = await supabase.from('group_session_attendance').select('athlete_id').eq('run_id', run.id)
-    const existingIds = new Set((existingAtt || []).map(a => a.athlete_id))
-    const toAdd = [...presentIds].filter(id => !existingIds.has(id))
-    const toRemove = [...existingIds].filter(id => !presentIds.has(id))
-    if (toAdd.length) {
-      await supabase.from('group_session_attendance').insert(toAdd.map(athlete_id => ({ run_id: run.id, athlete_id })))
-      await supabase.from('notifications').insert(toAdd.map(athlete_id => ({
-        athlete_id, type: 'group_session_pending',
-        title: 'Séance de groupe à compléter',
-        body: session?.title || null,
-      })))
-      // Push téléphone (app native) en plus de la notif in-app ci-dessus — automatique, pas
-      // besoin de confirmation comme pour le rappel email plus bas.
-      notifyGroupSessionAttendance({ athleteIds: toAdd, sessionTitle: session?.title })
-    }
-    if (toRemove.length) await supabase.from('group_session_attendance').delete().eq('run_id', run.id).in('athlete_id', toRemove)
-
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-
-    if (presentIds.size > 0 && window.confirm(`Envoyer un email aux ${presentIds.size} présent${presentIds.size > 1 ? 's' : ''} pour qu'ils pensent à remplir leur performance ?`)) {
-      notifyGroupSessionReminder({ athleteIds: [...presentIds], sessionTitle: session?.title })
-    }
+      const { data: existingAtt } = await supabase.from('group_session_attendance').select('athlete_id').eq('run_id', run.id)
+      const existingIds = new Set((existingAtt || []).map(a => a.athlete_id))
+      const toAdd = [...presents].filter(id => !existingIds.has(id))
+      const toRemove = [...existingIds].filter(id => !presents.has(id))
+      if (toAdd.length) await supabase.from('group_session_attendance').insert(toAdd.map(athlete_id => ({ run_id: run.id, athlete_id })))
+      if (toRemove.length) await supabase.from('group_session_attendance').delete().eq('run_id', run.id).in('athlete_id', toRemove)
+      return run
+    })
+    chaineRef.current = tache.catch(() => {})
+    return tache
   }
+
+  useEffect(() => {
+    if (!modifs) return
+    enAttenteRef.current = true
+    const t = setTimeout(() => {
+      enAttenteRef.current = false
+      enregistrerPassage().then(() => setAutoEtat('ok'), () => setAutoEtat('erreur'))
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [modifs]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Départ de la page pendant le délai : on écrit tout de suite ce qui restait en attente.
+  useEffect(() => () => { if (enAttenteRef.current) enregistrerPassage().catch(() => {}) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const avantDepart = (e) => { if (enAttenteRef.current) { enregistrerPassage().catch(() => {}); e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', avantDepart)
+    return () => window.removeEventListener('beforeunload', avantDepart)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100svh', color: 'var(--text3)' }}>Chargement…</div>
@@ -246,7 +266,7 @@ function GroupCoachingSessionPage({ params }) {
             </div>
             {exo.note && <div style={{ fontSize: 12, color: 'var(--text2)', fontStyle: 'italic', marginBottom: 8 }}>{exo.note}</div>}
             <textarea placeholder="Note perso (visible uniquement par toi)…" value={exerciseNotes[`exercise:${exo.id}`] || ''}
-              onChange={e => setExerciseNotes(prev => ({ ...prev, [`exercise:${exo.id}`]: e.target.value }))}
+              onChange={e => { setExerciseNotes(prev => ({ ...prev, [`exercise:${exo.id}`]: e.target.value })); modifie() }}
               rows={2} style={{ ...inp, resize: 'vertical' }} />
 
             {presentIds.size > 0 && (
@@ -295,7 +315,7 @@ function GroupCoachingSessionPage({ params }) {
             </div>
             {c.text && <div style={{ fontSize: 12, color: 'var(--text2)', whiteSpace: 'pre-wrap', marginBottom: 8 }}>{c.text}</div>}
             <textarea placeholder="Note perso (visible uniquement par toi)…" value={exerciseNotes[`circuit:${c.id}`] || ''}
-              onChange={e => setExerciseNotes(prev => ({ ...prev, [`circuit:${c.id}`]: e.target.value }))}
+              onChange={e => { setExerciseNotes(prev => ({ ...prev, [`circuit:${c.id}`]: e.target.value })); modifie() }}
               rows={2} style={{ ...inp, resize: 'vertical' }} />
           </div>
         ))}
@@ -309,25 +329,19 @@ function GroupCoachingSessionPage({ params }) {
             <div style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 600, marginBottom: 6 }}>Difficulté ressentie pour le groupe (1-10)</div>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
-                <button key={n} onClick={() => setCoachDifficulty(n)} style={{
+                <button key={n} onClick={() => { setCoachDifficulty(n); modifie() }} style={{
                   width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
                   background: coachDifficulty === n ? 'var(--green)' : 'var(--bg2)', color: coachDifficulty === n ? '#fff' : 'var(--text2)',
                 }}>{n}</button>
               ))}
             </div>
           </div>
-          <textarea placeholder="Note libre sur la séance…" value={coachNote} onChange={e => setCoachNote(e.target.value)}
+          <textarea placeholder="Note libre sur la séance…" value={coachNote} onChange={e => { setCoachNote(e.target.value); modifie() }}
             rows={3} style={{ ...inp, resize: 'vertical' }} />
         </div>
 
-        <button onClick={save} disabled={saving} style={{
-          background: saved ? '#DCFCE7' : 'var(--green)', color: saved ? '#166534' : '#fff', border: saved ? '1px solid #BBF7D0' : 'none',
-          borderRadius: 'var(--rl)', padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer', width: '100%',
-        }}>
-          {saving ? '…' : saved ? '✓ Enregistré' : <><FloppyDisk size={15} style={{ verticalAlign: -2, marginRight: 5 }} />Enregistrer</>}
-        </button>
-        <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>
-          Les présents recevront une notification pour compléter leur séance (charges, notes, difficulté, plaisir) à leur prochaine connexion.
+        <div style={{ fontSize: 11, color: autoEtat === 'erreur' ? 'var(--red, #B91C1C)' : 'var(--text3)', textAlign: 'center' }}>
+          {autoEtat === 'attente' ? 'Enregistrement…' : autoEtat === 'erreur' ? 'Échec de l\u2019enregistrement — vérifie ta connexion puis modifie un champ pour réessayer.' : autoEtat === 'ok' ? '✓ Enregistré automatiquement.' : 'Notes, présences et charges s\u2019enregistrent automatiquement.'}
         </div>
       </div>
     </div>
