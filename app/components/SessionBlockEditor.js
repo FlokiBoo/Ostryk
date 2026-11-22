@@ -2979,15 +2979,20 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                     const alreadyInBlock = activeBlock?.exercises?.some(e => e.name === ex.name)
                     const isPending = pendingCircuitExercises.some(p => p.name === ex.name)
                     const added = alreadyInBlock || (isCircuitBlock && isPending)
+                    const Miniature = ex.videoUrl ? 'button' : 'div'
                     return (
                       <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderBottom: `1px solid ${c.border}` }}>
-                        <div style={{
-                          width: 64, height: 64, flexShrink: 0, borderRadius: 6, background: c.text, color: '#fff',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
-                          fontSize: 9, fontWeight: 700, textTransform: 'uppercase', padding: 4, lineHeight: 1.2,
-                        }}>
+                        <Miniature
+                          {...(ex.videoUrl ? { type: 'button', onClick: () => openExerciseVideo(ex), title: 'Voir la vidéo', 'aria-label': `Voir la vidéo : ${ex.name}` } : {})}
+                          style={{
+                            width: 64, height: 64, flexShrink: 0, borderRadius: 6, background: c.text, color: '#fff', border: 'none',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontFamily: 'inherit',
+                            fontSize: 9, fontWeight: 700, textTransform: 'uppercase', padding: 4, lineHeight: 1.2,
+                            cursor: ex.videoUrl ? 'pointer' : 'default',
+                          }}
+                        >
                           {ex.name}
-                        </div>
+                        </Miniature>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 15, fontWeight: 600, color: c.text, textDecoration: 'underline' }}>{ex.name}</div>
                           {ex.muscles && (
