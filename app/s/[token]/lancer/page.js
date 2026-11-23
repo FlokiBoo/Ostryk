@@ -27,7 +27,8 @@ export default function LancerPage({ params }) {
         .eq('athlete_id', ath.id)
         .neq('archived', true)
         .order('created_at', { ascending: false })
-      const progs = estSportif ? programmesPourClient(progsBruts) : progsBruts
+      // La RLS renvoie sans séance un programme dont tout est masqué : rien à lancer, rien à montrer.
+      const progs = estSportif ? programmesPourClient(progsBruts).filter(p => p.program_sessions.length > 0) : progsBruts
 
       const sessionIds = (progs || []).flatMap(p => (p.program_sessions || []).map(s => s.id))
       const { data: comps } = sessionIds.length

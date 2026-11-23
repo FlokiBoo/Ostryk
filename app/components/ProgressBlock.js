@@ -22,7 +22,8 @@ export default function ProgressBlock({ athleteId }) {
 
       // Grouper par exercice, garder les 2 dernières entrées distinctes
       const byExercise = {}
-      history.forEach(h => {
+      // Exercice d'une séance masquée au client : la RLS ne renvoie pas son nom.
+      history.filter(h => h.program_exercises?.name).forEach(h => {
         if (!byExercise[h.program_exercise_id]) byExercise[h.program_exercise_id] = []
         byExercise[h.program_exercise_id].push(h)
       })
