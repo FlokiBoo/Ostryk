@@ -58,6 +58,7 @@ function ProgramsPageInner({ params }) {
   const [assignDone, setAssignDone] = useState(false)
   const [groups, setGroups] = useState([])
   const [newActivityType, setNewActivityType] = useState('Musculation 🏋️')
+  const [newVisibleClient, setNewVisibleClient] = useState(true)
   const [selectedTypes, setSelectedTypes] = useState(new Set())
   const [typesInit, setTypesInit] = useState(false)
   const [objectives, setObjectives] = useState([])
@@ -128,7 +129,7 @@ function ProgramsPageInner({ params }) {
     let firstId = null, firstProgId = null
     for (const aid of newAthleteIds) {
       const { data, error } = await supabase.from('programs')
-        .insert({ athlete_id: aid, title: newTitle.trim(), coach_id: coachId, activity_type: newActivityType, objective_id: aid === athleteId ? (objectiveId || null) : null })
+        .insert({ athlete_id: aid, title: newTitle.trim(), coach_id: coachId, activity_type: newActivityType, visible_client: newVisibleClient, objective_id: aid === athleteId ? (objectiveId || null) : null })
         .select().single()
       if (data) {
         await supabase.from('program_sessions')
@@ -219,6 +220,7 @@ function ProgramsPageInner({ params }) {
         .insert({
           athlete_id: targetId, title: assignModal.title, coach_id: coachId, source_program_id: assignModal.id,
           activity_type: assignModal.activity_type, group_id: assignGroupId, group_batch_id: batchId,
+          visible_client: assignModal.visible_client !== false,
           // Le conseil de rythme doit suivre la copie, sinon il reste invisible du sportif.
           recommended_sessions_per_week: assignModal.recommended_sessions_per_week ?? null,
           min_hours_between_sessions: assignModal.min_hours_between_sessions ?? null,
@@ -229,7 +231,7 @@ function ProgramsPageInner({ params }) {
       for (const sess of (sessions || [])) {
         const { data: newSess } = await supabase.from('program_sessions')
           .insert({
-            program_id: newProg.id, order_index: sess.order_index, title: sess.title || '', source_session_id: sess.id,
+            program_id: newProg.id, order_index: sess.order_index, visible_client: sess.visible_client !== false, title: sess.title || '', source_session_id: sess.id,
             activation: sess.activation, coach_notes: sess.coach_notes, activation_videos: sess.activation_videos || [], circuits: sess.circuits || [],
             warmup_content: sess.warmup_content || null, cooldown_content: sess.cooldown_content || null,
             session_type: sess.session_type || null, recurring_daily_target: sess.recurring_daily_target ?? null,
@@ -247,7 +249,7 @@ function ProgramsPageInner({ params }) {
       }
     }
 
-    notifyAssigned({ athleteIds: selectedIds, kind: 'program', title: assignModal.title })
+    if (assignModal.visible_client !== false) notifyAssigned({ athleteIds: selectedIds, kind: 'program', title: assignModal.title })
     setAssigning(false)
     setAssignDone(true)
   }
@@ -331,6 +333,11 @@ function ProgramsPageInner({ params }) {
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Activité</div>
                 <ActivityTypeSelect value={newActivityType} onChange={setNewActivityType} />
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={newVisibleClient} onChange={e => setNewVisibleClient(e.target.checked)}
+                  style={{ accentColor: 'var(--green)', width: 15, height: 15 }} />
+                Visible par le client
+              </label>
               {!objectiveId && (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -416,7 +423,7 @@ function ProgramsPageInner({ params }) {
                           {typePrograms.map(p => (
                             <div key={p.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', overflow: 'hidden' }}>
                               <Link href={`/programs/${athleteId}/${p.id}`} style={{ display: 'block', padding: '14px 16px', textDecoration: 'none', color: 'inherit' }}>
-                                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{p.title}</div>
+                                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{p.title}{p.visible_client === false && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: 'var(--text3)' }}>Masqué au client</span>}</div>
                                 <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                                   {(p.program_sessions || []).length} séance{(p.program_sessions || []).length !== 1 ? 's' : ''}
                                 </div>
@@ -465,7 +472,7 @@ function ProgramsPageInner({ params }) {
                   {archivedPrograms.map(p => (
                     <div key={p.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', overflow: 'hidden', opacity: 0.7 }}>
                       <Link href={`/programs/${athleteId}/${p.id}`} style={{ display: 'block', padding: '14px 16px', textDecoration: 'none', color: 'inherit' }}>
-                        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{p.title}</div>
+                        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{p.title}{p.visible_client === false && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: 'var(--text3)' }}>Masqué au client</span>}</div>
                         <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                           {(p.program_sessions || []).length} séance{(p.program_sessions || []).length !== 1 ? 's' : ''}
                         </div>

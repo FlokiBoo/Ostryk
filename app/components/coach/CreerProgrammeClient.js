@@ -11,13 +11,14 @@ export default function CreerProgrammeClient({ athleteId, athleteNom, onFermer, 
   const [titre, setTitre] = useState('')
   const [activite, setActivite] = useState('Musculation 🏋️')
   const [enCours, setEnCours] = useState(false)
+  const [visibleClient, setVisibleClient] = useState(true)
 
   const creer = async () => {
     if (!titre.trim() || enCours) return
     setEnCours(true)
     const coachId = await getCoachId()
     const { data, error } = await supabase.from('programs')
-      .insert({ athlete_id: athleteId, title: titre.trim(), coach_id: coachId, activity_type: activite })
+      .insert({ athlete_id: athleteId, title: titre.trim(), coach_id: coachId, activity_type: activite, visible_client: visibleClient })
       .select().single()
     if (!data) {
       alert('Erreur : ' + (error?.message || 'impossible de créer le programme'))
@@ -47,6 +48,11 @@ export default function CreerProgrammeClient({ athleteId, athleteNom, onFermer, 
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Activité</div>
           <ActivityTypeSelect value={activite} onChange={setActivite} />
         </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={visibleClient} onChange={e => setVisibleClient(e.target.checked)}
+            style={{ accentColor: 'var(--green)', width: 15, height: 15 }} />
+          Visible par le client
+        </label>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={creer} disabled={enCours || !titre.trim()} style={{ flex: 1, background: titre.trim() ? 'var(--bordeaux)' : 'var(--border)', color: '#fff', border: 'none', borderRadius: 'var(--r)', padding: 11, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
             {enCours ? 'Création…' : 'Créer et ouvrir'}

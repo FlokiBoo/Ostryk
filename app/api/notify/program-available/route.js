@@ -10,7 +10,7 @@ export async function POST(request) {
   if (!program) return NextResponse.json({ error: 'Programme introuvable.' }, { status: 404 })
 
   const { data: sessions } = await supabaseAdmin.from('program_sessions')
-    .select('session_type, coach_notes').eq('program_id', programId)
+    .select('session_type, coach_notes').eq('program_id', programId).eq('visible_client', true)
   const sessionCount = (sessions || []).length
   const explication = (sessions || []).find(s => s.session_type === 'explication')?.coach_notes?.trim()
 

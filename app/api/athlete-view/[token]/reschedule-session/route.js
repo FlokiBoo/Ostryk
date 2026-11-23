@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { estVisibleClient } from '@/lib/visibiliteClient'
 import { isIsoDate, planFrom, ordreSeances } from '@/lib/programSchedule'
 
 // "Décaler" depuis l'accueil : la séance passe à la date choisie et les séances suivantes non
@@ -33,15 +34,16 @@ export async function POST(request, { params }) {
   if (!program || program.athlete_id !== athlete.id) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const { data: sessions } = await supabaseAdmin.from('program_sessions')
-    .select('id, order_index, session_type, week_number, day_of_week').eq('program_id', target.program_id).order('order_index')
+    .select('id, order_index, session_type, week_number, day_of_week, visible_client').eq('program_id', target.program_id).order('order_index')
   const { data: completions } = await supabaseAdmin.from('program_completions')
     .select('program_session_id, skipped').eq('athlete_id', athlete.id).in('program_session_id', sessions.map(s => s.id))
   // Même définition de "faite" que l'accueil : une séance sautée reste à faire.
   const doneIds = new Set((completions || []).filter(c => !c.skipped).map(c => c.program_session_id))
   if (doneIds.has(sessionId)) return NextResponse.json({ error: 'séance déjà faite' }, { status: 400 })
 
-  const progression = [...sessions].sort(ordreSeances).filter(s => s.session_type !== 'recurrent')
+  const progression = [...sessions].sort(ordreSeances).filter(s => s.session_type !== 'recurrent' && estVisibleClient(s))
   const from = progression.findIndex(s => s.id === sessionId)
+  if (from === -1) return NextResponse.json({ error: 'séance introuvable' }, { status: 404 })
   const upcoming = progression.slice(from).filter(s => !doneIds.has(s.id))
   const plan = planFrom(upcoming, date, {
     athleteDays: program.athlete_days_of_week,

@@ -185,7 +185,7 @@ export default function MicrocyclesBlock({ athleteId, athleteToken }) {
 
       for (const sess of (sessions || [])) {
         const { data: newSess } = await supabase.from('program_sessions')
-          .insert({ program_id: newProg.id, order_index: sess.order_index, title: sess.title || '', coach_notes: sess.coach_notes, activation: sess.activation, activation_videos: sess.activation_videos, warmup_content: sess.warmup_content || null, cooldown_content: sess.cooldown_content || null, circuits: sess.circuits, source_session_id: sess.id, session_type: sess.session_type || null, recurring_daily_target: sess.recurring_daily_target ?? null, week_number: sess.week_number, materiel: sess.materiel || null, day_of_week: sess.day_of_week ?? null, hidden_until_run: !!sess.hidden_until_run })
+          .insert({ program_id: newProg.id, order_index: sess.order_index, visible_client: sess.visible_client !== false, title: sess.title || '', coach_notes: sess.coach_notes, activation: sess.activation, activation_videos: sess.activation_videos, warmup_content: sess.warmup_content || null, cooldown_content: sess.cooldown_content || null, circuits: sess.circuits, source_session_id: sess.id, session_type: sess.session_type || null, recurring_daily_target: sess.recurring_daily_target ?? null, week_number: sess.week_number, materiel: sess.materiel || null, day_of_week: sess.day_of_week ?? null, hidden_until_run: !!sess.hidden_until_run })
           .select().single()
         if (!newSess) continue
 

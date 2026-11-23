@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { estVisibleClient } from '@/lib/visibiliteClient'
 
 // Décale une séance de N séances plus tard dans la file des séances restantes (ni validées, ni
 // déjà sautées) du même programme. Les séances déjà traitées entre-temps ne bougent pas.
@@ -29,19 +30,19 @@ export async function POST(request, { params }) {
   if (!program || program.athlete_id !== athlete.id) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const { data: sessions } = await supabaseAdmin.from('program_sessions')
-    .select('id, order_index').eq('program_id', target.program_id).order('order_index')
+    .select('id, order_index, visible_client').eq('program_id', target.program_id).order('order_index')
   const { data: completions } = await supabaseAdmin.from('program_completions')
     .select('program_session_id').eq('athlete_id', athlete.id).in('program_session_id', sessions.map(s => s.id))
   const processedIds = new Set((completions || []).map(c => c.program_session_id))
 
   const idx = sessions.findIndex(s => s.id === sessionId)
-  if (idx === -1) return NextResponse.json({ error: 'séance introuvable' }, { status: 404 })
+  if (idx === -1 || !estVisibleClient(sessions[idx])) return NextResponse.json({ error: 'séance introuvable' }, { status: 404 })
 
   const arr = [...sessions]
   const [item] = arr.splice(idx, 1)
   let count = 0, insertAt = arr.length
   for (let i = idx; i < arr.length; i++) {
-    if (!processedIds.has(arr[i].id)) {
+    if (!processedIds.has(arr[i].id) && estVisibleClient(arr[i])) {
       count++
       if (count === offset) { insertAt = i + 1; break }
     }

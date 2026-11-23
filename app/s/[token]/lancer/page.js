@@ -4,6 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { coachingHref } from '@/lib/coachingHref'
+import { programmesPourClient } from '@/lib/visibiliteClient'
 
 export default function LancerPage({ params }) {
   const { token } = use(params)
@@ -18,12 +19,15 @@ export default function LancerPage({ params }) {
       if (!ath) { setPrograms([]); return }
       setAthlete(ath)
 
-      const { data: progs } = await supabase
+      const { data: { user } } = await supabase.auth.getUser()
+      const estSportif = !!user?.app_metadata?.athlete_token
+      const { data: progsBruts } = await supabase
         .from('programs')
-        .select('id, title, activity_type, pinned_board, program_sessions(id, title, order_index, program_exercises(name))')
+        .select('id, title, activity_type, pinned_board, visible_client, program_sessions(id, title, order_index, visible_client, program_exercises(name))')
         .eq('athlete_id', ath.id)
         .neq('archived', true)
         .order('created_at', { ascending: false })
+      const progs = estSportif ? programmesPourClient(progsBruts) : progsBruts
 
       const sessionIds = (progs || []).flatMap(p => (p.program_sessions || []).map(s => s.id))
       const { data: comps } = sessionIds.length

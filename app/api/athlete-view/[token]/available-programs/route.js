@@ -102,7 +102,7 @@ export async function POST(request, { params }) {
   for (const sess of (sessions || [])) {
     const { data: newSess } = await supabaseAdmin.from('program_sessions')
       .insert({
-        program_id: newProg.id, order_index: sess.order_index, title: sess.title || '', source_session_id: sess.id,
+        program_id: newProg.id, order_index: sess.order_index, visible_client: sess.visible_client !== false, title: sess.title || '', source_session_id: sess.id,
         activation: sess.activation || null, coach_notes: sess.coach_notes || null,
         activation_videos: sess.activation_videos || [], circuits: sess.circuits || [],
         warmup_content: sess.warmup_content || null, cooldown_content: sess.cooldown_content || null,

@@ -21,6 +21,7 @@ import { codeSeance } from '@/lib/codeSeance'
 import {
   ClipboardText, CalendarBlank, Trash, UsersThree, Repeat,
   CopySimple, ArrowsOutCardinal, Barbell, Heartbeat, Columns, X, CheckCircle,
+  Eye, EyeSlash,
 } from '@phosphor-icons/react'
 
 function today() {
@@ -43,7 +44,7 @@ function emptyExo(order) {
 // La puce est aussi une zone de dépôt (`chip:<id>`) : lâcher une séance dessus la place juste
 // au-dessus. Pendant le glisser, c'est le DragOverlay de SessionList qui suit le pointeur (avec le nombre de séances
 // emportées) ; les puces d'origine restent en place, estompées.
-function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact, doneAt, dimmed }) {
+function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, onToggleVisible, compact, doneAt, dimmed }) {
   const { attributes, listeners, setNodeRef: setDragRef } = useDraggable({ id: s.id })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `chip:${s.id}` })
   const setNodeRef = (node) => { setDragRef(node); setDropRef(node) }
@@ -51,12 +52,13 @@ function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact
     opacity: dimmed ? 0.35 : 1,
     boxShadow: isOver && !dimmed ? '0 -3px 0 0 var(--bordeaux)' : undefined,
   }
-  const color = selected ? '#fff' : 'var(--green)'
+  const masquee = s.visible_client === false
+  const color = selected ? '#fff' : masquee ? 'var(--text3)' : 'var(--green)'
   return (
     <div ref={setNodeRef} style={{
       display: 'flex', alignItems: 'center', gap: 4, position: 'relative',
-      background: selected ? 'var(--green)' : 'var(--green-light)',
-      border: '1px solid var(--green)', color,
+      background: selected ? 'var(--green)' : masquee ? 'var(--bg2)' : 'var(--green-light)',
+      border: masquee ? '1px dashed var(--border2)' : '1px solid var(--green)', color,
       borderRadius: compact ? 20 : 'var(--r)', padding: compact ? '3px 6px 3px 10px' : '5px 6px 5px 8px',
       fontSize: compact ? 11 : 14, fontWeight: 700, lineHeight: 1.25,
       ...style,
@@ -76,6 +78,14 @@ function SessionChip({ s, selected, onToggleSelect, onOpen, onDuplicate, compact
         {codeSeance(s) && <span style={{ marginRight: 6, fontWeight: 800 }}>{codeSeance(s)}</span>}
         {s.title || (codeSeance(s) ? '' : 'Séance')}
       </button>
+      {onToggleVisible && (
+        <button onClick={() => onToggleVisible(s.id)} role="switch" aria-checked={!masquee}
+          aria-label={`Séance ${s.title || ''} visible par le client`}
+          title={masquee ? 'Masquée au client (1:1) — cliquer pour la rendre visible' : 'Visible par le client — cliquer pour la masquer'}
+          style={{ background: 'none', border: 'none', padding: 3, display: 'flex', alignItems: 'center', gap: 3, color: 'inherit', cursor: 'pointer', flexShrink: 0, fontSize: 11, fontWeight: 700 }}>
+          {masquee ? <><EyeSlash size={compact ? 12 : 14} /> Masquée</> : <Eye size={compact ? 12 : 14} />}
+        </button>
+      )}
       <button onClick={() => onDuplicate(s.id)} title="Dupliquer cette séance"
         style={{ background: 'none', border: 'none', padding: 3, display: 'flex', color: 'inherit', cursor: 'pointer', flexShrink: 0, opacity: 0.85 }}>
         <CopySimple size={compact ? 12 : 14} />
@@ -120,7 +130,7 @@ function EndDrop() {
   )
 }
 
-function SessionList({ sessions, onAdd, onAddFromWorkout, onOpenSession, onApplyLayout, onDuplicateSession, selectedIds, doneDates, onToggleSelect }) {
+function SessionList({ sessions, onAdd, onAddFromWorkout, onOpenSession, onApplyLayout, onDuplicateSession, onToggleVisible, selectedIds, doneDates, onToggleSelect }) {
   const ordered = sessions.filter(s => s.session_type !== 'recurrent').sort(byOrder)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 6 } }))
   const [movingIds, setMovingIds] = useState([])
@@ -173,7 +183,7 @@ function SessionList({ sessions, onAdd, onAddFromWorkout, onOpenSession, onApply
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 22, flexShrink: 0, textAlign: 'right', fontSize: 12, fontWeight: 700, color: 'var(--text3)' }}>{i + 1}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <SessionChip s={s} selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} dimmed={movingIds.includes(s.id)} />
+                <SessionChip s={s} selected={selectedIds.has(s.id)} doneAt={doneDates[s.id]} onToggleSelect={onToggleSelect} onOpen={onOpenSession} onDuplicate={onDuplicateSession} onToggleVisible={onToggleVisible} dimmed={movingIds.includes(s.id)} />
               </div>
             </div>
           ))}
@@ -410,7 +420,7 @@ function ProgramEditorPage({ params }) {
       if (!clientSess) {
         // Nouvelle séance côté template, jamais vue par ce client : on la crée
         const { data: created } = await supabase.from('program_sessions')
-          .insert({ program_id: cp.id, order_index: sessOrderIndex, title: fields.title, source_session_id: sessId, seance_lettre: fields.seance_lettre ?? null, seance_numero: fields.seance_numero ?? null, session_type: fields.session_type || null, materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run, warmup_content: fields.warmup_content ?? null, cooldown_content: fields.cooldown_content ?? null })
+          .insert({ program_id: cp.id, order_index: sessOrderIndex, visible_client: fields.visible_client !== false, title: fields.title, source_session_id: sessId, seance_lettre: fields.seance_lettre ?? null, seance_numero: fields.seance_numero ?? null, session_type: fields.session_type || null, materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run, warmup_content: fields.warmup_content ?? null, cooldown_content: fields.cooldown_content ?? null })
           .select().single()
         clientSess = created
         if (!clientSess) continue
@@ -511,6 +521,7 @@ function ProgramEditorPage({ params }) {
     const pending = sessions.filter(s => s.needs_sync)
     for (const s of pending) {
       const sessFields = {
+        visible_client: s.visible_client !== false,
         title: s.title || '', activation: s.activation || null,
         seance_lettre: s.seance_lettre || null, seance_numero: s.seance_numero ?? null,
         coach_notes: s.coach_notes || null, activation_videos: s.activation_videos || [],
@@ -537,6 +548,29 @@ function ProgramEditorPage({ params }) {
       await notifyAssigned({ athleteIds: followers.map(f => f.athlete_id), kind: 'program_updated', title: program?.title || 'Programme' })
     }
     setSyncing(false)
+  }
+
+  const toggleProgramVisible = async () => {
+    if (!program) return
+    const next = program.visible_client === false
+    setProgram(p => ({ ...p, visible_client: next }))
+    const { error } = await supabase.from('programs').update({ visible_client: next }).eq('id', programId)
+    if (error) {
+      setProgram(p => ({ ...p, visible_client: !next }))
+      alert('Erreur : ' + error.message)
+    }
+  }
+
+  const toggleSessionVisible = async (id) => {
+    const seance = sessions.find(s => s.id === id)
+    if (!seance) return
+    const next = seance.visible_client === false
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, visible_client: next } : s))
+    const { error } = await supabase.from('program_sessions').update({ visible_client: next }).eq('id', id)
+    if (error) {
+      setSessions(prev => prev.map(s => s.id === id ? { ...s, visible_client: !next } : s))
+      alert('Erreur : ' + error.message)
+    }
   }
 
   const toggleProgramAvailable = async () => {
@@ -828,6 +862,7 @@ function ProgramEditorPage({ params }) {
         athlete_id: targetId, title: program.title, coach_id: coachId,
         source_program_id: programId, activity_type: program.activity_type,
         group_id: program.group_id, group_batch_id: program.group_batch_id,
+        visible_client: program.visible_client !== false,
       })
       .select().single()
 
@@ -835,7 +870,7 @@ function ProgramEditorPage({ params }) {
       for (const sess of (sourceSessions || [])) {
         const { data: newSess } = await supabase.from('program_sessions')
           .insert({
-            program_id: newProg.id, order_index: sess.order_index, title: sess.title || '', source_session_id: sess.id,
+            program_id: newProg.id, order_index: sess.order_index, visible_client: sess.visible_client !== false, title: sess.title || '', source_session_id: sess.id,
             activation: sess.activation || null, coach_notes: sess.coach_notes || null,
             activation_videos: sess.activation_videos || [], circuits: sess.circuits || [],
             warmup_content: sess.warmup_content || null, cooldown_content: sess.cooldown_content || null,
@@ -854,7 +889,7 @@ function ProgramEditorPage({ params }) {
       }
       setParticipants(prev => [...prev, { id: newProg.id, athlete_id: targetId, athletes: { name: otherAthletes.find(a => a.id === targetId)?.name } }])
       setOtherAthletes(prev => prev.filter(a => a.id !== targetId))
-      notifyAssigned({ athleteIds: [targetId], kind: 'program', title: program.title })
+      if (program.visible_client !== false) notifyAssigned({ athleteIds: [targetId], kind: 'program', title: program.title })
     }
     setAddingParticipantId(null)
   }
@@ -1207,6 +1242,29 @@ function ProgramEditorPage({ params }) {
           </div>
         )}
 
+        {!isTemplate && (
+          <div style={{ margin: '12px 16px 0', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--rl)', padding: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Visible par le client</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                {program?.visible_client === false
+                  ? 'Programme masqué : le client ne le voit pas. Vous pouvez toujours lancer ses séances.'
+                  : "L'œil de chaque séance permet de masquer les séances de 1:1."}
+              </div>
+            </div>
+            <button onClick={toggleProgramVisible} role="switch" aria-checked={program?.visible_client !== false} aria-label="Programme visible par le client"
+              style={{
+                width: 40, height: 22, borderRadius: 20, border: 'none', flexShrink: 0, cursor: 'pointer', position: 'relative',
+                background: program?.visible_client !== false ? 'var(--green)' : 'var(--border2)', transition: 'background 0.15s',
+              }}>
+              <span style={{
+                position: 'absolute', top: 2, left: program?.visible_client !== false ? 20 : 2, width: 18, height: 18, borderRadius: '50%',
+                background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+              }} />
+            </button>
+          </div>
+        )}
+
         <SessionList
           sessions={sessions}
           onAdd={mode => addSessionAt(null, null, mode)}
@@ -1214,6 +1272,7 @@ function ProgramEditorPage({ params }) {
           onOpenSession={goToSessionPage}
           onApplyLayout={applyLayout}
           onDuplicateSession={duplicateFromChip}
+          onToggleVisible={isGroupCycle ? undefined : toggleSessionVisible}
           selectedIds={selectedSessionIds}
           doneDates={doneDates}
           onToggleSelect={toggleSessionSelected}

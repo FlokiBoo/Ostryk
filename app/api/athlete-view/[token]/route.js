@@ -6,6 +6,7 @@ import { buildKnownRaces } from '@/lib/raceEstimates'
 import { sectionDeSeance } from '@/lib/sectionsTexte'
 import { SUBSCRIPTIONS_ENABLED } from '@/lib/subscriptionTiers'
 import { ordreSeances } from '@/lib/programSchedule'
+import { programmesPourClient } from '@/lib/visibiliteClient'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -78,9 +79,12 @@ export async function GET(request, { params }) {
   // coach l'a personnalisé) pour donner envie de passer payant. Un programme donné directement par
   // le coach (is_self_service = false) reste toujours accessible en entier, quel que soit l'abonnement.
   // Chacun avance à son rythme, pas de notion de semaine.
+  // Filtré ici, avant tout le reste : le quota gratuit ne compte que les séances visibles, et une
+  // séance masquée n'atteint jamais le navigateur du client. Le coach garde tout pour la lancer.
+  const progsVisibles = isCoach ? (progs || []) : programmesPourClient(progs)
   const shouldGateFreeTier = SUBSCRIPTIONS_ENABLED && !isCoach && athlete.subscription_status !== 'active'
   const gatedProgs = shouldGateFreeTier
-    ? (progs || []).map(p => {
+    ? progsVisibles.map(p => {
         if (!p.is_self_service) return p
         const limit = p.free_sessions_count ?? 3
         const sorted = [...(p.program_sessions || [])].sort(ordreSeances)
@@ -94,7 +98,7 @@ export async function GET(request, { params }) {
           ),
         }
       })
-    : (progs || [])
+    : progsVisibles
 
   // Séances de groupe volontairement cachées par le coach (contenu secret, comme en salle)
   // jusqu'à ce qu'il les "révèle" en validant la séance depuis l'espace groupe (présence + bilan
@@ -137,7 +141,11 @@ export async function GET(request, { params }) {
   // Profil perso du coach (bouton "Switch to athlete") : simule l'abonnement le plus cher pour que
   // le coach voie exactement l'expérience d'un client payant, sans passer par un vrai abonnement
   // Stripe. Purement côté réponse — la ligne `athletes` en base n'est pas modifiée.
-  const responseAthlete = athlete.is_coach ? { ...athlete, subscription_status: 'active', subscription_tier: 'B' } : athlete
+  const athleteAffiche = athlete.is_coach ? { ...athlete, subscription_status: 'active', subscription_tier: 'B' } : athlete
+  // Séance en cours devenue masquée : l'accueil ne doit pas rester ancré sur un id introuvable.
+  const ancreVisible = isCoach || !athlete.current_session_id
+    || progsVisibles.some(p => (p.program_sessions || []).some(s => s.id === athlete.current_session_id))
+  const responseAthlete = ancreVisible ? athleteAffiche : { ...athleteAffiche, current_session_id: null }
 
   // Échauffement / retour au calme de chaque séance, déjà convertis depuis l'ancien format s'il le
   // faut (lib/sectionsTexte.js) : le client reçoit { echauffement, retourAuCalme } prêts à
