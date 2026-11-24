@@ -48,6 +48,7 @@ décrivent les **changements** sans décrire l'état de départ.
 | `20261101090000_clients_suivis.sql` | Clients suivis | ☑ 2026-11-01 |
 | `20261101150000_suivis_vers_1to1.sql` | Suivi = 1:1 | ☐ |
 | `20261116090000_code_seance.sql` | Codes de séance SA1… | ☑ 2026-11-16 |
+| `20261124090000_phase_seance.sql` | Phase de séance P1… | ☐ |
 
 Tous ces fichiers sont **additifs** : ils ajoutent des colonnes nullables, des contraintes qui ne
 mordent que sur des valeurs hors bornes, et une policy qui élargit l'accès. Aucun ne supprime, ne

@@ -17,7 +17,7 @@ import { notifyAssigned, notifyProgramAvailable } from '@/lib/notify'
 import SessionBlockEditor from '@/app/components/SessionBlockEditor'
 import SeanceRealisee from '@/app/components/coach/SeanceRealisee'
 import { copieExercice } from '@/lib/copieExercice'
-import { codeSeance } from '@/lib/codeSeance'
+import { codeSeance, memePhase } from '@/lib/codeSeance'
 import {
   ClipboardText, CalendarBlank, Trash, UsersThree, Repeat,
   CopySimple, ArrowsOutCardinal, Barbell, Heartbeat, Columns, X, CheckCircle,
@@ -420,7 +420,7 @@ function ProgramEditorPage({ params }) {
       if (!clientSess) {
         // Nouvelle séance côté template, jamais vue par ce client : on la crée
         const { data: created } = await supabase.from('program_sessions')
-          .insert({ program_id: cp.id, order_index: sessOrderIndex, visible_client: fields.visible_client !== false, title: fields.title, source_session_id: sessId, seance_lettre: fields.seance_lettre ?? null, seance_numero: fields.seance_numero ?? null, session_type: fields.session_type || null, materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run, warmup_content: fields.warmup_content ?? null, cooldown_content: fields.cooldown_content ?? null })
+          .insert({ program_id: cp.id, order_index: sessOrderIndex, visible_client: fields.visible_client !== false, title: fields.title, source_session_id: sessId, seance_lettre: fields.seance_lettre ?? null, seance_numero: fields.seance_numero ?? null, phase_numero: fields.phase_numero ?? null, session_type: fields.session_type || null, materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run, warmup_content: fields.warmup_content ?? null, cooldown_content: fields.cooldown_content ?? null })
           .select().single()
         clientSess = created
         if (!clientSess) continue
@@ -431,7 +431,7 @@ function ProgramEditorPage({ params }) {
         if (completion) continue
 
         await supabase.from('program_sessions').update({
-          title: fields.title, activation: fields.activation, seance_lettre: fields.seance_lettre ?? null, seance_numero: fields.seance_numero ?? null,
+          title: fields.title, activation: fields.activation, seance_lettre: fields.seance_lettre ?? null, seance_numero: fields.seance_numero ?? null, phase_numero: fields.phase_numero ?? null,
           coach_notes: fields.coach_notes, activation_videos: fields.activation_videos,
           circuits: fields.circuits, session_type: fields.session_type || null,
           materiel: fields.materiel || null, day_of_week: fields.day_of_week ?? null, hidden_until_run: !!fields.hidden_until_run,
@@ -523,7 +523,7 @@ function ProgramEditorPage({ params }) {
       const sessFields = {
         visible_client: s.visible_client !== false,
         title: s.title || '', activation: s.activation || null,
-        seance_lettre: s.seance_lettre || null, seance_numero: s.seance_numero ?? null,
+        seance_lettre: s.seance_lettre || null, seance_numero: s.seance_numero ?? null, phase_numero: s.phase_numero ?? null,
         coach_notes: s.coach_notes || null, activation_videos: s.activation_videos || [],
         circuits: s.circuits || [], session_type: s.session_type || null,
         materiel: s.materiel || null, day_of_week: s.day_of_week ?? null, hidden_until_run: !!s.hidden_until_run,
@@ -714,8 +714,8 @@ function ProgramEditorPage({ params }) {
     // sans re-render, l'état y serait périmé et donnerait deux fois le même numéro.
     let code = {}
     if (src.seance_lettre) {
-      const { data: memeLettre } = await supabase.from('program_sessions')
-        .select('seance_numero').eq('program_id', programId).eq('seance_lettre', src.seance_lettre)
+      const { data: memeLettre } = await memePhase(supabase.from('program_sessions')
+        .select('seance_numero').eq('program_id', programId).eq('seance_lettre', src.seance_lettre), src.phase_numero ?? null)
       code = { seance_numero: Math.max(0, ...(memeLettre || []).map(x => x.seance_numero ?? 0)) + 1 }
     }
     const { data: newSession, error: sessErr } = await supabase.from('program_sessions')

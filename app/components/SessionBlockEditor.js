@@ -34,7 +34,7 @@ import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVi
 import { sectionDeSeance, lignesDeProtocole } from '@/lib/sectionsTexte'
 import { historiqueParExercice, cleExercice } from '@/lib/historiqueExercice'
 import { telechargerSeancePdf } from '@/lib/seancePdf'
-import { codeSeance, codesExercices, nomsParCode, normaliserLettre, memeNom } from '@/lib/codeSeance'
+import { codeSeance, codesExercices, nomsParCode, normaliserLettre, memeNom, memePhase } from '@/lib/codeSeance'
 
 // Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
 // petit helper autonome plutôt qu'un import cross-fichier).
@@ -471,6 +471,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [programId, setProgramId] = useState(null)
   const [seanceLettre, setSeanceLettre] = useState('')
   const [seanceNumero, setSeanceNumero] = useState('')
+  // Phase du programme (P1, P2…), indépendante du code de séance.
+  const [phaseNumero, setPhaseNumero] = useState('')
   // Noms par code d'exercice tels qu'enregistrés en base (au chargement, puis après chaque Save) :
   // c'est la référence pour détecter « A1 a changé » au Save suivant.
   const nomsEnregistres = useRef({})
@@ -601,7 +603,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     let cancelled = false
     async function load() {
       const [{ data: sessionRow }, { data: exerciseRows }, { data: movs }] = await Promise.all([
-        supabase.from('program_sessions').select('id, program_id, seance_lettre, seance_numero, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, warmup_content, cooldown_content, timer_config, activation, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
+        supabase.from('program_sessions').select('id, program_id, phase_numero, seance_lettre, seance_numero, title, coach_notes, circuits, session_type, recurring_daily_target, activity_mode, warmup_block, cooldown_block, warmup_content, cooldown_content, timer_config, activation, activation_videos, materiel, hidden_until_run, programs(group_id)').eq('id', sessionId).single(),
         supabase.from('program_exercises').select('id, order_index, name, sets, rest, note, materiel, superset_group, block_type, pace_base, pct_low, pct_high, set_details, timer_config, focus_muscles, cardio_structure').eq('program_session_id', sessionId).order('order_index'),
         // Bibliothèque récupérée en entier (petit volume) plutôt que filtrée par nom — sensible à
         // la casse côté Postgres, raterait silencieusement un nom mal accordé. Même approche que
@@ -618,6 +620,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       setProgramId(sessionRow.program_id || null)
       setSeanceLettre(sessionRow.seance_lettre || '')
       setSeanceNumero(sessionRow.seance_numero != null ? String(sessionRow.seance_numero) : '')
+      setPhaseNumero(sessionRow.phase_numero != null ? String(sessionRow.phase_numero) : '')
       nomsEnregistres.current = nomsParCode(exerciseRows || [])
       setDescription(sessionRow.coach_notes || '')
       setSessionType(sessionRow.session_type || null)
@@ -776,6 +779,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
           ...(canManageCatalog ? {
             seance_lettre: seanceLettre || null,
             seance_numero: seanceLettre && seanceNumero !== '' ? parseInt(seanceNumero, 10) : null,
+            phase_numero: phaseNumero !== '' ? parseInt(phaseNumero, 10) : null,
           } : {}),
           warmup_block: extractBlockMeta(blocksAEcrire, 'warmup'), cooldown_block: extractBlockMeta(blocksAEcrire, 'cooldown'),
           ...(sections.warmup?.modifiee ? { warmup_content: sections.warmup.contenu } : {}),
@@ -825,9 +829,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const proposerPropagation = async (remplaces) => {
     const numero = parseInt(seanceNumero, 10)
     if (!seanceLettre || !programId || Number.isNaN(numero)) return
-    const { data: suivantes } = await supabase.from('program_sessions')
-      .select('id, title, seance_lettre, seance_numero, program_exercises(id, name, order_index, superset_group, block_type)')
-      .eq('program_id', programId).eq('seance_lettre', seanceLettre).gt('seance_numero', numero)
+    // Même phase seulement : SA1 de la phase 2 n'est pas la suite de SA3 de la phase 1.
+    const { data: suivantes } = await memePhase(supabase.from('program_sessions')
+      .select('id, title, phase_numero, seance_lettre, seance_numero, program_exercises(id, name, order_index, superset_group, block_type)')
+      .eq('program_id', programId).eq('seance_lettre', seanceLettre).gt('seance_numero', numero),
+      phaseNumero !== '' ? parseInt(phaseNumero, 10) : null)
       .order('seance_numero')
     if (!suivantes?.length) return
     const { data: faites } = await supabase.from('program_completions')
@@ -1775,8 +1781,15 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
             <X size={22} />
           </button>
           {canManageCatalog && (
-            <div title="Code de séance : S + lettre + numéro (ex. SA1). Dupliquer SA1 crée SA2."
+            <div title="Phase (P1, P2…) puis code de séance : S + lettre + numéro (ex. SA1). Dupliquer SA1 crée SA2 dans la même phase."
               style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, fontSize: 15, fontWeight: 700, color: c.textMuted }}>
+              P
+              <input
+                value={phaseNumero}
+                onChange={e => { setPhaseNumero(e.target.value.replace(/[^0-9]/g, '').slice(0, 2)); setUnsavedChanges(true) }}
+                placeholder="1" inputMode="numeric" aria-label="Numéro de la phase"
+                style={{ ...input, width: 40, fontSize: 15, padding: '10px 4px', textAlign: 'center', fontWeight: 700, marginRight: 8 }}
+              />
               S
               <input
                 value={seanceLettre}
@@ -1795,7 +1808,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
           <input
             value={sessionTitle}
             onChange={e => { setSessionTitle(e.target.value); setUnsavedChanges(true) }}
-            placeholder='Workout name &quot;Standard&quot;'
+            placeholder='Texte libre (ex. Force bas du corps)'
             style={{ ...input, flex: 1, fontSize: 15, padding: '10px 14px' }}
           />
           {savedFlash && <span style={{ fontSize: 13, color: c.blue, fontWeight: 600 }}>✓ Sauvegardé</span>}
