@@ -413,15 +413,54 @@ function idsDesLignes(blocks) {
   return ids
 }
 
-// Ce qui a été enregistré, par id d'exercice de l'éditeur : son code (A1…), son nom, sa consigne.
-function etatParExercice(rows, ids) {
+// JSON à clés triées : jsonb renvoie ses clés dans un autre ordre que celui où on les a écrites.
+const stable = v => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x)
+  ? Object.keys(x).sort().reduce((o, cle) => { o[cle] = x[cle]; return o }, {})
+  : x))
+const estVide = v => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
+
+// Tout ce qui se règle sur un exercice en dehors de son nom et de sa consigne.
+const PRESCRIPTION = ['sets', 'rest', 'set_details', 'materiel', 'focus_muscles', 'pace_base', 'pct_low', 'pct_high', 'cardio_structure', 'timer_config']
+const prescriptionDe = r => stable(Object.fromEntries(PRESCRIPTION.map(k => [k, estVide(r?.[k]) ? null : r[k]])))
+
+// Ce qui a été enregistré, par id d'exercice de l'éditeur : son code (A1…), son nom, sa consigne,
+// sa prescription telle que l'éditeur la réécrit (`presc`, pour détecter un changement) et telle
+// qu'elle est en base (`prescBrute`, pour savoir si une séance suivante était identique).
+function etatParExercice(rows, ids, bruts = rows) {
   const codes = codesExercices(rows)
   const etat = {}
   rows.forEach((r, i) => {
-    if (ids[i]) etat[ids[i]] = { code: codes[i], nom: (r.name || '').trim(), note: (r.note || '').trim() }
+    if (ids[i]) {
+      etat[ids[i]] = {
+        code: codes[i], nom: (r.name || '').trim(), note: (r.note || '').trim(),
+        presc: prescriptionDe(r), prescBrute: prescriptionDe(bruts[i]),
+      }
+    }
   })
   return etat
 }
+
+// Réglages de la séance elle-même proposés au report.
+const CHAMPS_SEANCE = [
+  ['title', 'Texte libre (titre)'],
+  ['coach_notes', 'Notes de séance'],
+  ['warmup_content', 'Préparation'],
+  ['warmup_block', 'Préparation (titre, description)'],
+  ['cooldown_content', 'Retour au calme'],
+  ['cooldown_block', 'Retour au calme (titre, description)'],
+  ['circuits', 'Circuits'],
+  ['materiel', 'Matériel'],
+  ['timer_config', 'Minuteur'],
+]
+// Circuits : ni leur id (différent d'une séance à l'autre, régénéré au Save) ni leur position
+// (afterExerciseIndex bouge dès qu'on ajoute ou retire un exercice avant eux, et l'ajout / la
+// suppression reportés la recalent déjà chez les séances suivantes) : seul leur contenu compte.
+const normChamp = (cle, v) => {
+  if (estVide(v)) return 'null'
+  if (cle === 'circuits') return stable(v.map(({ id: _id, afterExerciseIndex: _pos, ...c }) => c))
+  return stable(typeof v === 'string' ? v.trim() || null : v)
+}
+const champsNormalises = obj => Object.fromEntries(CHAMPS_SEANCE.map(([cle]) => [cle, normChamp(cle, obj[cle])]))
 
 // Différences entre le dernier enregistrement et celui-ci, exprimées par emplacement de l'ANCIEN
 // code : un exercice inséré décale les codes (l'ancien A1 devient A2), mais dans les séances
@@ -457,6 +496,12 @@ function changementsDepuis(avant, rows, ids) {
     }
     if (prev.note !== note) {
       changements.push({ type: 'consigne', code: prev.code, codeAffiche: code, nom, ancienne: prev.note, nouvelle: note })
+    }
+    if (prev.presc !== prescriptionDe(r)) {
+      changements.push({
+        type: 'prescription', code: prev.code, codeAffiche: code, nom, ancienneBrute: prev.prescBrute,
+        valeurs: Object.fromEntries(PRESCRIPTION.map(k => [k, estVide(r[k]) ? null : r[k]])),
+      })
     }
   })
   const presents = new Set(ids)
@@ -630,7 +675,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [phaseNumero, setPhaseNumero] = useState('')
   // État enregistré de chaque exercice (au chargement, puis après chaque Save), par id d'éditeur :
   // la référence pour détecter au Save suivant un ajout, un remplacement ou une consigne modifiée.
-  const etatEnregistre = useRef({})
+  const etatEnregistre = useRef({ exos: {}, champs: {}, champsBruts: {} })
   // Proposition de report de ces changements sur les séances suivantes de la même lettre.
   const [propagation, setPropagation] = useState(null)
   const [propagationEnCours, setPropagationEnCours] = useState(false)
@@ -776,7 +821,6 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       setSeanceLettre(sessionRow.seance_lettre || '')
       setSeanceNumero(sessionRow.seance_numero != null ? String(sessionRow.seance_numero) : '')
       setPhaseNumero(sessionRow.phase_numero != null ? String(sessionRow.phase_numero) : '')
-      etatEnregistre.current = etatParExercice(exerciseRows || [], (exerciseRows || []).map(r => `ex-${r.id}`))
       setDescription(sessionRow.coach_notes || '')
       setSessionType(sessionRow.session_type || null)
       setActivityMode(sessionRow.activity_mode || 'standard')
@@ -808,6 +852,22 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         }
       }
       setSections(lues)
+      // Référence du report : la séance telle que l'éditeur la réécrirait sans rien toucher
+      // (comparée au Save suivant), et telle qu'elle est en base (comparée aux séances suivantes).
+      {
+        const idsCharges = idsDesLignes(builtBlocks)
+        const parId = Object.fromEntries((exerciseRows || []).map(r => [`ex-${r.id}`, r]))
+        etatEnregistre.current = {
+          exos: etatParExercice(flattenBlocksToExerciseRows(builtBlocks, sessionRow.activity_mode || 'standard'), idsCharges, idsCharges.map(id => parId[id] || {})),
+          champs: champsNormalises({
+            ...sessionRow,
+            circuits: flattenBlocksToCircuits(builtBlocks),
+            warmup_block: extractBlockMeta(builtBlocks, 'warmup'),
+            cooldown_block: extractBlockMeta(builtBlocks, 'cooldown'),
+          }),
+          champsBruts: champsNormalises(sessionRow),
+        }
+      }
       setBlocks(builtBlocks)
       if (builtBlocks.length) setActiveBlockId(builtBlocks[0].id)
       setAddMenuOpen((exerciseRows || []).length === 0 && !(sessionRow.circuits || []).length)
@@ -928,8 +988,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         }
       }
 
-      await supabase.from('program_sessions')
-        .update({
+      const ecrit = {
           title: sessionTitle, coach_notes: description, circuits: flattenBlocksToCircuits(blocksAEcrire),
           ...(canManageCatalog ? {
             seance_lettre: seanceLettre || null,
@@ -950,8 +1009,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
           // N'écrit activation_videos que pour une séance "explication" — ailleurs ce champ
           // n'est pas géré par cet éditeur, pas de raison de l'écraser.
           ...(sessionType === 'explication' ? { activation_videos: explicationVideo.trim() ? [{ name: 'Vidéo', video_url: explicationVideo.trim() }] : [] } : {}),
-        })
-        .eq('id', sessionId)
+      }
+      await supabase.from('program_sessions').update(ecrit).eq('id', sessionId)
 
       // Écriture dans le catalogue partagé réservée au coach (RLS) — un athlète ne choisit de
       // toute façon que parmi les mouvements déjà existants ici (pas de "Create <name>"), donc
@@ -963,8 +1022,16 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
 
       const ids = idsDesLignes(blocksAEcrire)
       const avant = etatEnregistre.current
-      etatEnregistre.current = etatParExercice(rows, ids)
-      const changements = changementsDepuis(avant, rows, ids)
+      // Champ non écrit (préparation non retouchée) : inchangé.
+      const ecritNormalise = champsNormalises(ecrit)
+      const champsApres = Object.fromEntries(CHAMPS_SEANCE.map(([cle]) => [cle, cle in ecrit ? ecritNormalise[cle] : avant.champs[cle]]))
+      const champsBrutsApres = Object.fromEntries(CHAMPS_SEANCE.map(([cle]) => [cle, cle in ecrit ? ecritNormalise[cle] : avant.champsBruts[cle]]))
+      etatEnregistre.current = { exos: etatParExercice(rows, ids), champs: champsApres, champsBruts: champsBrutsApres }
+      const changements = [
+        ...CHAMPS_SEANCE.filter(([cle]) => champsApres[cle] !== avant.champs[cle])
+          .map(([cle, libelle]) => ({ type: 'champ', cle, libelle, valeur: ecrit[cle] ?? null, ancienBrut: avant.champsBruts[cle] })),
+        ...changementsDepuis(avant.exos, rows, ids),
+      ]
       if (changements.length && canManageCatalog) await proposerPropagation(changements)
 
       setBlocks(blocksAEcrire)
@@ -984,7 +1051,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     if (!seanceLettre || !programId || Number.isNaN(numero)) return
     // Même phase seulement : SA1 de la phase 2 n'est pas la suite de SA3 de la phase 1.
     const { data: suivantes } = await memePhase(supabase.from('program_sessions')
-      .select('id, title, phase_numero, seance_lettre, seance_numero, program_exercises(id, name, note, order_index, superset_group, block_type)')
+      .select(`id, phase_numero, seance_lettre, seance_numero, ${CHAMPS_SEANCE.map(([cle]) => cle).join(', ')}, program_exercises(*)`)
       .eq('program_id', programId).eq('seance_lettre', seanceLettre).gt('seance_numero', numero),
       phaseNumero !== '' ? parseInt(phaseNumero, 10) : null)
       .order('seance_numero')
@@ -1000,6 +1067,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         codesExercices(exos).forEach((c, i) => { if (c) parCode[c] = exos[i] })
         const terminee = terminees.has(s.id)
         const base = { sessionId: s.id, codeSeance: codeSeance(s), titre: s.title || '', terminee }
+        if (ch.type === 'champ') {
+          const identique = normChamp(ch.cle, s[ch.cle]) === ch.ancienBrut
+          return [{ ...base, circuitsCible: s.circuits || [], detail: identique ? 'identique avant ta modif' : 'déjà différente', coche: !terminee && identique }]
+        }
         if (ch.type === 'ajout') {
           const ancre = ch.ancreCode ? parCode[ch.ancreCode] : null
           const ou = !ch.ancreCode ? 'au début' : ancre ? `après ${ch.ancreCode} · ${ancre.name}` : 'à la fin'
@@ -1007,8 +1078,15 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         }
         const place = parCode[ch.code]
         if (!place) return []
+        if (ch.type === 'prescription') {
+          // Cochée seulement si la séance avait la même prescription : une progression (charges,
+          // reps qui montent d'une séance à l'autre) n'est pas écrasée d'office.
+          const identique = memeNom(place.name, ch.nom) && prescriptionDe(place) === ch.ancienneBrute
+          return [{ ...base, exoId: place.id, detail: `${ch.code} : ${place.name || '—'}${identique ? '' : ' · prescription déjà différente'}`, coche: !terminee && identique }]
+        }
         const nomAttendu = ch.type === 'remplacement' ? ch.ancien : ch.nom
-        // Suppression : cochée seulement si c'est bien le même exercice à cet emplacement.
+        // Suppression, consigne, remplacement : cochés seulement si c'est bien le même exercice
+        // à cet emplacement.
         return [{ ...base, exoId: place.id, detail: `${ch.code} actuel : ${place.name || '—'}`, coche: !terminee && memeNom(place.name, nomAttendu) }]
       }),
     })).filter(ch => ch.cibles.length)
@@ -1031,10 +1109,25 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     setPropagationEnCours(true)
     const erreurs = []
     const touchees = new Set()
+    // Circuits : le contenu de cette séance, à la position qu'ils avaient chez la séance suivante
+    // (même nombre de circuits), sinon à la position d'ici.
+    const valeurChamp = (ch, t) => {
+      if (ch.cle !== 'circuits' || !Array.isArray(ch.valeur)) return ch.valeur
+      const cible = t.circuitsCible || []
+      return ch.valeur.map((circuit, i) => (cible.length === ch.valeur.length
+        ? { ...circuit, id: cible[i].id || circuit.id, afterExerciseIndex: cible[i].afterExerciseIndex ?? circuit.afterExerciseIndex }
+        : circuit))
+    }
+    const champsExo = ch => (ch.type === 'remplacement' ? { name: ch.nouveau }
+      : ch.type === 'consigne' ? { note: ch.nouvelle || null }
+        : ch.valeurs)
     const maj = propagation.flatMap(ch => (ch.type === 'ajout' || ch.type === 'suppression' ? [] : cochees(ch).map(t => ({
-      t, champs: ch.type === 'remplacement' ? { name: ch.nouveau } : { note: ch.nouvelle || null },
+      t,
+      requete: ch.type === 'champ'
+        ? supabase.from('program_sessions').update({ [ch.cle]: valeurChamp(ch, t) }).eq('id', t.sessionId)
+        : supabase.from('program_exercises').update(champsExo(ch)).eq('id', t.exoId),
     }))))
-    const res = await Promise.all(maj.map(({ t, champs }) => supabase.from('program_exercises').update(champs).eq('id', t.exoId)))
+    const res = await Promise.all(maj.map(m => m.requete))
     res.forEach((r, i) => { if (r.error) erreurs.push(r.error.message); else touchees.add(maj[i].t.sessionId) })
     // Suppressions puis ajouts, une à une : chacune relit la séance (ordre et circuits à jour).
     for (const ch of propagation.filter(c => c.type === 'suppression')) {
@@ -3435,6 +3528,13 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                         <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>Ajout {ch.code}</span>
                         <span style={{ fontWeight: 700 }}>{ch.lignes.map(l => l.name).join(' + ')}</span>
                       </>
+                    ) : ch.type === 'champ' ? (
+                      <span style={{ fontWeight: 800, color: c.blue }}>{ch.libelle}</span>
+                    ) : ch.type === 'prescription' ? (
+                      <>
+                        <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>Séries {ch.codeAffiche}</span>
+                        <span style={{ fontWeight: 700 }}>{ch.nom}</span>
+                      </>
                     ) : ch.type === 'suppression' ? (
                       <>
                         <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>Suppression {ch.code}</span>
@@ -3454,7 +3554,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                     )}
                   </div>
                   <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 10 }}>
-                    {ch.type === 'ajout'
+                    {ch.type === 'champ'
+                      ? 'Remplacé par la version de cette séance.'
+                      : ch.type === 'prescription'
+                        ? 'Séries, reps, charges, récup, matériel et minuteur repris de cette séance.'
+                        : ch.type === 'ajout'
                       ? 'Copié avec ses séries, charges et consigne.'
                       : ch.type === 'suppression'
                         ? 'Retiré de la séance, avec ses séries et sa consigne.'
