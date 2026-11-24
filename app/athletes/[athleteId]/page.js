@@ -103,17 +103,25 @@ async function chargerFiche(athleteId) {
     const programme = (programs || []).find(p => !p.is_workout && !p.is_microcycle && (p.program_sessions || []).length > 1)
       || (programs || [])[0] || null
 
+    // Tous les programmes en cours, le principal en tête : un client peut en suivre plusieurs à la
+    // fois (ex. Johan : Epaule Fondation + Macro 1 - Remodelage) et la fiche n'en montrait qu'un.
+    // Ni séances libres ni programmes de groupe (sauf si le principal en est un, faute de mieux).
+    const programmesEnCours = programme
+      ? [programme, ...programs.filter(p => p.id !== programme.id && !p.is_workout && !p.group_id)]
+      : []
+
     const parSession = new Map((completions || []).map(c => [c.program_session_id, c]))
     const setsParExercice = {}
     for (const s of (sets || [])) {
       (setsParExercice[s.program_exercise_id] ||= []).push(s)
     }
 
-    const sessions = [...((programme?.program_sessions) || [])]
+    const sessionsDe = (p) => [...((p?.program_sessions) || [])]
       .filter(s => s.session_type !== 'recurrent')
       .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    const plusieurs = programmesEnCours.length > 1
 
-    const seances = sessions.map(s => {
+    const seances = programmesEnCours.flatMap(p => sessionsDe(p).map(s => {
       const c = parSession.get(s.id)
       const statut = !c ? 'a_venir' : (c.skipped ? 'manquee' : 'faite')
       const blocs = blocsDeSeance(s, setsParExercice)
@@ -130,8 +138,10 @@ async function chargerFiche(athleteId) {
         saisie_coach: false,
         duree_estimee_min: Math.max(5, Math.round(5 + nbSeries * 1.5)),
         blocs,
+        // Nom du programme sur la carte quand le client en suit plusieurs.
+        programme: plusieurs ? (p.title || 'Programme') : null,
       }
-    })
+    }))
 
     const faitesAvecDate = (completions || []).filter(c => !c.skipped && c.completed_at)
     const semainePrevues = programme?.athlete_days_of_week?.length || programme?.recommended_sessions_per_week || 3
@@ -140,7 +150,28 @@ async function chargerFiche(athleteId) {
       const fin = debutDeSemaine(k - 1)
       return { faites: faitesAvecDate.filter(c => { const d = new Date(c.completed_at); return d >= debut && d < fin }).length, prevues: semainePrevues }
     })
-    const restantes = seances.filter(s => s.statut === 'a_venir').length
+    // Avancement, semaine et fin estimée de chaque programme, à partir de ses propres séances.
+    const resumeProgramme = (p) => {
+      const ss = sessionsDe(p)
+      const parSemaine = p.athlete_days_of_week?.length || p.recommended_sessions_per_week || 3
+      const passees = ss.filter(s => parSession.has(s.id)).length
+      const restantes = ss.length - passees
+      return {
+        id: p.id,
+        titre: p.title || 'Programme',
+        duration_weeks: p.duration_weeks || Math.max(1, Math.ceil(ss.length / parSemaine)),
+        semaine_courante: Math.min(p.duration_weeks || 99, Math.max(1, Math.ceil((passees + 1) / parSemaine))),
+        athlete_days_of_week: p.athlete_days_of_week || [],
+        faites: ss.filter(s => { const c = parSession.get(s.id); return c && !c.skipped }).length,
+        total: ss.length,
+        visible_client: p.visible_client !== false,
+        // Projection à partir d'aujourd'hui sur les séances qui RESTENT, pas depuis la date
+        // d'assignation : sur un programme entamé il y a deux mois, partir de created_at affichait
+        // une date de fin déjà passée.
+        fin_estimee: restantes ? new Date(Date.now() + Math.ceil(restantes / parSemaine) * 7 * 86400000).toISOString() : null,
+      }
+    }
+    const programmes = programmesEnCours.map(resumeProgramme)
     const difficultes = (completions || []).filter(c => c.difficulty != null).map(c => c.difficulty)
     const moyenne = difficultes.length ? Math.round(difficultes.reduce((a, b) => a + b, 0) / difficultes.length) : null
 
@@ -171,37 +202,8 @@ async function chargerFiche(athleteId) {
         groupes: (membres || []).map(m => m.groups?.name).filter(Boolean),
         objectifs: (objectives || []).filter(o => !o.completed_at).map(o => ({ id: o.id, titre: o.text, date: o.target_date })),
       },
-      programme: {
-        id: programme?.id,
-        titre: programme?.title || 'Aucun programme',
-        duration_weeks: programme?.duration_weeks || Math.max(1, Math.ceil(sessions.length / semainePrevues)),
-        semaine_courante: Math.min(
-          programme?.duration_weeks || 99,
-          Math.max(1, Math.ceil((seances.filter(s => s.statut !== 'a_venir').length + 1) / semainePrevues))
-        ),
-        athlete_days_of_week: programme?.athlete_days_of_week || [],
-        // Projection à partir d'aujourd'hui sur les séances qui RESTENT, pas depuis la date
-        // d'assignation : sur un programme entamé il y a deux mois, partir de created_at affichait
-        // une date de fin déjà passée.
-        fin_estimee: restantes
-          ? new Date(Date.now() + Math.ceil(restantes / semainePrevues) * 7 * 86400000).toISOString()
-          : null,
-      },
-      // Les autres programmes en cours (un client peut en suivre deux à la fois, ex. Johan :
-      // Epaule Fondation + Macro 1 - Remodelage). Avant, la fiche n'en montrait qu'un et le second
-      // n'était visible nulle part. Ni séances libres ni programmes de groupe.
-      autresProgrammes: programs
-        .filter(p => p.id !== programme?.id && !p.is_workout && !p.group_id)
-        .map(p => {
-          const ss = (p.program_sessions || []).filter(s => s.session_type !== 'recurrent')
-          return {
-            id: p.id,
-            titre: p.title || 'Programme',
-            faites: ss.filter(s => { const c = parSession.get(s.id); return c && !c.skipped }).length,
-            total: ss.length,
-            visible_client: p.visible_client !== false,
-          }
-        }),
+      programme: programmes[0] || { id: null, titre: 'Aucun programme', duration_weeks: 1, semaine_courante: 1, athlete_days_of_week: [], fin_estimee: null },
+      programmes,
       stats: {
         semaineFaites: quatreSemaines[3].faites,
         semainePrevues,
@@ -280,8 +282,7 @@ export default function FicheSportifPage() {
     <FicheSportifCoach
       athlete={data.athlete}
       programme={data.programme}
-      autresProgrammes={data.autresProgrammes}
-      onOuvrirAutreProgramme={(id) => router.push(`/programs/${athleteId}/${id}`)}
+      programmes={data.programmes}
       stats={data.stats}
       seances={data.seances}
       renderCoaching={({ seance, fermer, terminee }) => (
@@ -299,7 +300,7 @@ export default function FicheSportifPage() {
       onVoirHistorique={() => router.push(`/programs/${athleteId}`)}
       onCreerProgramme={() => setCreationProgramme(true)}
       onInviter={!data.athlete.compteActive && data.athlete.token ? () => setInvitation(true) : null}
-      onOuvrirProgramme={data.programme.id ? () => router.push(`/programs/${athleteId}/${data.programme.id}`) : null}
+      onOuvrirProgramme={(id) => router.push(`/programs/${athleteId}/${id}`)}
       tableauDeBord={<TableauDeBordClient athleteId={athleteId} seancesFaites={data.seancesSeptJours} />}
       // Le panneau de messagerie est global (ChatWidget dans app/layout.js), ouvert par événement.
       onMessage={() => window.dispatchEvent(new Event('open-chat-widget'))}

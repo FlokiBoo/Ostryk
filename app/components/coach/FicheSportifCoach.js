@@ -540,6 +540,7 @@ function LigneSeance({ seance, ouverte, onBasculer, ...actions }) {
           <p style={{ fontSize: 14, fontWeight: 600, margin: "5px 0 3px", color: estManquee ? T.texteSec : T.texte }}>
             {seance.titre}
           </p>
+          {seance.programme ? <p style={{ fontSize: 11, color: T.texteSec, margin: "0 0 3px" }}>{seance.programme}</p> : null}
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             {estFaite ? <CheckCircle size={15} weight="fill" color={T.vert} /> : null}
             <span style={{ fontSize: 11, color: estFaite && seance.effort === "Dur" ? T.bordeaux : T.texteSec }}>{meta}</span>
@@ -560,9 +561,9 @@ function LigneSeance({ seance, ouverte, onBasculer, ...actions }) {
 export default function FicheSportifCoach({
   athlete = demo.athlete,
   programme = demo.programme,
-  // Les autres programmes en cours du client, listés sous le programme principal.
-  autresProgrammes = [],
-  onOuvrirAutreProgramme = null,
+  // Tous les programmes en cours du client, le principal en tête (même forme que `programme`,
+  // plus faites / total / visible_client).
+  programmes = [demo.programme],
   stats = demo.stats,
   seances = demo.seances,
   // Écran de coaching en présentiel : l'écran de séance commun au sportif et au coach
@@ -577,7 +578,7 @@ export default function FicheSportifCoach({
   onCreerProgramme = null,
   // Client sans compte : bouton « Inviter » (liens personnels internet / Android), voir LiensInvitation.
   onInviter = null,
-  // Ouvre l'éditeur du programme en cours (absent s'il n'y en a pas).
+  // Ouvre l'éditeur d'un programme : onOuvrirProgramme(programmeId).
   onOuvrirProgramme = null,
   // PWA / webview natif : pas de bouton retour système, la fiche doit fournir le sien.
   onRetour = null,
@@ -624,7 +625,7 @@ export default function FicheSportifCoach({
     if (!b.date) return -1;
     return new Date(a.date) - new Date(b.date);
   });
-  const avancement = Math.round(((programme.semaine_courante - 1) / programme.duration_weeks) * 100);
+  const avancementDe = (p) => Math.round(((p.semaine_courante - 1) / p.duration_weeks) * 100);
 
   const actions = {
     onLancer: renderCoaching ? (s) => setCoaching(s) : null,
@@ -692,10 +693,14 @@ export default function FicheSportifCoach({
             {athlete.is_1to1_client ? <Badge variante="bordeaux">Suivi 1:1</Badge> : null}
           </div>
           <p style={{ fontSize: 12, color: T.texteSec, margin: "3px 0 0" }}>
-            {programme.titre} · semaine {programme.semaine_courante}/{programme.duration_weeks}
-            {programme.athlete_days_of_week?.length
-              ? " · " + programme.athlete_days_of_week.map((j) => JOURS_COURTS[j]).join(", ")
-              : ""}
+            {programmes.length > 1
+              ? `${programmes.length} programmes en cours`
+              : <>
+                  {programme.titre} · semaine {programme.semaine_courante}/{programme.duration_weeks}
+                  {programme.athlete_days_of_week?.length
+                    ? " · " + programme.athlete_days_of_week.map((j) => JOURS_COURTS[j]).join(", ")
+                    : ""}
+                </>}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -836,48 +841,35 @@ export default function FicheSportifCoach({
           </div>
 
           <div style={carte}>
-            <p style={{ ...titreEncart, display: "flex", alignItems: "center", gap: 7 }}><TrendUp size={15} />Programme</p>
-            <p style={{ fontSize: 13, margin: 0 }}>{programme.titre}</p>
-            <div
-              role="progressbar"
-              aria-valuenow={avancement}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              style={{ height: 6, borderRadius: 100, background: T.neutreBg, margin: "8px 0 4px" }}
-            >
-              <div style={{ width: `${avancement}%`, height: 6, borderRadius: 100, background: T.bordeaux }} />
-            </div>
-            {programme.fin_estimee ? (
-              <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>
-                Fin estimée le{" "}
-                {new Date(programme.fin_estimee).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}
-              </p>
-            ) : null}
-            {onOuvrirProgramme ? (
-              <Bouton onClick={onOuvrirProgramme} style={{ marginTop: 12, width: "100%" }}>
-                <NotePencil size={17} weight="bold" />Ouvrir et modifier le programme
-              </Bouton>
-            ) : null}
-            {autresProgrammes.length ? (
-              <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.neutreBg}`, display: "flex", flexDirection: "column", gap: 10 }}>
-                <p style={{ fontSize: 11, color: T.texteSec, margin: 0, textTransform: "uppercase", letterSpacing: "0.4px" }}>Aussi en cours</p>
-                {autresProgrammes.map((p) => (
-                  <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: 13, margin: 0 }}>{p.titre}</p>
-                      <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>
-                        {p.faites}/{p.total} séance{p.total > 1 ? "s" : ""}{p.visible_client ? "" : " · masqué au client"}
-                      </p>
-                    </div>
-                    {onOuvrirAutreProgramme ? (
-                      <Bouton onClick={() => onOuvrirAutreProgramme(p.id)} aria-label={`Ouvrir ${p.titre}`}>
-                        <NotePencil size={17} weight="bold" />
-                      </Bouton>
-                    ) : null}
-                  </div>
-                ))}
+            <p style={{ ...titreEncart, display: "flex", alignItems: "center", gap: 7 }}><TrendUp size={15} />{programmes.length > 1 ? `Programmes (${programmes.length})` : "Programme"}</p>
+            {programmes.length === 0 ? <p style={{ fontSize: 13, margin: 0 }}>Aucun programme</p> : null}
+            {programmes.map((p, i) => (
+              <div key={p.id || i} style={i > 0 ? { marginTop: 14, paddingTop: 14, borderTop: `1px solid ${T.neutreBg}` } : null}>
+                <p style={{ fontSize: 13, margin: 0 }}>{p.titre}</p>
+                <div
+                  role="progressbar"
+                  aria-valuenow={avancementDe(p)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  style={{ height: 6, borderRadius: 100, background: T.neutreBg, margin: "8px 0 4px" }}
+                >
+                  <div style={{ width: `${avancementDe(p)}%`, height: 6, borderRadius: 100, background: T.bordeaux }} />
+                </div>
+                <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>
+                  Semaine {p.semaine_courante}/{p.duration_weeks}
+                  {p.total != null ? ` · ${p.faites}/${p.total} séance${p.total > 1 ? "s" : ""}` : ""}
+                  {p.fin_estimee
+                    ? ` · fin estimée le ${new Date(p.fin_estimee).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}`
+                    : ""}
+                  {p.visible_client === false ? " · masqué au client" : ""}
+                </p>
+                {onOuvrirProgramme && p.id ? (
+                  <Bouton onClick={() => onOuvrirProgramme(p.id)} style={{ marginTop: 10, width: "100%" }}>
+                    <NotePencil size={17} weight="bold" />Ouvrir et modifier le programme
+                  </Bouton>
+                ) : null}
               </div>
-            ) : null}
+            ))}
           </div>
 
           {athlete.groupes?.length ? (
