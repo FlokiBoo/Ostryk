@@ -187,6 +187,21 @@ async function chargerFiche(athleteId) {
           ? new Date(Date.now() + Math.ceil(restantes / semainePrevues) * 7 * 86400000).toISOString()
           : null,
       },
+      // Les autres programmes en cours (un client peut en suivre deux à la fois, ex. Johan :
+      // Epaule Fondation + Macro 1 - Remodelage). Avant, la fiche n'en montrait qu'un et le second
+      // n'était visible nulle part. Ni séances libres ni programmes de groupe.
+      autresProgrammes: programs
+        .filter(p => p.id !== programme?.id && !p.is_workout && !p.group_id)
+        .map(p => {
+          const ss = (p.program_sessions || []).filter(s => s.session_type !== 'recurrent')
+          return {
+            id: p.id,
+            titre: p.title || 'Programme',
+            faites: ss.filter(s => { const c = parSession.get(s.id); return c && !c.skipped }).length,
+            total: ss.length,
+            visible_client: p.visible_client !== false,
+          }
+        }),
       stats: {
         semaineFaites: quatreSemaines[3].faites,
         semainePrevues,
@@ -265,6 +280,8 @@ export default function FicheSportifPage() {
     <FicheSportifCoach
       athlete={data.athlete}
       programme={data.programme}
+      autresProgrammes={data.autresProgrammes}
+      onOuvrirAutreProgramme={(id) => router.push(`/programs/${athleteId}/${id}`)}
       stats={data.stats}
       seances={data.seances}
       renderCoaching={({ seance, fermer, terminee }) => (

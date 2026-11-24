@@ -560,6 +560,9 @@ function LigneSeance({ seance, ouverte, onBasculer, ...actions }) {
 export default function FicheSportifCoach({
   athlete = demo.athlete,
   programme = demo.programme,
+  // Les autres programmes en cours du client, listés sous le programme principal.
+  autresProgrammes = [],
+  onOuvrirAutreProgramme = null,
   stats = demo.stats,
   seances = demo.seances,
   // Écran de coaching en présentiel : l'écran de séance commun au sportif et au coach
@@ -854,6 +857,26 @@ export default function FicheSportifCoach({
               <Bouton onClick={onOuvrirProgramme} style={{ marginTop: 12, width: "100%" }}>
                 <NotePencil size={17} weight="bold" />Ouvrir et modifier le programme
               </Bouton>
+            ) : null}
+            {autresProgrammes.length ? (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.neutreBg}`, display: "flex", flexDirection: "column", gap: 10 }}>
+                <p style={{ fontSize: 11, color: T.texteSec, margin: 0, textTransform: "uppercase", letterSpacing: "0.4px" }}>Aussi en cours</p>
+                {autresProgrammes.map((p) => (
+                  <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 13, margin: 0 }}>{p.titre}</p>
+                      <p style={{ fontSize: 11, color: T.texteSec, margin: 0 }}>
+                        {p.faites}/{p.total} séance{p.total > 1 ? "s" : ""}{p.visible_client ? "" : " · masqué au client"}
+                      </p>
+                    </div>
+                    {onOuvrirAutreProgramme ? (
+                      <Bouton onClick={() => onOuvrirAutreProgramme(p.id)} aria-label={`Ouvrir ${p.titre}`}>
+                        <NotePencil size={17} weight="bold" />
+                      </Bouton>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             ) : null}
           </div>
 
