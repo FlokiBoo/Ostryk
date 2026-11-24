@@ -34,7 +34,7 @@ import SectionTexteVideo, { FenetreVideo } from '@/app/components/SectionTexteVi
 import { sectionDeSeance, lignesDeProtocole } from '@/lib/sectionsTexte'
 import { historiqueParExercice, cleExercice } from '@/lib/historiqueExercice'
 import { telechargerSeancePdf } from '@/lib/seancePdf'
-import { codeSeance, codesExercices, nomsParCode, normaliserLettre, memeNom, memePhase } from '@/lib/codeSeance'
+import { codeSeance, codesExercices, normaliserLettre, memeNom, memePhase } from '@/lib/codeSeance'
 
 // Dupliqué depuis l'ancien app/components/athlete/SessionPlayer.js, aujourd'hui dans Seance.js (même convention que ce fichier :
 // petit helper autonome plutôt qu'un import cross-fichier).
@@ -399,6 +399,134 @@ function flattenBlocksToExerciseRows(blocks, activityMode) {
   return rows
 }
 
+// --- Report sur les séances suivantes (SA1 → SA2, SA3…) -----------------------------------------
+
+// Id d'éditeur de chaque ligne de flattenBlocksToExerciseRows, dans le même ordre. Un exercice
+// chargé garde `ex-<id en base>`, un exercice ajouté reçoit `new-…` (nextBlockId), et un
+// remplacement conserve l'id : c'est ce qui distingue un ajout d'un remplacement.
+function idsDesLignes(blocks) {
+  const ids = []
+  blocks.forEach(block => {
+    if (block.type === 'circuit' || !block.exercises?.length) return
+    block.exercises.forEach(ex => ids.push(ex.id))
+  })
+  return ids
+}
+
+// Ce qui a été enregistré, par id d'exercice de l'éditeur : son code (A1…), son nom, sa consigne.
+function etatParExercice(rows, ids) {
+  const codes = codesExercices(rows)
+  const etat = {}
+  rows.forEach((r, i) => {
+    if (ids[i]) etat[ids[i]] = { code: codes[i], nom: (r.name || '').trim(), note: (r.note || '').trim() }
+  })
+  return etat
+}
+
+// Différences entre le dernier enregistrement et celui-ci, exprimées par emplacement de l'ANCIEN
+// code : un exercice inséré décale les codes (l'ancien A1 devient A2), mais dans les séances
+// suivantes l'exercice correspondant est toujours à l'ancien emplacement.
+//  - remplacement : même exercice de l'éditeur, nom changé ;
+//  - consigne : même exercice, note changée ;
+//  - ajout : exercice(s) nouveau(x), rattachés au dernier exercice déjà enregistré qui les précède.
+function changementsDepuis(avant, rows, ids) {
+  const codes = codesExercices(rows)
+  const changements = []
+  let ajout = null
+  let ancre = null
+  rows.forEach((r, i) => {
+    const code = codes[i]
+    if (!code) { ajout = null; return }
+    const prev = avant[ids[i]]
+    if (!prev?.code) {
+      const dansBlocAncre = !!(ancre && r.superset_group && r.superset_group === ancre.superset_group && r.block_type === ancre.block_type)
+      if (!ajout) {
+        ajout = { type: 'ajout', code, ancreCode: ancre?.code || null, lignes: [] }
+        changements.push(ajout)
+      }
+      ajout.lignes.push({ ...r, dansBlocAncre })
+      return
+    }
+    ajout = null
+    ancre = { code: prev.code, superset_group: r.superset_group, block_type: r.block_type }
+    const nom = (r.name || '').trim()
+    const note = (r.note || '').trim()
+    if (prev.nom && nom && !memeNom(prev.nom, nom)) {
+      changements.push({ type: 'remplacement', code: prev.code, codeAffiche: code, ancien: prev.nom, nouveau: nom })
+    }
+    if (prev.note !== note) {
+      changements.push({ type: 'consigne', code: prev.code, codeAffiche: code, nom, ancienne: prev.note, nouvelle: note })
+    }
+  })
+  return changements
+}
+
+const nouveauToken = () => Math.random().toString(36).slice(2, 8)
+
+// Insère les lignes d'un ajout dans une séance suivante, au même endroit : juste après
+// l'exercice d'ancrage (dans son bloc si l'ajout en faisait partie, sinon après son bloc), au
+// début s'il n'y avait rien avant, à la fin si l'ancrage n'existe pas dans cette séance.
+// Renumérote order_index et décale les circuits placés après le point d'insertion.
+async function insererDansSeance(sessionId, ajout, ancreId) {
+  const [{ data: exos, error }, { data: sess }] = await Promise.all([
+    supabase.from('program_exercises').select('*').eq('program_session_id', sessionId).order('order_index'),
+    supabase.from('program_sessions').select('circuits').eq('id', sessionId).single(),
+  ])
+  if (error) return error.message
+  const lignes = exos || []
+  const codes = codesExercices(lignes)
+  const premier = ajout.lignes[0]
+  const k = ancreId ? lignes.findIndex(e => e.id === ancreId) : -1
+  let p
+  let tokenAncre = null
+  if (k !== -1) {
+    const a = lignes[k]
+    if (premier.dansBlocAncre) {
+      p = k + 1
+      tokenAncre = a.superset_group || nouveauToken()
+      if (!a.superset_group) {
+        const { error: e } = await supabase.from('program_exercises').update({ superset_group: tokenAncre }).eq('id', a.id)
+        if (e) return e.message
+      }
+    } else {
+      p = k + 1
+      while (p < lignes.length && a.superset_group && lignes[p].superset_group === a.superset_group && lignes[p].block_type === a.block_type) p++
+    }
+  } else if (!ajout.ancreCode) {
+    const i = codes.findIndex(Boolean)
+    p = i === -1 ? lignes.length : i
+  } else {
+    const codees = codes.map((c, i) => (c ? i : -1)).filter(i => i >= 0)
+    p = codees.length ? codees[codees.length - 1] + 1 : lignes.length
+  }
+
+  const tokens = {}
+  const nouvelles = ajout.lignes.map(({ dansBlocAncre, ...r }, j) => ({
+    ...r,
+    superset_group: dansBlocAncre && tokenAncre ? tokenAncre : (r.superset_group ? (tokens[r.superset_group] ||= nouveauToken()) : null),
+    program_session_id: sessionId,
+    order_index: p + j,
+  }))
+  const n = nouvelles.length
+  const ordre = [...lignes.slice(0, p), ...nouvelles.map(() => null), ...lignes.slice(p)]
+  const majOrdre = ordre.flatMap((e, i) => (e && e.order_index !== i ? [supabase.from('program_exercises').update({ order_index: i }).eq('id', e.id)] : []))
+  const res = await Promise.all(majOrdre)
+  const echecOrdre = res.find(r => r.error)
+  if (echecOrdre) return echecOrdre.error.message
+  const { error: errIns } = await supabase.from('program_exercises').insert(nouvelles)
+  if (errIns) return errIns.message
+
+  const circuits = sess?.circuits || []
+  const decale = c => (c.afterExerciseIndex ?? 0) > p || ((c.afterExerciseIndex ?? 0) === p && premier.dansBlocAncre)
+  if (circuits.some(decale)) {
+    const { error: errC } = await supabase.from('program_sessions')
+      .update({ circuits: circuits.map(c => (decale(c) ? { ...c, afterExerciseIndex: (c.afterExerciseIndex ?? 0) + n } : c)) })
+      .eq('id', sessionId)
+    if (errC) return errC.message
+  }
+  return null
+}
+
 function flattenBlocksToCircuits(blocks) {
   const circuits = []
   let cursor = 0
@@ -473,10 +601,10 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   const [seanceNumero, setSeanceNumero] = useState('')
   // Phase du programme (P1, P2…), indépendante du code de séance.
   const [phaseNumero, setPhaseNumero] = useState('')
-  // Noms par code d'exercice tels qu'enregistrés en base (au chargement, puis après chaque Save) :
-  // c'est la référence pour détecter « A1 a changé » au Save suivant.
-  const nomsEnregistres = useRef({})
-  // Proposition de report d'un exercice remplacé sur les séances suivantes de la même lettre.
+  // État enregistré de chaque exercice (au chargement, puis après chaque Save), par id d'éditeur :
+  // la référence pour détecter au Save suivant un ajout, un remplacement ou une consigne modifiée.
+  const etatEnregistre = useRef({})
+  // Proposition de report de ces changements sur les séances suivantes de la même lettre.
   const [propagation, setPropagation] = useState(null)
   const [propagationEnCours, setPropagationEnCours] = useState(false)
   const [description, setDescription] = useState('')
@@ -621,7 +749,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
       setSeanceLettre(sessionRow.seance_lettre || '')
       setSeanceNumero(sessionRow.seance_numero != null ? String(sessionRow.seance_numero) : '')
       setPhaseNumero(sessionRow.phase_numero != null ? String(sessionRow.phase_numero) : '')
-      nomsEnregistres.current = nomsParCode(exerciseRows || [])
+      etatEnregistre.current = etatParExercice(exerciseRows || [], (exerciseRows || []).map(r => `ex-${r.id}`))
       setDescription(sessionRow.coach_notes || '')
       setSessionType(sessionRow.session_type || null)
       setActivityMode(sessionRow.activity_mode || 'standard')
@@ -806,13 +934,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         await supabase.from('movements').upsert(names.map(name => ({ name })), { onConflict: 'name', ignoreDuplicates: true })
       }
 
-      const avant = nomsEnregistres.current
-      const apres = nomsParCode(rows)
-      nomsEnregistres.current = apres
-      const remplaces = Object.keys(apres)
-        .filter(code => avant[code]?.nom && apres[code].nom && !memeNom(avant[code].nom, apres[code].nom))
-        .map(code => ({ code, ancien: avant[code].nom, nouveau: apres[code].nom }))
-      if (remplaces.length && canManageCatalog) await proposerPropagation(remplaces)
+      const ids = idsDesLignes(blocksAEcrire)
+      const avant = etatEnregistre.current
+      etatEnregistre.current = etatParExercice(rows, ids)
+      const changements = changementsDepuis(avant, rows, ids)
+      if (changements.length && canManageCatalog) await proposerPropagation(changements)
 
       setBlocks(blocksAEcrire)
       setUnsavedChanges(false)
@@ -823,15 +949,15 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     }
   }
 
-  // Séances suivantes de la même lettre (numéro supérieur, même programme) : pour chaque exercice
-  // remplacé, on liste ce qui occupe la même place (A1, B2…) chez elles. Cochées d'office celles
-  // qui avaient encore l'ancien exercice ; une séance déjà réalisée par le sportif reste intouchable.
-  const proposerPropagation = async (remplaces) => {
+  // Séances suivantes de la même lettre (numéro supérieur, même programme, même phase) : pour
+  // chaque changement, on repère l'emplacement correspondant chez elles (même code d'exercice, ou
+  // l'exercice d'ancrage pour un ajout). Une séance déjà réalisée par le sportif reste intouchable.
+  const proposerPropagation = async (changements) => {
     const numero = parseInt(seanceNumero, 10)
     if (!seanceLettre || !programId || Number.isNaN(numero)) return
     // Même phase seulement : SA1 de la phase 2 n'est pas la suite de SA3 de la phase 1.
     const { data: suivantes } = await memePhase(supabase.from('program_sessions')
-      .select('id, title, phase_numero, seance_lettre, seance_numero, program_exercises(id, name, order_index, superset_group, block_type)')
+      .select('id, title, phase_numero, seance_lettre, seance_numero, program_exercises(id, name, note, order_index, superset_group, block_type)')
       .eq('program_id', programId).eq('seance_lettre', seanceLettre).gt('seance_numero', numero),
       phaseNumero !== '' ? parseInt(phaseNumero, 10) : null)
       .order('seance_numero')
@@ -839,20 +965,26 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     const { data: faites } = await supabase.from('program_completions')
       .select('program_session_id, skipped').in('program_session_id', suivantes.map(s => s.id))
     const terminees = new Set((faites || []).filter(f => !f.skipped).map(f => f.program_session_id))
-    const changements = remplaces.map(r => ({
-      ...r,
+    const avecCibles = changements.map(ch => ({
+      ...ch,
       cibles: suivantes.flatMap(s => {
         const exos = [...(s.program_exercises || [])].sort((a, b) => a.order_index - b.order_index)
-        const place = nomsParCode(exos)[r.code]
-        if (!place) return []
+        const parCode = {}
+        codesExercices(exos).forEach((c, i) => { if (c) parCode[c] = exos[i] })
         const terminee = terminees.has(s.id)
-        return [{
-          exoId: place.id, sessionId: s.id, code: codeSeance(s), titre: s.title || '',
-          nomActuel: place.nom, terminee, coche: !terminee && memeNom(place.nom, r.ancien),
-        }]
+        const base = { sessionId: s.id, codeSeance: codeSeance(s), titre: s.title || '', terminee }
+        if (ch.type === 'ajout') {
+          const ancre = ch.ancreCode ? parCode[ch.ancreCode] : null
+          const ou = !ch.ancreCode ? 'au début' : ancre ? `après ${ch.ancreCode} · ${ancre.name}` : 'à la fin'
+          return [{ ...base, ancreId: ancre?.id || null, detail: ou, coche: !terminee }]
+        }
+        const place = parCode[ch.code]
+        if (!place) return []
+        const nomAttendu = ch.type === 'remplacement' ? ch.ancien : ch.nom
+        return [{ ...base, exoId: place.id, detail: `${ch.code} actuel : ${place.name || '—'}`, coche: !terminee && memeNom(place.name, nomAttendu) }]
       }),
     })).filter(ch => ch.cibles.length)
-    if (changements.length) setPropagation(changements)
+    if (avecCibles.length) setPropagation(avecCibles)
   }
 
   const basculerCible = (ci, ti) => {
@@ -861,18 +993,30 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
     }))
   }
 
-  // Seul le nom change : la note, les séries, les charges de la ligne restent en place (la vidéo
-  // et les muscles se déduisent du nom partout ailleurs).
+  // Remplacement : seul le nom change (note, séries, charges restent). Consigne : seule la note
+  // change. Ajout : l'exercice est copié tel quel (séries, charges, consigne). Remplacements et
+  // consignes passent d'abord, par id : les ajouts décalent ensuite les codes.
   const appliquerPropagation = async () => {
-    const aFaire = propagation.flatMap(ch => ch.cibles.filter(t => t.coche && !t.terminee).map(t => ({ ...t, nouveau: ch.nouveau })))
-    if (!aFaire.length) { setPropagation(null); return }
+    const cochees = ch => ch.cibles.filter(t => t.coche && !t.terminee)
+    if (!propagation.some(ch => cochees(ch).length)) { setPropagation(null); return }
     setPropagationEnCours(true)
-    const resultats = await Promise.all(aFaire.map(t => supabase.from('program_exercises').update({ name: t.nouveau }).eq('id', t.exoId)))
+    const erreurs = []
+    const touchees = new Set()
+    const maj = propagation.flatMap(ch => (ch.type === 'ajout' ? [] : cochees(ch).map(t => ({
+      t, champs: ch.type === 'remplacement' ? { name: ch.nouveau } : { note: ch.nouvelle || null },
+    }))))
+    const res = await Promise.all(maj.map(({ t, champs }) => supabase.from('program_exercises').update(champs).eq('id', t.exoId)))
+    res.forEach((r, i) => { if (r.error) erreurs.push(r.error.message); else touchees.add(maj[i].t.sessionId) })
+    for (const ch of propagation.filter(c => c.type === 'ajout')) {
+      for (const t of cochees(ch)) {
+        const err = await insererDansSeance(t.sessionId, ch, t.ancreId)
+        if (err) erreurs.push(err); else touchees.add(t.sessionId)
+      }
+    }
     setPropagationEnCours(false)
-    const echec = resultats.find(r => r.error)
-    if (echec) alert('Erreur lors du remplacement dans les séances suivantes : ' + echec.error.message)
+    if (erreurs.length) alert('Erreur lors de la modification des séances suivantes : ' + erreurs[0])
     setPropagation(null)
-    onExercicesPropages?.([...new Set(aFaire.map(t => t.sessionId))])
+    if (touchees.size) onExercicesPropages?.([...touchees])
   }
 
   const addWarmupBlock = () => {
@@ -3244,24 +3388,45 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
               <div style={{ padding: '20px 24px', borderBottom: `1px solid ${c.border}` }}>
                 <span style={{ display: 'block', fontSize: 20, fontWeight: 700, color: c.text }}>Modifier aussi les séances suivantes ?</span>
                 <span style={{ fontSize: 13, color: c.textMuted }}>
-                  Seul l&apos;exercice change : les notes, séries et charges de chaque séance restent en place.
+                  Une séance déjà faite par le client n&apos;est jamais modifiée.
                 </span>
               </div>
               {propagation.map((ch, ci) => (
-                <div key={ch.code} style={{ padding: '16px 24px', borderBottom: `1px solid ${c.border}` }}>
-                  <div style={{ fontSize: 14, color: c.text, marginBottom: 10 }}>
-                    <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>{ch.code}</span>
-                    <span style={{ textDecoration: 'line-through', color: c.textMuted }}>{ch.ancien}</span>
-                    {' → '}<span style={{ fontWeight: 700 }}>{ch.nouveau}</span>
+                <div key={ci} style={{ padding: '16px 24px', borderBottom: `1px solid ${c.border}` }}>
+                  <div style={{ fontSize: 14, color: c.text, marginBottom: 4 }}>
+                    {ch.type === 'ajout' ? (
+                      <>
+                        <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>Ajout {ch.code}</span>
+                        <span style={{ fontWeight: 700 }}>{ch.lignes.map(l => l.name).join(' + ')}</span>
+                      </>
+                    ) : ch.type === 'remplacement' ? (
+                      <>
+                        <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>{ch.codeAffiche}</span>
+                        <span style={{ textDecoration: 'line-through', color: c.textMuted }}>{ch.ancien}</span>
+                        {' → '}<span style={{ fontWeight: 700 }}>{ch.nouveau}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>Consigne {ch.codeAffiche}</span>
+                        <span style={{ fontWeight: 700 }}>{ch.nom}</span>
+                      </>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 10 }}>
+                    {ch.type === 'ajout'
+                      ? 'Copié avec ses séries, charges et consigne.'
+                      : ch.type === 'remplacement'
+                        ? 'Seul l’exercice change : séries, charges et consigne restent.'
+                        : ch.nouvelle ? `« ${ch.nouvelle} »` : 'Consigne supprimée.'}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {ch.cibles.map((t, ti) => (
                       <label key={t.sessionId} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: t.terminee ? c.textFaint : c.text, cursor: t.terminee ? 'default' : 'pointer' }}>
                         <input type="checkbox" checked={t.coche} disabled={t.terminee} onChange={() => basculerCible(ci, ti)}
                           style={{ accentColor: 'var(--green)', width: 15, height: 15, flexShrink: 0 }} />
-                        <span style={{ fontWeight: 700, minWidth: 44 }}>{t.code}</span>
+                        <span style={{ fontWeight: 700, minWidth: 44 }}>{t.codeSeance}</span>
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {ch.code} actuel : {t.nomActuel || '—'}{t.titre ? ` · ${t.titre}` : ''}
+                          {t.detail}{t.titre ? ` · ${t.titre}` : ''}
                         </span>
                         {t.terminee && <span style={{ fontSize: 11, fontWeight: 600 }}>déjà faite</span>}
                       </label>
@@ -3279,7 +3444,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                   background: c.blue, color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontSize: 14, fontWeight: 600,
                   cursor: propagationEnCours ? 'default' : 'pointer', opacity: propagationEnCours ? 0.7 : 1,
                 }}>
-                  {propagationEnCours ? 'Modification…' : 'Modifier les séances cochées'}
+                  {propagationEnCours ? 'Modification…' : 'Appliquer aux séances cochées'}
                 </button>
               </div>
             </div>
