@@ -428,7 +428,8 @@ function etatParExercice(rows, ids) {
 // suivantes l'exercice correspondant est toujours à l'ancien emplacement.
 //  - remplacement : même exercice de l'éditeur, nom changé ;
 //  - consigne : même exercice, note changée ;
-//  - ajout : exercice(s) nouveau(x), rattachés au dernier exercice déjà enregistré qui les précède.
+//  - ajout : exercice(s) nouveau(x), rattachés au dernier exercice déjà enregistré qui les précède ;
+//  - suppression : exercice enregistré qui n'est plus dans la séance.
 function changementsDepuis(avant, rows, ids) {
   const codes = codesExercices(rows)
   const changements = []
@@ -458,7 +459,33 @@ function changementsDepuis(avant, rows, ids) {
       changements.push({ type: 'consigne', code: prev.code, codeAffiche: code, nom, ancienne: prev.note, nouvelle: note })
     }
   })
+  const presents = new Set(ids)
+  Object.entries(avant)
+    .filter(([id, e]) => e.code && !presents.has(id))
+    .sort(([, a], [, b]) => a.code.localeCompare(b.code, 'fr', { numeric: true }))
+    .forEach(([, e]) => changements.push({ type: 'suppression', code: e.code, nom: e.nom }))
   return changements
+}
+
+// Supprime un exercice d'une séance suivante et recule d'un cran les circuits placés après lui.
+async function supprimerDansSeance(sessionId, exoId) {
+  const [{ data: exos, error }, { data: sess }] = await Promise.all([
+    supabase.from('program_exercises').select('id').eq('program_session_id', sessionId).order('order_index'),
+    supabase.from('program_sessions').select('circuits').eq('id', sessionId).single(),
+  ])
+  if (error) return error.message
+  const i = (exos || []).findIndex(e => e.id === exoId)
+  if (i === -1) return null
+  const { error: errDel } = await supabase.from('program_exercises').delete().eq('id', exoId)
+  if (errDel) return errDel.message
+  const circuits = sess?.circuits || []
+  if (circuits.some(c => (c.afterExerciseIndex ?? 0) > i)) {
+    const { error: errC } = await supabase.from('program_sessions')
+      .update({ circuits: circuits.map(c => ((c.afterExerciseIndex ?? 0) > i ? { ...c, afterExerciseIndex: c.afterExerciseIndex - 1 } : c)) })
+      .eq('id', sessionId)
+    if (errC) return errC.message
+  }
+  return null
 }
 
 const nouveauToken = () => Math.random().toString(36).slice(2, 8)
@@ -981,6 +1008,7 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
         const place = parCode[ch.code]
         if (!place) return []
         const nomAttendu = ch.type === 'remplacement' ? ch.ancien : ch.nom
+        // Suppression : cochée seulement si c'est bien le même exercice à cet emplacement.
         return [{ ...base, exoId: place.id, detail: `${ch.code} actuel : ${place.name || '—'}`, coche: !terminee && memeNom(place.name, nomAttendu) }]
       }),
     })).filter(ch => ch.cibles.length)
@@ -994,19 +1022,27 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
   }
 
   // Remplacement : seul le nom change (note, séries, charges restent). Consigne : seule la note
-  // change. Ajout : l'exercice est copié tel quel (séries, charges, consigne). Remplacements et
-  // consignes passent d'abord, par id : les ajouts décalent ensuite les codes.
+  // change. Ajout : l'exercice est copié tel quel (séries, charges, consigne). Suppression : la
+  // ligne est retirée. Remplacements et consignes passent d'abord, par id (cibles repérées avant
+  // tout décalage) ; suppressions et ajouts ensuite.
   const appliquerPropagation = async () => {
     const cochees = ch => ch.cibles.filter(t => t.coche && !t.terminee)
     if (!propagation.some(ch => cochees(ch).length)) { setPropagation(null); return }
     setPropagationEnCours(true)
     const erreurs = []
     const touchees = new Set()
-    const maj = propagation.flatMap(ch => (ch.type === 'ajout' ? [] : cochees(ch).map(t => ({
+    const maj = propagation.flatMap(ch => (ch.type === 'ajout' || ch.type === 'suppression' ? [] : cochees(ch).map(t => ({
       t, champs: ch.type === 'remplacement' ? { name: ch.nouveau } : { note: ch.nouvelle || null },
     }))))
     const res = await Promise.all(maj.map(({ t, champs }) => supabase.from('program_exercises').update(champs).eq('id', t.exoId)))
     res.forEach((r, i) => { if (r.error) erreurs.push(r.error.message); else touchees.add(maj[i].t.sessionId) })
+    // Suppressions puis ajouts, une à une : chacune relit la séance (ordre et circuits à jour).
+    for (const ch of propagation.filter(c => c.type === 'suppression')) {
+      for (const t of cochees(ch)) {
+        const err = await supprimerDansSeance(t.sessionId, t.exoId)
+        if (err) erreurs.push(err); else touchees.add(t.sessionId)
+      }
+    }
     for (const ch of propagation.filter(c => c.type === 'ajout')) {
       for (const t of cochees(ch)) {
         const err = await insererDansSeance(t.sessionId, ch, t.ancreId)
@@ -3399,6 +3435,11 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                         <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>Ajout {ch.code}</span>
                         <span style={{ fontWeight: 700 }}>{ch.lignes.map(l => l.name).join(' + ')}</span>
                       </>
+                    ) : ch.type === 'suppression' ? (
+                      <>
+                        <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>Suppression {ch.code}</span>
+                        <span style={{ fontWeight: 700, textDecoration: 'line-through' }}>{ch.nom}</span>
+                      </>
                     ) : ch.type === 'remplacement' ? (
                       <>
                         <span style={{ fontWeight: 800, color: c.blue, marginRight: 6 }}>{ch.codeAffiche}</span>
@@ -3415,6 +3456,8 @@ export default function SessionBlockEditor({ sessionId, backHref, canManageCatal
                   <div style={{ fontSize: 12, color: c.textMuted, marginBottom: 10 }}>
                     {ch.type === 'ajout'
                       ? 'Copié avec ses séries, charges et consigne.'
+                      : ch.type === 'suppression'
+                        ? 'Retiré de la séance, avec ses séries et sa consigne.'
                       : ch.type === 'remplacement'
                         ? 'Seul l’exercice change : séries, charges et consigne restent.'
                         : ch.nouvelle ? `« ${ch.nouvelle} »` : 'Consigne supprimée.'}
